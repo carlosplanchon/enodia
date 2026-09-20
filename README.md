@@ -1,4 +1,4 @@
-![Enodia: a walked route, numbered street crossings and radio observations across four city blocks.](https://raw.githubusercontent.com/carlosplanchon/enodia/main/assets/enodia_banner.jpg)
+![A walker on a Montevideo street, carrying a laptop in a backpack, pressing a headset button and holding a notebook of street crossings.](https://raw.githubusercontent.com/carlosplanchon/enodia/main/assets/enodia_walk.jpg)
 
 # Enodia
 
@@ -22,7 +22,7 @@ Back home, Enodia joins the two: scans placed along your route, estimates of whe
 
 Capture, reconciliation and localisation work offline, without GPS or an external geolocation database.
 
-![A walker on a Montevideo street, carrying a laptop in a backpack, pressing a headset button and holding a notebook of street crossings.](https://raw.githubusercontent.com/carlosplanchon/enodia/main/assets/enodia_walk.jpg)
+![Enodia: a walked route, numbered street crossings and radio observations across four city blocks.](https://raw.githubusercontent.com/carlosplanchon/enodia/main/assets/enodia_banner.jpg)
 
 ## Get started
 
