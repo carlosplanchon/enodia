@@ -1,10 +1,12 @@
 """Tests for the command line."""
 
+import importlib.metadata
 import json
 
 import pytest
 from ifpeek import AccessPoint
 
+import enodia
 from enodia import cli
 from enodia import voice as voice_module
 from enodia.voice import ESpeak, PicoTTS
@@ -14,7 +16,15 @@ def test_version(capsys):
     with pytest.raises(SystemExit) as info:
         cli.main(["--version"])
     assert info.value.code == 0
-    assert capsys.readouterr().out.startswith("enodia ")
+    assert capsys.readouterr().out.strip() == f"enodia {enodia.__version__}"
+
+
+def test_the_version_the_module_says_is_the_version_the_package_declares():
+    # It is written twice, in `pyproject.toml` and in `enodia/__init__.py`, and
+    # nothing kept the two together. A release where they disagree ships a
+    # package that answers one number to `--version` and another to pip, and
+    # the one that is wrong is whichever the person bumping forgot.
+    assert importlib.metadata.version("enodia") == enodia.__version__
 
 
 def test_open_networks(tmp_path, capsys):
