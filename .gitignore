@@ -216,3 +216,15 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- Enodia -------------------------------------------------------------------
+# Scan logs contain the MAC addresses and names of other people's networks.
+networks.txt
+networks.jsonl
+*.jsonl
+# The lock the map is held with while it is read, added to and put back.
+*.jsonl.lock
+# What --export-public writes is meant to be published, and the rule above would
+# hide it. Nothing else in the repository is exempt.
+!public/*.jsonl
+!samples/*.jsonl

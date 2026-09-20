@@ -1,0 +1,91 @@
+[build-system]
+requires = ["setuptools>=77.0.3", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "enodia"
+version = "0.1.0"
+description = "Wardriving on foot, without GPS: a talking Wi-Fi scanner in a backpack, a paper notebook of street crossings, and a reconciliation that places every access point along your walk."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    {name = "Carlos A. Planchón", email = "carlosandresplanchonprestes@gmail.com"}
+]
+keywords = ["wardriving", "wifi", "linux", "text-to-speech", "offline", "ifpeek"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: System :: Networking :: Monitoring",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14"
+]
+requires-python = ">=3.10"
+dependencies = [
+    "ifpeek[scan]>=1.3.0",
+]
+
+[project.urls]
+# The labels PyPI gives their own presentation to, spelled the way the packaging
+# specification spells them. Nothing here points at a file that does not exist:
+# a dead link on the project page is worse than one fewer link.
+Homepage = "https://github.com/carlosplanchon/enodia"
+Repository = "https://github.com/carlosplanchon/enodia"
+Documentation = "https://github.com/carlosplanchon/enodia/tree/main/docs"
+Issues = "https://github.com/carlosplanchon/enodia/issues"
+
+[project.optional-dependencies]
+# Only for `--geocode --proxy socks5://...`. Everything else, the walk included,
+# runs without it. urllib and http.client speak no SOCKS, and hand-rolling RFC
+# 1928 in a tool people would trust with Tor is not where to save a dependency.
+socks = ["PySocks>=1.7.1"]
+
+[project.scripts]
+enodia = "enodia.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1",
+    "pytest-cov>=7.1",
+    "ruff",
+    "ty",
+]
+
+[tool.setuptools]
+packages = ["enodia"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--verbose",
+    "--cov=enodia",
+    "--cov-report=term-missing",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "C4", "PIE", "ISC", "RUF", "DTZ", "BLE", "PYI"]
+# ISC001 fights the formatter; ruff itself says to leave it off when formatting.
+ignore = ["ISC001"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests build naive datetimes on purpose: they are what `actual_time` is fed.
+"tests/*" = ["DTZ001"]
+
+[tool.coverage.run]
+omit = ["enodia/__main__.py"]
+
+[tool.coverage.report]
+exclude_also = ['if __name__ == "__main__":']

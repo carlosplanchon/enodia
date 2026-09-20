@@ -1,0 +1,266 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -56.195916,
+     -34.879661
+    ]
+   },
+   "properties": {
+    "kind": "network",
+    "ssid": "sample-ap-01",
+    "bssid": "02:00:00:00:00:01",
+    "security": "psk",
+    "open": false,
+    "frequency_mhz": 2412,
+    "channel": 1,
+    "best_signal_dbm": -42,
+    "best_signal_percent": null,
+    "seen": 2,
+    "connected": false,
+    "first_seen": "2026-09-14T17:00:30-03:00",
+    "last_seen": "2026-09-14T17:01:21-03:00",
+    "best_seen": "2026-09-14T17:00:30-03:00",
+    "placed_by": "estimate",
+    "spread_m": 10,
+    "sightings": 2,
+    "barely_pinned": true
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -56.195873,
+     -34.879777
+    ]
+   },
+   "properties": {
+    "kind": "network",
+    "ssid": "sample-ap-02",
+    "bssid": "02:00:00:00:00:02",
+    "security": "psk",
+    "open": false,
+    "frequency_mhz": 2437,
+    "channel": 6,
+    "best_signal_dbm": -44,
+    "best_signal_percent": null,
+    "seen": 3,
+    "connected": false,
+    "first_seen": "2026-09-14T17:00:30-03:00",
+    "last_seen": "2026-09-14T17:02:15-03:00",
+    "best_seen": "2026-09-14T17:01:21-03:00",
+    "placed_by": "estimate",
+    "spread_m": 14,
+    "sightings": 3,
+    "barely_pinned": true
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -56.195784,
+     -34.880014
+    ]
+   },
+   "properties": {
+    "kind": "network",
+    "ssid": "sample-ap-03",
+    "bssid": "02:00:00:00:00:03",
+    "security": "psk",
+    "open": false,
+    "frequency_mhz": 2462,
+    "channel": 11,
+    "best_signal_dbm": -43,
+    "best_signal_percent": null,
+    "seen": 4,
+    "connected": false,
+    "first_seen": "2026-09-14T17:00:30-03:00",
+    "last_seen": "2026-09-14T17:03:24-03:00",
+    "best_seen": "2026-09-14T17:02:15-03:00",
+    "placed_by": "estimate",
+    "spread_m": 17,
+    "sightings": 4,
+    "barely_pinned": false
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -56.195689,
+     -34.880273
+    ]
+   },
+   "properties": {
+    "kind": "network",
+    "ssid": "sample-ap-04",
+    "bssid": "02:00:00:00:00:04",
+    "security": "psk",
+    "open": false,
+    "frequency_mhz": 5180,
+    "channel": 36,
+    "best_signal_dbm": -41,
+    "best_signal_percent": null,
+    "seen": 4,
+    "connected": false,
+    "first_seen": "2026-09-14T17:01:21-03:00",
+    "last_seen": "2026-09-14T17:04:06-03:00",
+    "best_seen": "2026-09-14T17:03:24-03:00",
+    "placed_by": "estimate",
+    "spread_m": 17,
+    "sightings": 4,
+    "barely_pinned": false
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -56.195618,
+     -34.880468
+    ]
+   },
+   "properties": {
+    "kind": "network",
+    "ssid": "sample-ap-05",
+    "bssid": "02:00:00:00:00:05",
+    "security": "psk",
+    "open": false,
+    "frequency_mhz": 5200,
+    "channel": 40,
+    "best_signal_dbm": -42,
+    "best_signal_percent": null,
+    "seen": 4,
+    "connected": false,
+    "first_seen": "2026-09-14T17:02:15-03:00",
+    "last_seen": "2026-09-14T17:04:39-03:00",
+    "best_seen": "2026-09-14T17:04:06-03:00",
+    "placed_by": "estimate",
+    "spread_m": 12,
+    "sightings": 4,
+    "barely_pinned": false
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -56.195574,
+     -34.880587
+    ]
+   },
+   "properties": {
+    "kind": "network",
+    "ssid": "sample-ap-06",
+    "bssid": "02:00:00:00:00:06",
+    "security": "psk",
+    "open": false,
+    "frequency_mhz": 5220,
+    "channel": 44,
+    "best_signal_dbm": -43,
+    "best_signal_percent": null,
+    "seen": 3,
+    "connected": false,
+    "first_seen": "2026-09-14T17:03:24-03:00",
+    "last_seen": "2026-09-14T17:04:39-03:00",
+    "best_seen": "2026-09-14T17:04:39-03:00",
+    "placed_by": "estimate",
+    "spread_m": 9,
+    "sightings": 3,
+    "barely_pinned": false
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -56.195557,
+     -34.880637
+    ]
+   },
+   "properties": {
+    "kind": "network",
+    "ssid": "sample-ap-07",
+    "bssid": "02:00:00:00:00:07",
+    "security": "psk",
+    "open": false,
+    "frequency_mhz": 5240,
+    "channel": 48,
+    "best_signal_dbm": -49,
+    "best_signal_percent": null,
+    "seen": 2,
+    "connected": false,
+    "first_seen": "2026-09-14T17:04:06-03:00",
+    "last_seen": "2026-09-14T17:04:39-03:00",
+    "best_seen": "2026-09-14T17:04:39-03:00",
+    "placed_by": "estimate",
+    "spread_m": 5,
+    "sightings": 2,
+    "barely_pinned": false
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -56.1959854,
+     -34.8794754
+    ]
+   },
+   "properties": {
+    "kind": "crossing",
+    "name": "Avenida Agraciada y Doctor Salvador García Pintos",
+    "time": "2026-09-14T17:00:00-03:00"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -56.1955157,
+     -34.8807492
+    ]
+   },
+   "properties": {
+    "kind": "crossing",
+    "name": "Avenida Agraciada y San Fructuoso",
+    "time": "2026-09-14T17:05:00-03:00"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -56.1959854,
+      -34.8794754
+     ],
+     [
+      -56.1955157,
+      -34.8807492
+     ]
+    ]
+   },
+   "properties": {
+    "kind": "route",
+    "from": "Avenida Agraciada y Doctor Salvador García Pintos",
+    "to": "Avenida Agraciada y San Fructuoso"
+   }
+  }
+ ]
+}
