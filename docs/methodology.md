@@ -121,7 +121,7 @@ One request goes out for the whole notebook, whatever it costs in corners, and t
 ## Through Tor, if you want
 
 ```bash
-uv run enodia --geocode libreta.txt --area Montevideo --proxy socks5://127.0.0.1:9050
+uv run enodia --geocode notebook.txt --area Montevideo --proxy socks5://127.0.0.1:9050
 ```
 
 The list of corners somebody is about to walk is not nothing, so the one request can go through a SOCKS5 proxy. `9050` is the Tor daemon, `9150` is Tor Browser. Needs `uv sync --extra socks`.
@@ -137,9 +137,9 @@ A scan between two crossings sits some fraction of the way along, and without kn
 The lookup already knows better and was throwing it away. The one Overpass request comes back with every way of every street the notebook names, node by node, which is the street drawn. `--streets FILE` keeps it:
 
 ```bash
-uv run enodia --geocode libreta.txt --area Montevideo --streets calles.jsonl
-uv run enodia --reconcile paseo.jsonl libreta.geo.txt --streets calles.jsonl
-uv run enodia --map-add paseo.jsonl libreta.geo.txt --streets calles.jsonl
+uv run enodia --geocode notebook.txt --area Montevideo --streets streets.jsonl
+uv run enodia --reconcile walk.jsonl notebook.geo.txt --streets streets.jsonl
+uv run enodia --map-add walk.jsonl notebook.geo.txt --streets streets.jsonl
 ```
 
 Written by `--geocode`, read by `--reconcile` and `--map-add`, one JSON object per way, coordinates inline so the file stands on its own and nothing is asked of OpenStreetMap again.
@@ -155,8 +155,8 @@ It is entirely optional and it never guesses. Without a streets file, or for a b
 ## Drawing it
 
 ```bash
-uv run enodia --geocode libreta.txt --area Montevideo --streets calles.jsonl --buildings
-uv run enodia --reconcile paseo.jsonl libreta.geo.txt --streets calles.jsonl --svg plano.svg
+uv run enodia --geocode notebook.txt --area Montevideo --streets streets.jsonl --buildings
+uv run enodia --reconcile walk.jsonl notebook.geo.txt --streets streets.jsonl --svg plan.svg
 ```
 
 An SVG, written once, that opens in any browser with nothing fetched. The lines are the ones OpenStreetMap draws, rendered here rather than there. `--buildings` is a second request, asked for separately because the box to ask about is not known until the crossings are, and it turns the picture from lines into blocks.

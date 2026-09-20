@@ -77,7 +77,7 @@ Resolve preflight failures before leaving. Check that you hear announcements wit
 
 Mark the first crossing, each crossing along the way, and the last one. Write each name beside its announced mark number, or beside the spoken time if you have no button. Two or three blocks are enough to try the whole process. Press Ctrl+C when you finish.
 
-**3. Transcribe the notebook into `libreta.txt`.**
+**3. Transcribe the notebook into `notebook.txt`.**
 
 ```text
 #1 Avenida Agraciada y Doctor Salvador García Pintos
@@ -91,8 +91,8 @@ Coordinates are optional: append `@ latitude, longitude` after a crossing name. 
 **4. Reconcile the walk and add it to your map.**
 
 ```bash
-uv run enodia --reconcile walk.jsonl libreta.txt
-uv run enodia --map-add walk.jsonl libreta.txt
+uv run enodia --reconcile walk.jsonl notebook.txt
+uv run enodia --map-add walk.jsonl notebook.txt
 ```
 
 Reconciliation places scans between crossings and estimates access-point positions. Adding the walk to the map keeps its scans as fingerprints.

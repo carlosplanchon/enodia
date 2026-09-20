@@ -13,7 +13,7 @@ watched), `-t` is `--interval`, `-l` is `--log`.
 uv run enodia                             # every Wi-Fi interface, every 5 s, one log per outing
 uv run enodia -i wlan0 -t 10              # one interface, every 10 s
 uv run enodia -l wifi.jsonl               # one log file of your choosing
-uv run enodia --dir ~/paseos              # one file per outing, in that directory
+uv run enodia --dir ~/walks              # one file per outing, in that directory
 uv run enodia --voice pico                # engine: auto (espeak-ng, else Pico) | espeak | pico | none
 uv run enodia --lang en-GB --ssid-lang es-ES # language of the announcements, and of the network names
 uv run enodia --say-status                # also say "Scanning" and the time every cycle
@@ -38,13 +38,13 @@ uv run enodia --preflight                 # check everything an outing needs and
 ## Reading a log back
 
 ```bash
-uv run enodia --reconcile LOG libreta.txt                     # the report
-uv run enodia --reconcile LOG libreta.txt --pace clock        # share out each stretch on time
-uv run enodia --reconcile LOG libreta.txt --outing 3f9a2b10    # one walk of a file that holds several
-uv run enodia --reconcile LOG libreta.txt --scans              # also list where every scan landed
-uv run enodia --reconcile LOG libreta.txt --csv redes.csv --geojson paseo.geojson
-uv run enodia --reconcile LOG libreta.geo.txt --streets calles.jsonl          # along the streets
-uv run enodia --reconcile LOG libreta.geo.txt --streets calles.jsonl --svg plano.svg
+uv run enodia --reconcile LOG notebook.txt                     # the report
+uv run enodia --reconcile LOG notebook.txt --pace clock        # share out each stretch on time
+uv run enodia --reconcile LOG notebook.txt --outing 3f9a2b10    # one walk of a file that holds several
+uv run enodia --reconcile LOG notebook.txt --scans              # also list where every scan landed
+uv run enodia --reconcile LOG notebook.txt --csv networks.csv --geojson walk.geojson
+uv run enodia --reconcile LOG notebook.geo.txt --streets streets.jsonl          # along the streets
+uv run enodia --reconcile LOG notebook.geo.txt --streets streets.jsonl --svg plan.svg
 uv run enodia --open-networks LOG                              # the unencrypted ones, strongest first
 ```
 
@@ -67,8 +67,8 @@ report itself goes to standard output, so capturing it wants a run without them.
 ## Does any of it work
 
 ```bash
-uv run enodia --reconcile LOG libreta.geo.txt --check-pace     # which pace method finds the crossings again
-uv run enodia --reconcile LOG libreta.txt --check-passes       # how far apart two passes put the same networks
+uv run enodia --reconcile LOG notebook.geo.txt --check-pace     # which pace method finds the crossings again
+uv run enodia --reconcile LOG notebook.txt --check-passes       # how far apart two passes put the same networks
 uv run enodia --check-map                                      # hold out a pass and locate it from the rest
 uv run enodia --check-map --match signal                       # the same, scored on signal as well
 ```
@@ -83,12 +83,12 @@ tell you.
 ## The map, and finding yourself again
 
 ```bash
-uv run enodia --map-add LOG libreta.txt                        # add an outing to the map
-uv run enodia --map-add LOG libreta.txt --streets calles.jsonl # along the street shapes
+uv run enodia --map-add LOG notebook.txt                        # add an outing to the map
+uv run enodia --map-add LOG notebook.txt --streets streets.jsonl # along the street shapes
 uv run enodia --locate                                         # scan now: where am I?
 uv run enodia --locate LOG                                     # or place a log's last scan
 uv run enodia --locate --match signal                          # score on signal strength too
-uv run enodia --map otro.jsonl --locate                        # a map somewhere else
+uv run enodia --map other.jsonl --locate                        # a map somewhere else
 ```
 
 `--match networks` is the default and matches on which networks are in view. `--match signal`
@@ -99,13 +99,13 @@ added twice.
 ## Putting the notebook on the map
 
 ```bash
-uv run enodia --geocode libreta.txt --area Montevideo                          # look the corners up
-uv run enodia --geocode libreta.txt --area Montevideo --out libreta.geo.txt    # name the output
-uv run enodia --geocode libreta.txt --area Montevideo --marks LOG              # time the untimed lines
-uv run enodia --geocode libreta.txt --area Montevideo --proxy socks5://127.0.0.1:9050
-uv run enodia --geocode libreta.txt --area Montevideo --streets calles.jsonl   # keep the street shapes
-uv run enodia --geocode libreta.txt --area Montevideo --streets calles.jsonl --buildings
-uv run enodia --geocode libreta.txt --area Montevideo --overpass-url https://overpass.kumi.systems/api/interpreter
+uv run enodia --geocode notebook.txt --area Montevideo                          # look the corners up
+uv run enodia --geocode notebook.txt --area Montevideo --out notebook.geo.txt    # name the output
+uv run enodia --geocode notebook.txt --area Montevideo --marks LOG              # time the untimed lines
+uv run enodia --geocode notebook.txt --area Montevideo --proxy socks5://127.0.0.1:9050
+uv run enodia --geocode notebook.txt --area Montevideo --streets streets.jsonl   # keep the street shapes
+uv run enodia --geocode notebook.txt --area Montevideo --streets streets.jsonl --buildings
+uv run enodia --geocode notebook.txt --area Montevideo --overpass-url https://overpass.kumi.systems/api/interpreter
 ```
 
 This is the one command in Enodia that goes online, and only when you type it. `--area` is not
@@ -143,12 +143,12 @@ Speech runs in its own thread and never holds up a scan. It is slow (espeak-ng t
 ## Sharing a walk
 
 ```bash
-uv run enodia --export-public paseo.jsonl libreta.txt --out publicado/
-uv run enodia --export-public paseo.jsonl libreta.txt --ssid pseudonym  # names kept apart, not dropped
-uv run enodia --export-public paseo.jsonl libreta.txt --ssid keep       # names as they are
-uv run enodia --export-public paseo.jsonl libreta.txt --mac-shaped      # d2:17:43:.. rather than ap-1c8a74f992ae
-uv run enodia --export-public paseo.jsonl libreta.txt --key-file ~/keys/enodia.key
-uv run enodia --export-public walk.jsonl libreta.txt --outing 3f9a2b10   # one walk of a file that holds several
+uv run enodia --export-public walk.jsonl notebook.txt --out published/
+uv run enodia --export-public walk.jsonl notebook.txt --ssid pseudonym  # names kept apart, not dropped
+uv run enodia --export-public walk.jsonl notebook.txt --ssid keep       # names as they are
+uv run enodia --export-public walk.jsonl notebook.txt --mac-shaped      # d2:17:43:.. rather than ap-1c8a74f992ae
+uv run enodia --export-public walk.jsonl notebook.txt --key-file ~/keys/enodia.key
+uv run enodia --export-public walk.jsonl notebook.txt --outing 3f9a2b10   # one walk of a file that holds several
 ```
 
 Both files at once, and `--out` names the directory, `public/` by default. The directory is the
@@ -181,7 +181,7 @@ is the whole point. Lose it and the next export gives the same router a differen
 
 ```bash
 uv run enodia --assistant                          # the whole workflow, one screen at a time
-uv run enodia --assistant --dir ~/paseos --map otro.jsonl   # over a different directory and map
+uv run enodia --assistant --dir ~/walks --map other.jsonl   # over a different directory and map
 uv run enodia --assistant --log walk.jsonl         # over one file, and every walk inside it
 uv run enodia --assistant -i wlan0 --voice pico    # and every walk it starts uses these
 ```
