@@ -130,7 +130,16 @@ class UntimedNotebook(NotebookError):
 
 @dataclass(frozen=True)
 class Waypoint:
-    """A street crossing passed at a known time."""
+    """One place the notebook names, and the time it was passed.
+
+    A street crossing most of the time, and nothing requires it to be one. A
+    plaza, a shop, the bench you stopped at: anything you can write down and
+    find again is a place the route can be measured from, and the name is taken
+    as written. Only `corner_streets` asks whether a name is two streets, and
+    only where the answer buys something: splitting a corner so that the same
+    street is recognised at two of them, and looking one up on OpenStreetMap.
+    A name it will not split is a place, not an error.
+    """
 
     time: datetime
     name: str
