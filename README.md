@@ -20,7 +20,7 @@ At each crossing, press the headset button: “Mark 1.” “Mark 2.” Write th
 
 Back home, Enodia joins the two: scans placed along your route, estimates of where access points stand, and fingerprints you can keep. Walk there again and a new scan can tell you where you are: between these crossings, this far along.
 
-Capture, reconciliation and localisation work offline, without GPS or an external geolocation database.
+No GNSS receiver and no external geolocation database: position comes from a radio map you walked yourself. Everything else follows, and runs offline.
 
 ![Enodia: a walked route, numbered street crossings and radio observations across four city blocks.](https://raw.githubusercontent.com/carlosplanchon/enodia/main/assets/enodia_banner.jpg)
 
@@ -114,6 +114,8 @@ See the [CLI reference](docs/cli.md) for command syntax and options.
 ## Limits
 
 Enodia is experimental. Field use so far covers one real outing. Its pace, access-point and localisation estimates are tested on synthetic observations, and their accuracy on real streets remains to be established.
+
+Enodia has no GPS on purpose. The question is whether a self-built Wi-Fi map can give a position on its own, and a receiver in the loop answers it by making the radio a second opinion. Where GPS does belong is as ground truth: coordinates can be written into the notebook beside any crossing (`@ -34.9066, -56.2001`) before reconciling, and `--check-pace` then measures the estimates against them in metres.
 
 The map covers places you have already walked and ages as routers move or disappear. A map recognising the same outing it was built from proves little. Access-point positions are estimates, and scans follow straight lines between crossings unless you supply street geometry.
 
