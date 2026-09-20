@@ -645,12 +645,17 @@ class Estimate:
     def barely_pinned(self) -> bool:
         """True when the signal barely narrowed this down past where you walked.
 
-        The weighted centroid is compared with the plain middle of the same
-        sightings. Walk past an access point and its signal peaks sharply,
-        pulling the centroid well clear of that middle. Hear one faintly from a
-        block away and every sighting weighs about the same, so the centroid
-        settles on the middle of your own route and says nothing whatever about
-        where the thing is. Most of what a walk hears is of the second kind, and
+        What is compared is how tightly the sightings gather, not where their
+        middle lands: the spread around the weighted estimate against the spread
+        around the same sightings read with the signal ignored. The signal has
+        to bring the first down to `PINNED` of the second or less to count as
+        having pinned anything down.
+
+        Walk past an access point and its signal peaks sharply, pulling the
+        sightings in around one point. Hear one faintly from a block away and
+        every sighting weighs about the same, the cloud stays as wide as the
+        stretch you walked, and the estimate says nothing whatever about where
+        the thing is. Most of what a walk hears is of the second kind, and
         without this the two come out of the report looking alike.
         """
         return self.plain_spread_m <= 0 or self.spread_m > self.plain_spread_m * PINNED
@@ -695,9 +700,11 @@ def _estimate_from(points: Sequence[tuple[float, float, float]]) -> Estimate | N
         )
         / total
     )
-    # The same sightings with the signal ignored: the middle of where you walked
-    # while it was in view. How far the weighted centroid sits from this is the
-    # whole of what the signal contributed. See `Estimate.barely_pinned`.
+    # The same sightings with the signal ignored: their plain middle, and how
+    # far they sit from it on average. That second number is what the weighted
+    # spread above is judged against, since what says the signal contributed
+    # anything is the cloud getting tighter, not the middle moving. See
+    # `Estimate.barely_pinned`.
     plain_lat = sum(point_lat for point_lat, _, _ in points) / len(points)
     plain_lon = sum(point_lon for _, point_lon, _ in points) / len(points)
     plain = sum(

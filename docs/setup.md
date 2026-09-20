@@ -1,11 +1,26 @@
 # Setting up the machine
 
-Two things about the laptop itself have to be settled once, and `enodia --preflight` tells
-you whether they are. Both are shown for Arch Linux with systemd, and both take a minute.
+Four things about the laptop have to be settled before an outing, and `enodia --preflight`
+tells you whether they are. Everything here is shown for Arch Linux with systemd. The radio and
+the voice usually work already; the lid and the button usually do not.
 
 ## The lid
 
-Closing the lid suspends the laptop on any default systemd setup, and Enodia with it. The permanent fix is a drop-in for logind, which survives package updates where editing `/etc/systemd/logind.conf` might not:
+Closing the lid suspends the laptop on any default systemd setup, and Enodia with it.
+
+The quickest answer needs no configuration at all, because systemd has an inhibitor lock for
+exactly this. It lifts the lid handling for one command and puts it back when that command ends:
+
+```bash
+systemd-inhibit --what=handle-lid-switch --why="Enodia is walking" uv run enodia --say-status
+```
+
+**The preflight will still say `FAIL` on its `lid` line while you do this, and the walk is safe
+anyway.** It reads the configuration, which has not changed, and not the inhibitor locks held
+right now. Worth knowing before it sends you looking for a problem that is not there.
+
+The permanent answer is a drop-in for logind, which survives package updates where editing
+`/etc/systemd/logind.conf` might not:
 
 ```bash
 sudo mkdir -p /etc/systemd/logind.conf.d
@@ -16,15 +31,72 @@ EOF
 sudo systemctl kill -s HUP systemd-logind      # logind rereads its configuration, no restart
 ```
 
-With `ignore`, closing the lid does nothing, on battery or plugged in, and not only for Enodia: the laptop stays on inside any bag. If you would rather keep the default and lift it only while Enodia runs, systemd has an inhibitor lock for exactly that, and it needs no configuration at all:
-
-```bash
-systemd-inhibit --what=handle-lid-switch --why="Enodia is walking" uv run enodia --say-status
-```
-
-While that command runs, logind ignores the lid. When it ends, the lid suspends again. The preflight reads the configuration and not the inhibitors, so with this approach its `lid` line stays `FAIL` even though the walk is safe.
+With `ignore`, closing the lid does nothing, on battery or plugged in, and not only for Enodia:
+the laptop stays on inside any bag. That is the trade, and it is why the inhibitor is worth
+knowing about first.
 
 Either way, a desktop environment such as GNOME or KDE may take the lid over from logind and decide on its own. Then its power settings are the ones that count, and the preflight cannot see them. The test that settles it is the same in every case: with Enodia running, close the lid for a minute and open it. If it does not say "The laptop slept for one minute", the lid is done.
+
+## The Wi-Fi daemon
+
+Enodia never touches the radio itself. It asks whichever daemon is running, iwd,
+NetworkManager or wpa_supplicant, over D-Bus, and that daemon decides whether to answer. So
+what has to be settled here is not a driver but a permission.
+
+The preflight's `scan` line is the test, and it asks **every** interface the walk will use
+rather than the first, since a second card that cannot scan is a warning about that card and
+not a reason to stay home:
+
+```bash
+uv run enodia --preflight
+```
+
+It says `FAIL` with the daemon's own error when the answer was refused. The usual cause is that
+the user is not on the daemon's D-Bus policy, and the usual fix is a group: `wheel` or
+`network`, depending on which one the distribution's policy files name.
+
+```bash
+sudo usermod -aG network "$USER"     # or wheel, whichever the policy names
+```
+
+The `-a` matters, for the same reason it matters below, and group membership is read when a
+session starts: log out and back in.
+
+A `scan` line saying the daemon scanned and found no networks is not a permission problem. That
+is a quiet street, and it is reported as a warning rather than a failure for that reason.
+
+Two neighbouring lines. `--no-fresh` reads the daemon's cached view instead of asking for a
+scan, which is faster and can be days out of date, so it is not what an outing wants. And
+`scan mac` reports whether the daemon randomises the address it scans with, which is about what
+your laptop broadcasts rather than about what it hears.
+
+## The voice
+
+Two engines are supported and neither is required: without one, Enodia prints what it would
+have said and the walk is otherwise unaffected.
+
+- **espeak-ng** is the default, and the classic `espeak` binary is accepted in its place.
+- **SVOX Pico** is the fallback: `libttspico-utils` on Debian and Ubuntu, which gives
+  `pico2wave`, or `pico-tts` from the AUR on Arch. Pico writes a WAV rather than playing one,
+  so it also needs a player, and the first of `paplay`, `pw-play` and `aplay` found is used.
+
+```bash
+uv run enodia --voice espeak       # force one engine
+uv run enodia --voice pico
+uv run enodia --voice none         # print instead of speaking
+```
+
+The preflight's `voice` line **actually says something** rather than looking for a binary,
+because a `pico2wave` with no working player is found easily and cannot be heard. `WARN` means
+no engine was found at all and Enodia will print. `FAIL` means one was found and could not
+speak, and the reason is the message.
+
+If it says `FAIL`, the engine is the place to start, outside Enodia:
+
+```bash
+espeak-ng "preflight"                                          # does the engine itself speak?
+pico2wave -w /tmp/t.wav "preflight" && paplay /tmp/t.wav       # engine and player separately
+```
 
 ## Reading the headset button
 

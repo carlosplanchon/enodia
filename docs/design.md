@@ -7,7 +7,26 @@ is that one rule applied in different places, and most of it was learned by gett
 first. This file is the record of that: what the program refuses to do, and the mistake that
 taught it to refuse.
 
-The [README](../README.md) says what Enodia does. This says why it is like this.
+The [README](../README.md) says what Enodia does. This says why it is like this. Each section
+is one decision: what the program does now, why, and the failure that asked for it, in that
+order. Reading it start to finish is not the point. Finding the one that explains a refusal you
+just met is.
+
+| If you are wondering | Read |
+|---|---|
+| why an answer is missing rather than approximate | *Not knowing is an answer* |
+| why an unreadable file is not an absent one | *A failure to read is not evidence of absence* |
+| why a value in a log was thrown away | *Refused at the door* |
+| what a record actually is, and why the export is a serialiser | *One record, and two ways of writing it down* |
+| why a failed peripheral read does not stop the walk | *Nothing else is allowed to end the walk* |
+| why an outing is named the way it is | *Identity, and how the clock stopped being enough* |
+| why a button press is timed by the kernel and not by Enodia | *The button, and which clock a press happened on* |
+| why the assistant suggests what it suggests | *Suggesting a next step without pretending to know one* |
+| why a write to the map or an export can fail without losing anything | the three sections from *The map is added to whole or not at all* |
+| what an export promises and what it cannot | *Publishing a walk without publishing a neighbourhood* |
+| why a missing button press is written down | *The kernel saying it lost your input* |
+| why the preflight says FAIL about a lid that is fine | *What a closed screen cannot tell you* |
+| what a real walk changed | *What the first real outing falsified* |
 
 ## Not knowing is an answer
 
@@ -162,6 +181,30 @@ what they would need:
   with nothing in it: every rule below the notebook one turns on what the map holds, so when
   it cannot be read they are all suspended and the menu is drawn with no suggestion on it.
   A count worked out from a file nobody opened would be a number invented to fill a line.
+
+## The map is added to whole or not at all
+
+The map lives in `$XDG_DATA_HOME/enodia/map/map.jsonl`, in a directory of its own so that `--resume` never mistakes it for an outing's log, and `--map FILE` puts it anywhere you like. Adding the same outing twice is refused rather than done, since a doubled outing pulls every answer towards itself. An outing goes on whole or not at all, written beside the map with the permissions the map already had, and moved into place, because that refusal is what makes a half-written walk unrepairable: the map would hold a third of it, call the outing present, and add nothing on a second run. The log is the opposite case and is appended line by line, since there everything already written is worth keeping.
+
+## A temporary file is a name somebody else can get to first
+
+The map is added to whole or not at all, which means writing it beside itself and moving it
+into place. The obvious name for that file is the map's own with something on the end, and the
+obvious name is the problem: anybody who can write in that directory can leave a symlink
+waiting under it, and the next outing opens the link, pours the map through it into whatever it
+points at, and then leaves the map itself as that link. It takes a few lines to reproduce and
+no privilege at all beyond a shared directory.
+
+So the temporary is made by `mkstemp` in the map's own directory: an unguessable name, created
+with `O_EXCL`, which refuses a path that already exists whether it is a file or a link. It
+carries the mode the map already had, and it is removed again if the move never happens. After
+the move, the directory itself is flushed: the contents were on disk before the rename, and
+until the directory is too, a power cut can leave the name pointing at the file it used to. The
+same change stops two copies of Enodia running at once from writing over each other's
+half-finished map, which the fixed name also allowed.
+
+The log is not written this way and does not need to be. It is opened for append and never
+replaced, so there is no second name and no window.
 
 ## Adding to the map is a read, a change and a write
 
@@ -384,26 +427,6 @@ matches every frequency, and refusing on those would be an export nobody could m
 around it. So the block gives a name and a count, and says in as many words that it is there to
 be looked at rather than believed.
 
-## A temporary file is a name somebody else can get to first
-
-The map is added to whole or not at all, which means writing it beside itself and moving it
-into place. The obvious name for that file is the map's own with something on the end, and the
-obvious name is the problem: anybody who can write in that directory can leave a symlink
-waiting under it, and the next outing opens the link, pours the map through it into whatever it
-points at, and then leaves the map itself as that link. It takes a few lines to reproduce and
-no privilege at all beyond a shared directory.
-
-So the temporary is made by `mkstemp` in the map's own directory: an unguessable name, created
-with `O_EXCL`, which refuses a path that already exists whether it is a file or a link. It
-carries the mode the map already had, and it is removed again if the move never happens. After
-the move, the directory itself is flushed: the contents were on disk before the rename, and
-until the directory is too, a power cut can leave the name pointing at the file it used to. The
-same change stops two copies of Enodia running at once from writing over each other's
-half-finished map, which the fixed name also allowed.
-
-The log is not written this way and does not need to be. It is opened for append and never
-replaced, so there is no second name and no window.
-
 ## The kernel saying it lost your input
 
 `SYN_DROPPED` is the input layer telling a client that its queue overran and events were thrown
@@ -445,7 +468,3 @@ synthetic observations built to have a known answer. The bundled Agraciada examp
 OpenStreetMap coordinates and geometry, but its radios and passes are synthetic. That is why
 `--check-pace`, `--check-passes` and `--check-map` exist: they let a real outing settle the rest
 the same way.
-
-## The map is added to whole or not at all
-
-The map lives in `$XDG_DATA_HOME/enodia/map/map.jsonl`, in a directory of its own so that `--resume` never mistakes it for an outing's log, and `--map FILE` puts it anywhere you like. Adding the same outing twice is refused rather than done, since a doubled outing pulls every answer towards itself. An outing goes on whole or not at all, written beside the map with the permissions the map already had, and moved into place, because that refusal is what makes a half-written walk unrepairable: the map would hold a third of it, call the outing present, and add nothing on a second run. The log is the opposite case and is appended line by line, since there everything already written is worth keeping.

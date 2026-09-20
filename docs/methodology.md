@@ -12,7 +12,7 @@ With coordinates on the crossings the centroid is a latitude and longitude, and 
 
 Sightings from two different stretches are not averaged together. The route is a path, not a ruler: walk a block and turn back, and the same doorway is covered twice at two very different distances from the start, so averaging those puts every access point at the corner you turned round at, the one place none of them is. An access point belongs to the stretch it was loudest on, and only the sightings made there place it. Every pass over that stretch does count, including one that ran the other way, which is what makes the next section possible.
 
-Most of what a walk hears is not on the street it walked. It is inside the block, or a street over, heard faintly from wherever you happened to be, and the estimate still puts a point on the map for it. So each estimate is compared with the plain middle of the same sightings, with the signal ignored. Walk past an access point and its signal peaks sharply, pulling the estimate well clear of that middle. Hear one from a block away and every sighting weighs about the same, the estimate settles on the middle of your own route, and it says nothing whatever about where the thing is. The second kind is marked **barely pinned down**, in the report, in the `barely_pinned` column of the CSV and in the GeoJSON properties, and the summary says how many of them there were.
+Most of what a walk hears is not on the street it walked. It is inside the block, or a street over, heard faintly from wherever you happened to be, and the estimate still puts a point on the map for it. So each estimate is measured against the same sightings read with the signal ignored, and what is compared is how tightly they gather, not where their middle lands. The sightings have a spread around the weighted estimate and a spread around their own plain middle, and the signal has to bring the first down to three quarters of the second or less. Walk past an access point and its signal peaks sharply, pulling the sightings in around one point. Hear one from a block away and every sighting weighs about the same, the cloud is as wide as the stretch you walked, and the estimate says nothing whatever about where the thing is. The second kind is marked **barely pinned down**, in the report, in the `barely_pinned` column of the CSV and in the GeoJSON properties, and the summary says how many of them there were.
 
 On a synthetic grid walk this separates cleanly: an access point walked straight past came out exactly where it stood and unmarked, while one sitting 100 metres off the route was placed on a street it is not on, 152 metres from the truth, and marked. Before this, the two lines of the report looked alike.
 
@@ -52,13 +52,35 @@ Stretches walked more than once, and how far apart the passes put the networks:
 
 (A **synthetic** out and back built with three seconds of scan lag in it, not a real outing. See *Limits* in [the README](../README.md).)
 
-Two numbers come out, and they mean different things. The **disagreement** is how far apart the two passes put the same access point, which is an error bar on the whole method measured against nothing but the walk itself. The **shift** is systematic rather than random, and it is the more interesting one. A scan sweeps its channels over seconds and is stamped when it finishes, so an access point was always heard a little before it was recorded, which places it a little further along than it really is, in whichever direction you happened to be walking. Walk back and that error reverses. The two estimates therefore straddle the truth, half the gap between them is the lag, and their midpoint cancels it. It is the same reasoning as a reciprocal levelling in surveying.
+Two numbers come out, and they mean different things. The **disagreement** is how far apart the two passes put the same access point. It is a measure of consistency and not of accuracy: it is taken against nothing but the walk itself, so two passes can agree closely and both be displaced from where the access point really stands. Anything that biases both passes the same way is invisible to it, and the straight-street case below is exactly that. The **shift** is systematic rather than random, and it is the more interesting one. A scan sweeps its channels over seconds and is stamped when it finishes, so an access point was always heard a little before it was recorded, which places it a little further along than it really is, in whichever direction you happened to be walking. Walk back and that error reverses. The two estimates therefore straddle the truth, half the gap between them is the lag, and their midpoint cancels it. It is the same reasoning as a reciprocal levelling in surveying.
 
 Read the shift as an upper bound rather than a measurement: it also absorbs whatever else differed between the passes, such as which side of the street you took or which shoulder the laptop hung from.
 
+## What the map file is
+
+One JSON object per line, like everything else Enodia writes.
+
+```json
+{"time": "2026-09-14T17:03:24-03:00", "outing": "2026-09-14T17:00:30-03:00/sample-a14", "walk": "2026-09-14T17:00:30-03:00/sample-a14#0",
+ "from": "Avenida Agraciada y Doctor Salvador García Pintos", "to": "Avenida Agraciada y San Fructuoso", "fraction": 0.68,
+ "lat": -34.880341, "lon": -56.195664, "length_m": 148.0,
+ "networks": [{"ssid": "sample-ap-04", "bssid": "02:00:00:00:00:04", "signal_dbm": -41}]}
+```
+
+That is an abbreviated object copied from the checked-in sample map: the place and time are
+real outputs of the sample pipeline, while the `sample-*` radio identity is explicitly fictitious.
+
+`outing` names the walk by when it began and by the token it wrote on its own scans, never by the log's filename. A `walk` is one outing down one stretch, `outing#segment`, which is the unit `--check-map` holds out. `from`, `to` and `fraction` are in the sorted frame, while the names stay as the notebook wrote them, and only what matching uses is kept: not the security and not the band, since neither says anything about where you are. [The design notes](design.md) say why the clock alone was not enough to name an outing.
+
+A network with nothing to identify it, no BSSID and no name, is kept in the log and left out of the matching: the empty key it would have is the same empty key every other anonymous network in the world has. [The design notes](design.md) say what that cost before it was caught.
+
+Be clear about what this file is. It is a geolocation database of your neighbours' routers, names included, keyed to the street corners they sit near, small enough to mail and easy to grep. A map Enodia creates is readable only by you, and one you have set permissions on keeps them. That is exactly what makes it work and exactly why it is worth keeping to yourself. `.gitignore` excludes `*.jsonl` already. Keeping the SSID is deliberate, because a map you can read by eye is a map you can check.
+
+Every number in the map is checked on the way back in rather than trusted, since it is a file that gets copied about and edited by hand, and a BSSID arrives in one spelling of itself. [The design notes](design.md) say what each check refuses and which bug asked for it.
+
 ## Does the map actually find you?
 
-`--check-map` holds out one whole walk at a time, one outing down one stretch, and locates every scan of it from the rest of the map. Holding out one scan at a time would be worthless: its neighbour was taken five seconds and six metres later and sees almost exactly the same networks, so the map would be scoring itself on a copy of the question.
+`--check-map` holds out one pass down one stretch at a time, which is what a `walk` is in the map, and locates every scan of it from the rest. Two passes of the same outing are two walks, so an outing that doubled back is tested on the pass it did not train on, over the same street: the thing worth knowing, from data an ordinary walk already produced. Holding out one scan at a time would be worthless: its neighbour was taken five seconds and six metres later and sees almost exactly the same networks, so the map would be scoring itself on a copy of the question.
 
 ```
 Map: 12 fingerprints, 2 walks over 1 stretches, 2 outings.
@@ -77,28 +99,6 @@ Each walk held out in turn, and its scans located from the rest of the map:
 ```
 
 (Two **synthetic** passes over the real 148 m Agraciada geometry in [`samples/`](../samples/README.md), not real outings. See *Limits* in [the README](../README.md).) The error is given twice on purpose. A fraction of a block is comparable between any two stretches, and metres are only known for the stretches whose crossings carry coordinates, so a map that mixes notebooks with and without them says how many of the answers the distances actually cover instead of averaging the measurable half and calling it the whole. Signal wins here because the synthetic levels were made to vary smoothly along the block; only a real outing can say whether that survives different radios, bodies and days. The important structural point is that each pass is held out against the other outing, so none of these answers is the map recognising the walk it trained on.
-
-## What the map file is
-
-One JSON object per line, like everything else Enodia writes.
-
-```json
-{"time": "2026-09-14T17:03:24-03:00", "outing": "2026-09-14T17:00:30-03:00/sample-a14", "walk": "2026-09-14T17:00:30-03:00/sample-a14#0",
- "from": "Avenida Agraciada y Doctor Salvador García Pintos", "to": "Avenida Agraciada y San Fructuoso", "fraction": 0.68,
- "lat": -34.880341, "lon": -56.195664, "length_m": 148.0,
- "networks": [{"ssid": "sample-ap-04", "bssid": "02:00:00:00:00:04", "signal_dbm": -41}]}
-```
-
-That is an abbreviated object copied from the checked-in sample map: the place and time are
-real outputs of the sample pipeline, while the `sample-*` radio identity is explicitly fictitious.
-
-An outing is named by when it began and by the token the walk wrote on its own scans, never by the log's filename, since `--log walk.jsonl` reused every week appends to the same pages. Nor by the clock alone, which is what this was: the timestamp has one second of resolution and two walks can begin inside one, and then the map refused the second as already added and `--check-map` held the two out together as one. It is the lesson `cycle` taught one layer down. A log written before the token existed still falls back to the clock, the same way a log written before `cycle` falls back to it for grouping. A `walk` is one outing down one stretch, which is the unit `--check-map` holds out. `from`, `to` and `fraction` are in the sorted frame, while the names stay as the notebook wrote them. Only what matching uses is kept: the security and the band are not, since neither says anything about where you are.
-
-A network with nothing to identify it is kept in the log and left out of all of this. A network is known by its BSSID, or by its name when the backend gives no BSSID, which iwd sometimes does not, and a network that also hides its name leaves neither. Two of those are not the same network, they are two networks nothing can tell apart, and treated as one they agreed with each other completely: a fresh scan of one anonymous router scored a perfect match against a remembered, different one, and the map answered with a place. So they are never folded together, never matched, never counted as turnover and never placed. A coincidence of absence is not evidence.
-
-Be clear about what this file is. It is a geolocation database of your neighbours' routers, names included, keyed to the street corners they sit near, small enough to mail and easy to grep. A map Enodia creates is readable only by you, and one you have set permissions on keeps them. That is exactly what makes it work and exactly why it is worth keeping to yourself. `.gitignore` excludes `*.jsonl` already. Keeping the SSID is deliberate, because a map you can read by eye is a map you can check.
-
-Because it is a file that gets copied about and edited by hand, every number in it is checked on the way back in rather than trusted: a latitude has to be a number and to be finite and to fall between -90 and 90, a fraction between 0 and 1, and half a coordinate is no coordinate. A BSSID comes in as one spelling of itself, since hexadecimal written out has two of every letter and that string is what one network being another is decided by: `AA:BB:CC:DD:EE:FF` in a hand-edited map and `aa:bb:cc:dd:ee:ff` in a fresh scan are one access point, and they used to score nothing in common. The SSID keeps its case, because `Casa` and `casa` are two names somebody chose. JSON will carry `NaN`, and Python reads it without complaint, and one of them poisons every average it reaches, so it is refused at the door where it costs one line instead of turning up later as an answer nobody can explain. The same goes for the log.
 
 ## What comes out
 

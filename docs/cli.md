@@ -1,7 +1,11 @@
 # Every flag
 
-`enodia --help` is the authoritative list, and the one that cannot go out of date.
-This one groups the flags by when you reach for them, and says what each is for.
+`enodia --help` is the authoritative list, and the one that cannot go out of date. `enodia
+--version` says which Enodia this is. This page groups the flags by the command you reach for
+them with, and says what each is for and what it does when you leave it out.
+
+Short forms: `-i` is `--interface` (repeatable, and without it every Wi-Fi interface is
+watched), `-t` is `--interval`, `-l` is `--log`.
 
 ## On the walk
 
@@ -31,22 +35,87 @@ uv run enodia --cycles 3                  # stop after 3 scans instead of runnin
 uv run enodia --preflight                 # check everything an outing needs and exit
 ```
 
-## Afterwards
+## Reading a log back
 
 ```bash
-uv run enodia --open-networks LOG         # the unencrypted networks in a log, strongest first
-uv run enodia --reconcile LOG NOTEBOOK    # place every network along the route (see Back home)
-uv run enodia --map-add LOG NOTEBOOK      # add an outing to the fingerprint map
-uv run enodia --locate                    # scan now, on every radio, and say where on the map you are
-uv run enodia --check-map                 # hold out a walk and measure how well the map finds it
-uv run enodia --geocode libreta.txt --area Montevideo    # look the corners up on OpenStreetMap
-uv run enodia --geocode libreta.txt --area Montevideo --proxy socks5://127.0.0.1:9050  # through Tor
-uv run enodia --geocode libreta.txt --area Montevideo --streets calles.jsonl   # keep the street shapes
-uv run enodia --reconcile LOG libreta.geo.txt --streets calles.jsonl   # place the scans along them
-uv run enodia --geocode libreta.txt --area Montevideo --streets calles.jsonl --buildings  # and the blocks
-uv run enodia --reconcile LOG libreta.geo.txt --streets calles.jsonl --svg plano.svg   # draw it
-uv run enodia --reconcile LOG libreta.txt --outing 3f9a2b10   # one walk of a file that holds several
+uv run enodia --reconcile LOG libreta.txt                     # the report
+uv run enodia --reconcile LOG libreta.txt --pace clock        # share out each stretch on time
+uv run enodia --reconcile LOG libreta.txt --outing 3f9a2b10    # one walk of a file that holds several
+uv run enodia --reconcile LOG libreta.txt --scans              # also list where every scan landed
+uv run enodia --reconcile LOG libreta.txt --csv redes.csv --geojson paseo.geojson
+uv run enodia --reconcile LOG libreta.geo.txt --streets calles.jsonl          # along the streets
+uv run enodia --reconcile LOG libreta.geo.txt --streets calles.jsonl --svg plano.svg
+uv run enodia --open-networks LOG                              # the unencrypted ones, strongest first
 ```
+
+`--pace movement` is the default and reads the pace from how much the networks in view turn
+over, so that a stop stays a stop. `--pace clock` interpolates on time instead, assuming a
+steady walk. Which one is better for your route is not a matter of opinion: `--check-pace`
+below measures it.
+
+`--outing TOKEN` picks one walk out of a file that holds several, which is what `--log
+walk.jsonl` reused every week produces. Without it the last walk in the file is read, and which
+one that was is printed whenever there is a choice.
+
+`--streets FILE` places each scan along the street's real shape instead of on the straight line
+between two crossings, which is what happens without it. `--svg FILE` draws the walk as a plan
+from that same geometry, with no tiles fetched, and needs coordinates on the crossings.
+
+`--csv`, `--geojson` and `--svg` each add a line to the report saying where they wrote. The
+report itself goes to standard output, so capturing it wants a run without them.
+
+## Does any of it work
+
+```bash
+uv run enodia --reconcile LOG libreta.geo.txt --check-pace     # which pace method finds the crossings again
+uv run enodia --reconcile LOG libreta.txt --check-passes       # how far apart two passes put the same networks
+uv run enodia --check-map                                      # hold out a pass and locate it from the rest
+uv run enodia --check-map --match signal                       # the same, scored on signal as well
+```
+
+`--check-pace` needs coordinates on the crossings, since it measures in metres. `--check-passes`
+needs none: it compares two passes over one stretch against each other. `--check-map` needs a
+map with at least two passes in it, and holds out one pass down one stretch at a time, never a
+single scan, since a scan's neighbour was taken five seconds later and sees almost the same
+networks. [The methodology notes](methodology.md) say what each of the three can and cannot
+tell you.
+
+## The map, and finding yourself again
+
+```bash
+uv run enodia --map-add LOG libreta.txt                        # add an outing to the map
+uv run enodia --map-add LOG libreta.txt --streets calles.jsonl # along the street shapes
+uv run enodia --locate                                         # scan now: where am I?
+uv run enodia --locate LOG                                     # or place a log's last scan
+uv run enodia --locate --match signal                          # score on signal strength too
+uv run enodia --map otro.jsonl --locate                        # a map somewhere else
+```
+
+`--match networks` is the default and matches on which networks are in view. `--match signal`
+also weighs how strongly each came in, which is more precise and less portable between radios,
+since two cards report different numbers for the same room. An outing already in the map is not
+added twice.
+
+## Putting the notebook on the map
+
+```bash
+uv run enodia --geocode libreta.txt --area Montevideo                          # look the corners up
+uv run enodia --geocode libreta.txt --area Montevideo --out libreta.geo.txt    # name the output
+uv run enodia --geocode libreta.txt --area Montevideo --marks LOG              # time the untimed lines
+uv run enodia --geocode libreta.txt --area Montevideo --proxy socks5://127.0.0.1:9050
+uv run enodia --geocode libreta.txt --area Montevideo --streets calles.jsonl   # keep the street shapes
+uv run enodia --geocode libreta.txt --area Montevideo --streets calles.jsonl --buildings
+uv run enodia --geocode libreta.txt --area Montevideo --overpass-url https://overpass.kumi.systems/api/interpreter
+```
+
+This is the one command in Enodia that goes online, and only when you type it. `--area` is not
+optional: without it `Freire` matches a street in Chile. It takes a place as OpenStreetMap names
+it, or four numbers `s,w,n,e` for a bounding box.
+
+The original notebook is never touched. Without `--out`, the result goes beside it with `.geo`
+before the suffix. `--proxy` sends the one request through SOCKS5 and the proxy resolves the
+hostname, never this machine; `ALL_PROXY` and the rest of the environment are deliberately never
+read, and if the proxy cannot be reached nothing is sent. It needs `uv sync --extra socks`.
 
 ## What is spoken
 
@@ -74,7 +143,7 @@ Speech runs in its own thread and never holds up a scan. It is slow (espeak-ng t
 ## Sharing a walk
 
 ```bash
-uv run enodia --export-public paseo.jsonl libreta.txt --out samples/
+uv run enodia --export-public paseo.jsonl libreta.txt --out publicado/
 uv run enodia --export-public paseo.jsonl libreta.txt --ssid pseudonym  # names kept apart, not dropped
 uv run enodia --export-public paseo.jsonl libreta.txt --ssid keep       # names as they are
 uv run enodia --export-public paseo.jsonl libreta.txt --mac-shaped      # d2:17:43:.. rather than ap-1c8a74f992ae
@@ -150,11 +219,19 @@ outing and hands the menu back, with the log just written already chosen. Ctrl+D
 ## The ones that only make sense together
 
 Enodia refuses a combination that cannot mean anything rather than ignoring half of it, and
-says which flag is the odd one. `--area`, `--out`, `--marks`, `--proxy` and `--overpass` need
-`--geocode`. `--streets` needs one of `--geocode`, `--reconcile` or `--map-add`, and
-`--buildings` needs `--geocode --streets`. `--svg` needs `--reconcile`. `--outing` needs one of
-`--reconcile`, `--map-add`, `--locate LOG` or `--geocode --marks`. Each of those exits with
-status 2, the way a bad command line does.
+says which flag is the odd one.
+
+| flag | needs |
+|---|---|
+| `--area`, `--marks`, `--proxy`, `--overpass-url` | `--geocode` |
+| `--out` | `--geocode` or `--export-public` |
+| `--ssid`, `--mac-shaped`, `--key-file` | `--export-public` |
+| `--streets` | `--geocode`, `--reconcile` or `--map-add` |
+| `--buildings` | `--geocode` and `--streets` |
+| `--svg`, `--pace`, `--check-pace`, `--check-passes`, `--csv`, `--geojson`, `--scans` | `--reconcile` |
+| `--outing` | `--reconcile`, `--map-add`, `--export-public`, `--locate LOG` or `--geocode --marks` |
+
+Each of those exits with status 2, the way a bad command line does.
 
 ## Where things are written
 

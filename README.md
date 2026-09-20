@@ -106,7 +106,7 @@ uv run enodia --locate
 ## Go further
 
 - **Draw the route.** Add coordinates by hand or look up crossings with `--geocode`. Use `--streets` for street geometry and export with `--csv`, `--geojson` or `--svg`. Geocoding is the only command that accesses the internet, and it supports an explicit proxy.
-- **Check the estimates.** `--check-pace` compares inferred movement with the clock, `--check-passes` compares repeated passes, and `--check-map` holds out whole outings to test localisation.
+- **Check the estimates.** `--check-pace` compares inferred movement with the clock, `--check-passes` compares repeated passes, and `--check-map` holds out one pass down one stretch at a time to test localisation.
 - **Share an outing.** `--export-public` produces a pseudonymised log and notebook. Review both before publishing. Stable fingerprints and route geometry can still identify a place.
 
 See the [CLI reference](docs/cli.md) for command syntax and options.
@@ -121,10 +121,12 @@ Fresh Wi-Fi scans send probe requests. `--preflight` checks scan-address randomi
 
 ## Documentation
 
-- [Machine setup](docs/setup.md): lid behaviour and headset permissions.
-- [CLI reference](docs/cli.md): flags, speech, storage and exports.
-- [Methodology](docs/methodology.md): positioning, fingerprints and validation.
-- [Design notes](docs/design.md): engineering decisions and the evidence behind them.
+- [Machine setup](docs/setup.md): the lid, the Wi-Fi daemon, the voice and headset permissions.
+- [CLI reference](docs/cli.md): every flag, by the command you reach for it with.
+- [File formats](docs/formats.md): the notebook you write and the log Enodia writes.
+- [Methodology](docs/methodology.md): positioning, fingerprints and what the self-checks measure.
+- [Design notes](docs/design.md): engineering decisions and the failure behind each one.
+- [From Python](docs/library.md): the same operations as function calls.
 
 ## License
 
