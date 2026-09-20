@@ -334,16 +334,24 @@ def parse_proxy(url: str) -> Proxy:
     machine would announce what is about to be asked even though the request
     itself goes through Tor.
     """
+    # The scheme is read out of the string rather than asked of `urlsplit`,
+    # because what that calls the scheme of a bare `host:port` changed in 3.11.
+    # 3.10 answers "127.0.0.1" and every version after it answers "", so the
+    # same typed proxy was told "not 127.0.0.1", as though that were a scheme
+    # somebody had asked for, on one Python and "not a bare host" on another.
+    # A message that depends on which interpreter is installed is worse than
+    # either of the two messages.
+    named, marker, _ = url.partition("://")
+    if (named if marker else "") not in ("socks5", "socks5h"):
+        raise GeocodeError(
+            f"{url}: only socks5:// and socks5h:// proxies are supported, "
+            f"not {named if marker and named else 'a bare host'}"
+        )
     parts = urllib.parse.urlsplit(url)
     try:
         port = parts.port
     except ValueError as exc:  # a port that is not a number at all
         raise GeocodeError(f"{url}: {exc}") from exc
-    if parts.scheme not in ("socks5", "socks5h"):
-        raise GeocodeError(
-            f"{url}: only socks5:// and socks5h:// proxies are supported, "
-            f"not {parts.scheme or 'a bare host'}"
-        )
     if not parts.hostname or not port:
         raise GeocodeError(f"{url}: a proxy needs both a host and a port, as socks5://host:port")
     return Proxy(parts.hostname, port, parts.username, parts.password)

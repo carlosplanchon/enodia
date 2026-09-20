@@ -352,10 +352,16 @@ def test_a_socks_proxy_url_is_parsed_into_its_parts():
 
 
 def test_a_proxy_that_is_not_socks5_is_refused_by_name():
-    with pytest.raises(GeocodeError, match="only socks5"):
+    # The whole message, not a fragment of it. What `urlsplit` calls the scheme
+    # of a bare `host:port` changed in 3.11: 3.10 answers "127.0.0.1" and every
+    # version after it answers "", so the same typed proxy was told "not
+    # 127.0.0.1", as though that were a scheme somebody had asked for, on the
+    # oldest Python this supports and "not a bare host" on the newest.
+    with pytest.raises(GeocodeError, match=r"only socks5:// and socks5h:// .* not http$"):
         parse_proxy("http://127.0.0.1:3128")
-    with pytest.raises(GeocodeError, match="a bare host"):
-        parse_proxy("127.0.0.1:9050")
+    for bare in ("127.0.0.1:9050", "://host:80", "localhost"):
+        with pytest.raises(GeocodeError, match=r"not a bare host$"):
+            parse_proxy(bare)
 
 
 def test_a_proxy_url_without_a_port_is_refused_rather_than_guessed_at():

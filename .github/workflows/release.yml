@@ -1,0 +1,44 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    name: Build the distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v5
+      - name: Build the sdist and the wheel
+        run: uv build
+      - name: Check the metadata and the long description
+        run: uvx twine check --strict dist/*
+      - uses: actions/upload-artifact@v5
+        with:
+          name: distributions
+          path: dist/
+
+  publish:
+    name: Publish to PyPI
+    needs: [build]
+    runs-on: ubuntu-latest
+    # The environment is what the trusted publisher on PyPI is registered
+    # against, and it is also where a required reviewer can be added so that a
+    # tag alone cannot put a release on PyPI.
+    environment:
+      name: pypi
+      url: https://pypi.org/p/enodia
+    permissions:
+      # Mandatory for trusted publishing: it is how the job proves to PyPI which
+      # workflow of which repository it is, instead of carrying an API token.
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          name: distributions
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
