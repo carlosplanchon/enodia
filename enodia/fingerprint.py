@@ -729,13 +729,14 @@ def scan_from_log(log_path: str | Path, outing: str | None = None) -> list[SeenN
 
 @dataclass(frozen=True)
 class HeldOutScan:
-    """One fingerprint located from a map with its own walk taken out."""
+    """One fingerprint located from a map with its own outing, or its own walk, taken out."""
 
     truth: Place
     found: Location | None
     error_m: float | None
     error_fraction: float | None
     outing: str = ""
+    across_crossing: bool = False
 
     @property
     def abstained(self) -> bool:
@@ -743,7 +744,18 @@ class HeldOutScan:
 
     @property
     def wrong_stretch(self) -> bool:
-        return self.found is not None and self.found.place.key != self.truth.key
+        """True when the answer named a different street: a stretch with no crossing in common.
+
+        The stretch next door is not that. A scan taken at a corner is on two
+        stretches at once, and an answer a few metres past that corner is a
+        small error measured through it, `across_crossing`, not a different
+        street.
+        """
+        return (
+            self.found is not None
+            and self.found.place.key != self.truth.key
+            and not self.across_crossing
+        )
 
     @property
     def own_outing_only(self) -> bool:
@@ -755,18 +767,41 @@ class HeldOutScan:
         return self.found is not None and set(self.found.outings) <= {self.outing}
 
 
+def _shared_crossing(truth: Place, found: Place) -> tuple[float, float] | None:
+    """Which end of each stretch is the corner the two share, as fractions, or None."""
+    for truth_end, name in enumerate(truth.key):
+        for found_end, other in enumerate(found.key):
+            if name == other:
+                return float(truth_end), float(found_end)
+    return None
+
+
 def _measure(one: Fingerprint, found: Location | None) -> HeldOutScan:
     truth = one.place
-    if found is None or found.place.key != truth.key:
-        return HeldOutScan(truth, found, None, None, one.outing)
-    gap = abs(found.place.fraction - truth.fraction)
+    if found is None:
+        return HeldOutScan(truth, None, None, None, one.outing)
     here, there = truth.coordinates, found.place.coordinates
-    metres = (
+    straight = (
         distance_metres(here[0], here[1], there[0], there[1])
         if here is not None and there is not None
-        else truth.metres(gap)
+        else None
     )
-    return HeldOutScan(truth, found, metres, gap, one.outing)
+    if found.place.key == truth.key:
+        gap = abs(found.place.fraction - truth.fraction)
+        metres = truth.metres(gap) if straight is None else straight
+        return HeldOutScan(truth, found, metres, gap, one.outing)
+    corner = _shared_crossing(truth, found.place)
+    if corner is None:
+        return HeldOutScan(truth, found, None, None, one.outing)
+    # Through the corner: how far the scan was from it along its own stretch,
+    # plus how far the answer is from it along the next one.
+    to_corner = abs(truth.fraction - corner[0])
+    past_corner = abs(found.place.fraction - corner[1])
+    metres = straight
+    if metres is None:
+        here_m, there_m = truth.metres(to_corner), found.place.metres(past_corner)
+        metres = None if here_m is None or there_m is None else here_m + there_m
+    return HeldOutScan(truth, found, metres, to_corner + past_corner, one.outing, True)
 
 
 @dataclass(frozen=True)
@@ -801,30 +836,41 @@ def map_summary(fingerprints: Sequence[Fingerprint]) -> MapSummary:
     )
 
 
+def _by_outing(fingerprints: Sequence[Fingerprint]) -> bool:
+    """Whether the map holds enough outings to hold one out whole."""
+    return len({one.outing for one in fingerprints}) > 1
+
+
 def check_map(
     fingerprints: Sequence[Fingerprint],
     by_signal: bool = False,
 ) -> list[HeldOutScan]:
-    """Hold out one walk at a time and locate its scans from the rest of the map.
+    """Hold out one outing at a time, or one walk when there is only one, and locate its scans.
 
-    The unit held out is a whole walk down one stretch, never a single scan, and
-    that choice is the whole difference between a measurement and a flattering
-    number. Consecutive scans are five seconds and a few metres apart and see
-    almost exactly the same networks, so leaving one out leaves its own
-    neighbour in, and the map scores itself on a copy of the question.
+    The unit held out is a whole outing when the map holds more than one, and
+    the question is then the one anybody asks of a map: does it know this
+    street from another day. Holding out a walk, one outing down one stretch,
+    left the same outing's next stretch in, and its first scan was taken five
+    seconds after the held-out walk's last one, a few metres on: the copy of
+    the question that holding out a walk rather than a single scan was meant to
+    keep out, arriving at the end of every stretch instead.
 
-    Held out by the walk, a map built from one outing that doubled back is
-    tested on the pass it did not train on, over the same street: the thing
-    worth knowing, from data an ordinary outing already produced.
+    A map of a single outing still holds out a walk, since that is all there
+    is: an outing that doubled back is tested on the pass it did not train on,
+    over the same street, and the report says that such an answer is the map
+    recognising a walk rather than a place. Holding out one scan at a time
+    would be worthless either way, since consecutive scans are five seconds and
+    a few metres apart and see almost exactly the same networks.
     """
-    walks: dict[str, list[Fingerprint]] = {}
+    by_outing = _by_outing(fingerprints)
+    groups: dict[str, list[Fingerprint]] = {}
     for one in fingerprints:
-        walks.setdefault(one.walk, []).append(one)
-    if len(walks) < 2:
+        groups.setdefault(one.outing if by_outing else one.walk, []).append(one)
+    if len(groups) < 2:
         return []
     results = []
-    for walk, held in walks.items():
-        rest = [one for one in fingerprints if one.walk != walk]
+    for key, held in groups.items():
+        rest = [one for one in fingerprints if (one.outing if by_outing else one.walk) != key]
         for one in held:
             results.append(_measure(one, locate_scan(rest, one.networks, by_signal)))
     return results
@@ -852,7 +898,8 @@ def _column(results: Sequence[HeldOutScan]) -> tuple[list[str], int, int]:
     metres = [r.error_m for r in results if r.error_m is not None]
     rows = [
         str(len(results)),
-        str(len(fractions)),
+        str(sum(1 for r in results if r.error_fraction is not None and not r.across_crossing)),
+        str(sum(1 for r in results if r.across_crossing)),
         str(sum(1 for r in results if r.wrong_stretch)),
         str(sum(1 for r in results if r.abstained)),
     ]
@@ -876,6 +923,7 @@ def format_map_check(
     labels = [
         "scans held out",
         "placed on the right stretch",
+        "placed across a crossing",
         "landed on the wrong stretch",
         "not on the map",
         "mean error, of a stretch",
@@ -886,10 +934,15 @@ def format_map_check(
     left, placed, measured = _column(by_networks)
     right, _, _ = _column(by_signal)
     counted = map_summary(fingerprints)
+    held = (
+        "Each outing held out in turn, and its scans located from the other outings:"
+        if _by_outing(fingerprints)
+        else "Each walk held out in turn, and its scans located from the rest of the map:"
+    )
     lines = [
         counted.describe(),
         "",
-        "Each walk held out in turn, and its scans located from the rest of the map:",
+        held,
         "",
         f"  {'':<28}{'by networks':>13}{'and by signal':>15}",
     ]
@@ -900,7 +953,9 @@ def format_map_check(
     lines.append("")
     lines.append(
         "  A scan that landed on the wrong stretch is not a small error, it is a "
-        "different street,\n  so it is counted apart rather than averaged into the distances."
+        "different street,\n  so it is counted apart rather than averaged into the distances. "
+        "One placed across a\n  crossing is on the stretch next door, a few metres past the "
+        "corner the two share, and\n  its error is measured through that corner."
     )
     names = [name for one in fingerprints for name in one.place.stretch]
     confusable = format_confusable(confusable_crossings(names))

@@ -94,6 +94,30 @@ def test_the_closest_drawing_wins_when_more_than_one_could_serve():
     assert chosen is not None and len(chosen) == 4  # los dos cruces más los dos vértices
 
 
+def test_a_street_split_into_several_ways_is_one_line_for_the_block_between_them():
+    # OpenStreetMap starts a new way wherever a tag changes, so the two crossings
+    # of one block often sit on different ways of the same street. Looked for one
+    # way at a time, that block was never found and fell back to the chord.
+    a, m, b = BEND[0], BEND[2], BEND[-1]
+    for ways in (((a, m), (m, b)), ((a, m), (b, m)), ((m, a), (m, b)), ((m, a), (b, m))):
+        streets = StreetMap(tuple(Street("Curva", way) for way in ways))
+        drawn = streets.between(a, b)
+        assert drawn is not None and m in drawn, ways
+        assert line_length_m(drawn) == pytest.approx(
+            distance_metres(*a, *m) + distance_metres(*m, *b), abs=1
+        )
+        assert len(streets) == 2  # el archivo sigue teniendo dos ways
+    # Three ways, chained whatever order the file lists them in.
+    three = StreetMap(
+        (Street("Curva", (a, BEND[1])), Street("Curva", (m, b)), Street("Curva", (BEND[1], m)))
+    )
+    drawn = three.between(a, b)
+    assert drawn is not None
+    assert line_length_m(drawn) == pytest.approx(line_length_m((a, BEND[1], m, b)), abs=1)
+    # Two streets with different names are never chained, whatever they touch.
+    assert StreetMap((Street("Una", (a, m)), Street("Otra", (m, b)))).between(a, b) is None
+
+
 # --- the file -----------------------------------------------------------------
 
 
@@ -180,6 +204,31 @@ def test_a_whole_reconciliation_places_its_scans_along_the_street(tmp_path, monk
     middle_drawn = drawn.placed[1].position.coordinates
     assert middle_plain is not None and middle_drawn is not None
     assert middle_drawn[0] > middle_plain[0]  # sobre la curva, al norte de la cuerda
+
+
+def test_the_report_says_how_many_blocks_followed_the_drawing(tmp_path, monkeypatch):
+    # A streets file that drew none of the blocks walked looked exactly like one
+    # that drew them all: every block was on the chord and nothing said so.
+    from enodia import netlog
+    from enodia.netlog import NetworkLog
+    from enodia.reconcile import format_report
+
+    stamps = iter(f"2026-09-05T17:0{minute}:00-03:00" for minute in (1, 3, 5, 7))
+    monkeypatch.setattr(netlog, "now_iso", lambda ago=0.0: next(stamps))
+    log = NetworkLog(tmp_path / "paseo.jsonl")
+    for _ in range(4):
+        log.record_scan([])
+    nb = tmp_path / "libreta.txt"
+    nb.write_text(
+        f"17:00 A @ {BEND[0][0]}, {BEND[0][1]}\n17:04 B @ {BEND[-1][0]}, {BEND[-1][1]}\n"
+        "17:08 C @ -34.9100, -56.2000\n"
+    )
+    report = format_report(reconcile(log.path, nb, by_movement=False, streets=CURVE))
+    assert (
+        "Blocks: 1 of 2 follow the street as drawn, 1 on the straight line between their crossings"
+        in report
+    )
+    assert "Blocks:" not in format_report(reconcile(log.path, nb, by_movement=False))
 
 
 def test_the_buildings_go_into_the_file_and_come_back_out(tmp_path):

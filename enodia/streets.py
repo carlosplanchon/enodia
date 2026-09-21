@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from functools import cached_property
 from math import cos, hypot, radians
 from pathlib import Path
 from typing import Any
@@ -95,6 +96,46 @@ class Street:
         return line_length_m(self.line)
 
 
+def _chained(streets: Sequence[Street]) -> tuple[Street, ...]:
+    """The ways of each street that meet end to end, joined into one line apiece.
+
+    OpenStreetMap starts a new way wherever a tag changes: the surface, the
+    number of lanes, a bridge. A block whose two crossings sit on different ways
+    of one street is still one block, and looked for one way at a time it was
+    never found and fell back to the chord without a word.
+    """
+    by_name: dict[str, list[Line]] = {}
+    for street in streets:
+        if len(street.line) >= 2:
+            by_name.setdefault(street.name, []).append(tuple(street.line))
+    chained = []
+    for name, lines in by_name.items():
+        joined = True
+        while joined:
+            joined = False
+            for i, a in enumerate(lines):
+                for j in range(i + 1, len(lines)):
+                    b = lines[j]
+                    if a[-1] == b[0]:
+                        together = a + b[1:]
+                    elif a[-1] == b[-1]:
+                        together = a + b[::-1][1:]
+                    elif a[0] == b[-1]:
+                        together = b + a[1:]
+                    elif a[0] == b[0]:
+                        together = a[::-1] + b[1:]
+                    else:
+                        continue
+                    lines[i] = together
+                    del lines[j]
+                    joined = True
+                    break
+                if joined:
+                    break
+        chained.extend(Street(name, line) for line in lines)
+    return tuple(chained)
+
+
 @dataclass(frozen=True)
 class StreetMap:
     """What the lookup drew: the streets, and the buildings they run between."""
@@ -104,6 +145,11 @@ class StreetMap:
 
     def __len__(self) -> int:
         return len(self.streets)
+
+    @cached_property
+    def runs(self) -> tuple[Street, ...]:
+        """The streets with their ways chained end to end: what a block is looked for on."""
+        return _chained(self.streets)
 
     def between(self, here: Place, there: Place, within_m: float = NEAR_CROSSING_M) -> Line | None:
         """The block from one crossing to the next, as drawn, or None to use the chord.
@@ -117,9 +163,7 @@ class StreetMap:
         """
         chord = distance_metres(*here, *there)
         best: tuple[float, Line] | None = None
-        for street in self.streets:
-            if len(street.line) < 2:
-                continue
+        for street in self.runs:
             first, off_first = nearest_vertex(street.line, here)
             last, off_last = nearest_vertex(street.line, there)
             if first == last or off_first > within_m or off_last > within_m:

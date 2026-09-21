@@ -480,7 +480,7 @@ def _in_view(scan: LogRecord) -> set[str]:
     return {network.key for network in scan.networks if network.identified}
 
 
-def _step(before: LogRecord, after: LogRecord) -> float:
+def _step(before: LogRecord, after: LogRecord) -> float | None:
     """Movement between two consecutive scans, as far as the networks show it.
 
     Every scan record is evidence. A cycle whose scan could not be trusted (the
@@ -488,16 +488,21 @@ def _step(before: LogRecord, after: LogRecord) -> float:
     scan, and is skipped, so an empty list here is an empty view, and the step
     from a full view to it is a step.
 
-    Two different radios are never a step. Watching two interfaces writes a
-    record each, and they see different sets: one is a 5 GHz card hearing eight
-    networks and the other a 2.4 GHz one hearing forty. Comparing them reads as
-    a complete change of view, which is a whole block walked, over and over,
-    while the operator stands still. `merged_scans` folds each cycle into one
-    record before it gets here, and this is what catches a cycle whose two scans
-    landed either side of a second boundary.
+    Two different looks are never a step, and None says so: not "no movement"
+    but "no evidence either way", which `_share_out` fills in from the steps
+    around it. Watching two interfaces writes a record each, and they see
+    different sets: one is a 5 GHz card hearing eight networks and the other a
+    2.4 GHz one hearing forty. Comparing them reads as a complete change of
+    view, which is a whole block walked, over and over, while the operator
+    stands still. `merged_scans` folds each cycle into one record before it
+    gets here, which catches a cycle whose two scans landed either side of a
+    second boundary. This catches the cycle that only one of the cards
+    answered: folded, it is still one card's look, and against the two-card
+    look beside it half the view is missing, which read as a block walked while
+    standing still.
     """
-    if before.interface and after.interface and before.interface != after.interface:
-        return 0.0
+    if before.interface != after.interface:
+        return None
     return network_turnover(_in_view(before), _in_view(after))
 
 
@@ -554,6 +559,12 @@ def merged_scans(scans: Sequence[LogRecord]) -> list[LogRecord]:
     return sorted(folded, key=_when)
 
 
+# A step longer than this many of the usual ones is a hole in the scans, not a
+# step. Turnover saturates: a minute with nothing shared reads exactly like five
+# seconds with nothing shared.
+HOLE = 3.0
+
+
 def _share_out(scans: Sequence[LogRecord], start: Waypoint, end: Waypoint) -> list[float]:
     """Where each scan of one stretch falls, by movement rather than by the clock.
 
@@ -563,25 +574,45 @@ def _share_out(scans: Sequence[LogRecord], start: Waypoint, end: Waypoint) -> li
     in between. With a steady pace this lands on exactly what the clock would
     have said; the two only diverge where the pace was not steady, which is the
     whole point.
+
+    A step that measured nothing is filled the same way. Turnover saturates:
+    once nothing is shared a step reads as 1 whether it took five seconds or a
+    minute, so a hole in the scans counted as one step and everything after it
+    on the stretch was placed too early. And a step between two looks that
+    cannot be compared (`_step` says which) is no evidence either way. Both get
+    the average rate of the steps that did measure something, for as long as
+    they lasted. A stretch whose measured steps add up to no movement at all
+    falls back to the clock, as it always did.
     """
     times = [_when(scan) for scan in scans]
-    steps = [_step(a, b) for a, b in pairwise(scans)]
-    walked = sum(steps)
-    measured_seconds = (times[-1] - times[0]).total_seconds() if len(times) > 1 else 0.0
-    if walked <= 0 or measured_seconds <= 0:
+    spans = [(later - earlier).total_seconds() for earlier, later in pairwise(times)]
+    usual = sorted(spans)[len(spans) // 2] if spans else 0.0
+    steps: list[float | None] = []
+    for (before, after), span in zip(pairwise(scans), spans, strict=True):
+        turnover = _step(before, after)
+        steps.append(None if usual > 0 and span > usual * HOLE else turnover)
+    walked = seconds = 0.0
+    for step, span in zip(steps, spans, strict=True):
+        if step is not None:
+            walked += step
+            seconds += span
+    if walked <= 0 or seconds <= 0:
         return [_time_fraction(moment, start, end) for moment in times]
 
-    rate = walked / measured_seconds
+    rate = walked / seconds
+    filled = [
+        rate * span if step is None else step for step, span in zip(steps, spans, strict=True)
+    ]
     head = rate * (times[0] - start.time).total_seconds()
     tail = rate * (end.time - times[-1]).total_seconds()
-    total = head + walked + tail  # > 0: walked ya lo es, y head y tail no son negativos
+    total = head + sum(filled) + tail  # > 0: walked ya lo es, y head y tail no son negativos
 
     fractions = []
     travelled = head
     for index in range(len(scans)):
         fractions.append(min(1.0, max(0.0, travelled / total)))
-        if index < len(steps):
-            travelled += steps[index]
+        if index < len(filled):
+            travelled += filled[index]
     return fractions
 
 
@@ -1228,6 +1259,19 @@ def format_report(result: Reconciliation, with_scans: bool = False) -> str:
         ),
         "",
     ]
+    if result.streets is not None:
+        # One entry per block with scans on it. A streets file that drew none
+        # of the blocks walked used to look exactly like one that drew them all.
+        blocks = {
+            result.waypoints.index(one.position.start): one.position.line is not None
+            for one in result.placed
+        }
+        drawn = sum(1 for followed in blocks.values() if followed)
+        lines.insert(
+            3,
+            f"Blocks: {drawn} of {len(blocks)} follow the street as drawn, "
+            f"{len(blocks) - drawn} on the straight line between their crossings",
+        )
     if with_scans:
         lines.append("Scans along the route:")
         for placed_scan in result.placed:

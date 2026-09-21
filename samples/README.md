@@ -63,7 +63,7 @@ every test run and compares the results to the files beside it, so they cannot d
     --geojson samples/agraciada-walk.geojson --svg samples/agraciada-plan.svg
   ```
 
-- `agraciada-map-check.txt`: leave-one-walk-out validation of the two-pass map
+- `agraciada-map-check.txt`: validation of the two-pass map, each outing held out and located from the other
 
   ```bash
   uv run enodia --check-map --map samples/agraciada-map.jsonl > samples/agraciada-map-check.txt

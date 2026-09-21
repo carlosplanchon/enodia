@@ -80,16 +80,17 @@ Every number in the map is checked on the way back in rather than trusted, since
 
 ## Does the map actually find you?
 
-`--check-map` holds out one pass down one stretch at a time, which is what a `walk` is in the map, and locates every scan of it from the rest. Two passes of the same outing are two walks, so an outing that doubled back is tested on the pass it did not train on, over the same street: the thing worth knowing, from data an ordinary walk already produced. Holding out one scan at a time would be worthless: its neighbour was taken five seconds and six metres later and sees almost exactly the same networks, so the map would be scoring itself on a copy of the question.
+`--check-map` holds out one outing at a time and locates every scan of it from the other outings. A map with a single outing holds out one pass down one stretch instead, which is what a `walk` is in the map, so an outing that doubled back is tested on the pass it did not train on, over the same street: the thing worth knowing, from data an ordinary walk already produced, and the report says that such a result is the map recognising a walk rather than a place. Holding out one scan at a time would be worthless: its neighbour was taken five seconds and six metres later and sees almost exactly the same networks, so the map would be scoring itself on a copy of the question.
 
 ```
 Map: 12 fingerprints, 2 walks over 1 stretches, 2 outings.
 
-Each walk held out in turn, and its scans located from the rest of the map:
+Each outing held out in turn, and its scans located from the other outings:
 
                                 by networks  and by signal
   scans held out                         12             12
   placed on the right stretch            12             12
+  placed across a crossing                0              0
   landed on the wrong stretch             0              0
   not on the map                          0              0
   mean error, of a stretch               7%             2%
@@ -98,7 +99,7 @@ Each walk held out in turn, and its scans located from the rest of the map:
   median error in metres                7 m            3 m
 ```
 
-(Two **synthetic** passes over the real 148 m Agraciada geometry in [`samples/`](../samples/README.md), not real outings. See *Limits* in [the README](../README.md).) The error is given twice on purpose. A fraction of a block is comparable between any two stretches, and metres are only known for the stretches whose crossings carry coordinates, so a map that mixes notebooks with and without them says how many of the answers the distances actually cover instead of averaging the measurable half and calling it the whole. Signal wins here because the synthetic levels were made to vary smoothly along the block. Only a real outing can say whether that survives different radios, bodies and days. The important structural point is that each pass is held out against the other outing, so none of these answers is the map recognising the walk it trained on.
+(Two **synthetic** passes over the real 148 m Agraciada geometry in [`samples/`](../samples/README.md), not real outings. See *Limits* in [the README](../README.md).) The error is given twice on purpose. A fraction of a block is comparable between any two stretches, and metres are only known for the stretches whose crossings carry coordinates, so a map that mixes notebooks with and without them says how many of the answers the distances actually cover instead of averaging the measurable half and calling it the whole. Signal wins here because the synthetic levels were made to vary smoothly along the block. Only a real outing can say whether that survives different radios, bodies and days. The important structural point is that each pass is held out against the other outing, so none of these answers is the map recognising the walk it trained on. A scan answered on the stretch next door, a few metres past the corner, is placed across a crossing and measured through it. Only a stretch with no crossing in common is a different street.
 
 ## What comes out
 
@@ -150,7 +151,7 @@ On a **synthetic** block that bends north and comes back, the middle scan moves 
 
 Everything downstream follows without being asked: the access point centroid, the GeoJSON, the coordinates the fingerprint map stores, the distances `--check-pace` measures.
 
-It is entirely optional and it never guesses. Without a streets file, or for a block Enodia has no drawing of, or where the drawing cannot be matched to both crossings within 25 metres, or where the way between them runs more than three times the straight distance (a loop, or the long way round a one-way pair), the position falls back to the straight line, which is what it has always done.
+It is entirely optional and it never guesses. Without a streets file, or for a block Enodia has no drawing of, or where the drawing cannot be matched to both crossings within 25 metres, or where the way between them runs more than three times the straight distance (a loop, or the long way round a one-way pair), the position falls back to the straight line, which is what it has always done. The ways of one street are chained end to end before a block is looked for, since OpenStreetMap starts a new way wherever a tag changes, and the report says how many blocks followed the drawing.
 
 ## Drawing it
 

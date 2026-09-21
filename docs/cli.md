@@ -49,17 +49,19 @@ uv run enodia --open-networks LOG                              # the unencrypted
 ```
 
 `--pace movement` is the default and reads the pace from how much the networks in view turn
-over, so that a stop stays a stop. `--pace clock` interpolates on time instead, assuming a
-steady walk. Which one is better for your route is not a matter of opinion: `--check-pace`
-below measures it.
+over, so that a stop stays a stop. A hole in the scans, or a cycle that only one of two cards
+answered, is no evidence either way and is filled at the pace of the rest of the stretch.
+`--pace clock` interpolates on time instead, assuming a steady walk. Which one is better for
+your route is not a matter of opinion: `--check-pace` below measures it.
 
 `--outing TOKEN` picks one walk out of a file that holds several, which is what `--log
 walk.jsonl` reused every week produces. Without it the last walk in the file is read, and which
 one that was is printed whenever there is a choice.
 
 `--streets FILE` places each scan along the street's real shape instead of on the straight line
-between two crossings, which is what happens without it. `--svg FILE` draws the walk as a plan
-from that same geometry, with no tiles fetched, and needs coordinates on the crossings.
+between two crossings, which is what happens without it, and the report says how many blocks
+followed the drawing. `--svg FILE` draws the walk as a plan from that same geometry, with no
+tiles fetched, and needs coordinates on the crossings.
 
 `--csv`, `--geojson` and `--svg` each add a line to the report saying where they wrote. The
 report itself goes to standard output, so capturing it wants a run without them.
@@ -75,10 +77,10 @@ uv run enodia --check-map --match signal                       # the same, score
 
 `--check-pace` needs coordinates on the crossings, since it measures in metres. `--check-passes`
 needs none: it compares two passes over one stretch against each other. `--check-map` needs a
-map with at least two passes in it, and holds out one pass down one stretch at a time, never a
-single scan, since a scan's neighbour was taken five seconds later and sees almost the same
-networks. [The methodology notes](methodology.md) say what each of the three can and cannot
-tell you.
+map with at least two passes in it, and holds out one outing at a time, or one pass down one
+stretch when the map holds a single outing, never a single scan, since a scan's neighbour was
+taken five seconds later and sees almost the same networks.
+[The methodology notes](methodology.md) say what each of the three can and cannot tell you.
 
 ## The map, and finding yourself again
 

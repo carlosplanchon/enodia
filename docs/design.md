@@ -15,6 +15,9 @@ just met is.
 | If you are wondering | Read |
 |---|---|
 | why an answer is missing rather than approximate | *Not knowing is an answer* |
+| why a scan after a hole in the log is not placed too early | *A hole in the scans is not a step* |
+| what `--check-map` holds out, and what a scan placed across a crossing is | *A scan at a corner is on two stretches* |
+| why a block came out on the chord with the street drawn | *A street is more than one way* |
 | why an unreadable file is not an absent one | *A failure to read is not evidence of absence* |
 | why a value in a log was thrown away | *Refused at the door* |
 | what a record actually is, and why the export is a serialiser | *One record, and two ways of writing it down* |
@@ -53,6 +56,56 @@ When the fingerprints behind the winner are further apart than three of that str
 lengths (five kilometres, for a stretch whose length nobody knows), the stretch is still named
 and the coordinates are withheld, with a line saying so. Crossing names have to be unique across
 a map, and no map fed one outing at a time can enforce that for you.
+
+## A hole in the scans is not a step
+
+The pace is read off how much the networks in view turn over from one scan to the next, and
+turnover saturates: once nothing is shared, a step reads as 1 whether it took five seconds or
+a minute. So a hole in the scans, a daemon that refused for a minute, counted as one step of
+walking, and everything after it on the stretch was placed too early. On a synthetic 300 m
+stretch walked at a steady pace, a 60 s hole moved the scans after it 13 m on average and 23 m
+at worst, while the clock, which cannot saturate, was not moved at all. A step longer than
+three of the usual ones is a hole now, and a hole is filled at the average rate of the rest of
+the stretch, the way the two ends of every stretch already were.
+
+The same filling covers a step that is not evidence. Two cards write a record each and
+`merged_scans` folds them into one look, but a cycle that only one card answered stays a
+one-card look, and against the two-card look beside it half the view is missing. Standing
+still for four cycles with one card failing once, the scans landed at 0.2, 0.2, 0.5 and 0.8 of
+the stretch, since that missing half was the only movement the stretch appeared to hold. A
+step between looks that different cards made, or that one card made and two made, is no
+evidence either way, and is filled like a hole.
+
+## A scan at a corner is on two stretches
+
+`--check-map` held out one walk, one outing down one stretch, and located its scans from the
+rest. Two things were wrong with that at the ends of every stretch. The next stretch of the
+same outing stayed in, and its first scan was taken five seconds after the held-out walk's
+last one, a few metres further on: the copy of the question the hold-out exists to keep out.
+And an answer on that next stretch, a few metres past the corner, was counted as landing on
+the wrong stretch, which the report calls a different street. On two synthetic outings over
+two consecutive blocks, 7% of the scans were counted as a different street, every one of them
+within a step of a corner, with real errors of 5 to 13 m.
+
+So a map with more than one outing holds out an outing at a time, and its scans are located
+from the other outings only, which is the question anybody asks of a map: does it know this
+street from another day. A map with a single outing still holds out a walk, since that is all
+there is to hold out, and the report goes on saying that such a result is the map recognising
+a walk rather than a place. And an answer on a stretch that shares a crossing with the true
+one is placed across a crossing rather than on a different street: its error is measured
+through the corner they share, in metres when both places have coordinates, and it is counted
+in a row of its own.
+
+## A street is more than one way
+
+OpenStreetMap draws a street as many ways, and starts a new one wherever a tag changes: the
+surface, the number of lanes, a bridge. `--streets` kept every way, and the block between two
+crossings was looked for on one way at a time, so a block whose two crossings sat on different
+ways of one street fell back to the chord with nothing said. The ways of one street that meet
+end to end are chained into one line before a block is looked for, and the report says how
+many blocks followed the drawing and how many sat on the straight line between their
+crossings, so that a streets file doing nothing is no longer indistinguishable from one doing
+everything.
 
 ## A failure to read is not evidence of absence
 

@@ -532,6 +532,29 @@ def test_a_hole_in_the_log_is_skipped_and_the_scans_around_it_measure_the_pace(t
     assert [s.position.fraction for s in placed] == pytest.approx([0.2, 0.2, 0.6])
 
 
+def test_a_hole_in_the_scans_is_filled_at_the_pace_of_the_rest_of_the_stretch(
+    tmp_path, monkeypatch
+):
+    # Six scans five seconds apart, each seeing a brand new set, except a hole
+    # of thirty seconds after the third: the daemon refused for a while. The
+    # turnover across the hole is 1.0, exactly what a five-second step reads,
+    # so the hole used to count as one step and the three scans after it were
+    # placed too early, at 0.6, 0.8 and 1.0. A step longer than three of the
+    # usual ones is a hole, and a hole is filled at the pace of the rest.
+    log = write_log(
+        tmp_path / "networks.jsonl",
+        monkeypatch,
+        [
+            (f"2026-09-05T17:00:{second:02d}-03:00", seen(name))
+            for second, name in ((0, "A"), (5, "B"), (10, "C"), (40, "D"), (45, "E"), (50, "F"))
+        ],
+    )
+    nb = tmp_path / "libreta.txt"
+    nb.write_text("17:00:00 Start\n17:00:50 End\n")
+    placed = reconcile(log, nb).placed
+    assert [s.position.fraction for s in placed] == pytest.approx([0.0, 0.1, 0.2, 0.8, 0.9, 1.0])
+
+
 def test_distance_between_two_points():
     # A tenth of a degree of latitude is about 11 km anywhere.
     assert distance_metres(-34.90, -56.19, -34.80, -56.19) == pytest.approx(11_119, rel=0.01)
@@ -1257,6 +1280,30 @@ def test_two_interfaces_standing_still_are_not_walking(tmp_path, monkeypatch):
     assert [one.position.fraction for one in placed] == pytest.approx([0.2, 0.6])
 
 
+def test_a_cycle_that_only_one_card_answered_is_no_evidence_of_walking(tmp_path, monkeypatch):
+    # Standing still with two cards, and in the third cycle only wlan0 answered.
+    # Folded, that cycle is still one card's look, and against the two-card
+    # looks either side of it three networks of eight are missing: a turnover
+    # of 0.375 each way, the only movement the stretch appeared to hold, so the
+    # scans used to land at 0.2, 0.2, 0.5 and 0.8. Standing still is the clock.
+    stamps = iter(
+        ["2026-09-05T17:02:00-03:00"] * 2
+        + ["2026-09-05T17:04:00-03:00"] * 2
+        + ["2026-09-05T17:06:00-03:00"]
+        + ["2026-09-05T17:08:00-03:00"] * 2
+    )
+    monkeypatch.setattr(netlog, "now_iso", lambda ago=0.0: next(stamps))
+    log = NetworkLog(tmp_path / "networks.jsonl")
+    for cycle in range(4):
+        log.record_scan(seen("A", "B", "C", "D", "E"), "wlan0")
+        if cycle != 2:
+            log.record_scan(seen("X", "Y", "Z"), "wlan1")
+    nb = tmp_path / "libreta.txt"
+    nb.write_text("17:00 Start\n17:10 End\n")
+    placed = reconcile(log.path, nb).placed
+    assert [one.position.fraction for one in placed] == pytest.approx([0.2, 0.4, 0.6, 0.8])
+
+
 def test_a_cycle_keeps_the_stronger_reading_of_the_two_radios(tmp_path, monkeypatch):
     stamps = iter(["2026-09-05T17:02:00-03:00"] * 2)
     monkeypatch.setattr(netlog, "now_iso", lambda ago=0.0: next(stamps))
@@ -1285,7 +1332,7 @@ def test_two_radios_are_never_a_step_even_when_a_cycle_straddles_a_second():
 
     wlan0 = LogRecord("scan", interface="wlan0", networks=[net(c) for c in "ABCDE"])
     wlan1 = LogRecord("scan", interface="wlan1", networks=[net(c) for c in "XYZ"])
-    assert _step(wlan0, wlan1) == 0.0
+    assert _step(wlan0, wlan1) is None  # dos radios: ninguna evidencia, ni de quietud
     assert _step(wlan0, wlan0) == 0.0  # el mismo radio, la misma vista
     moved = LogRecord("scan", interface="wlan0", networks=[net(c) for c in "XYZ"])
     assert _step(wlan0, moved) == 1.0  # el mismo radio, otra vista: eso sí es caminar
