@@ -5,7 +5,7 @@ Each outing held out in turn, and its scans located from the other outings:
                                 by networks  and by signal
   scans held out                         12             12
   placed on the right stretch            12             12
-  placed across a crossing                0              0
+  placed across a mark                    0              0
   landed on the wrong stretch             0              0
   not on the map                          0              0
   mean error, of a stretch               7%             2%
@@ -14,6 +14,6 @@ Each outing held out in turn, and its scans located from the other outings:
   median error in metres                7 m            3 m
 
   A scan that landed on the wrong stretch is not a small error, it is a different street,
-  so it is counted apart rather than averaged into the distances. One placed across a
-  crossing is on the stretch next door, a few metres past the corner the two share, and
-  its error is measured through that corner.
+  so it is counted apart rather than averaged into the distances. One placed across a mark
+  is on the stretch next door, a few metres past the mark the two share, and its error is
+  measured through that mark.

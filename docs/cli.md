@@ -194,6 +194,8 @@ which the command says too.
 The key lives in `$XDG_CONFIG_HOME/enodia/export.key`, made once with permissions only its
 owner can read, and it is what makes two exports months apart agree with each other. Keeping it
 is the whole point. Lose it and the next export gives the same router a different name.
+[Publishing a walk](export.md) says what the export promises, what it cannot, and why each rule
+is there.
 
 ## The menu, if you would rather not remember any of this
 

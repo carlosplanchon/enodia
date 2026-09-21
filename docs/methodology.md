@@ -90,7 +90,7 @@ Each outing held out in turn, and its scans located from the other outings:
                                 by networks  and by signal
   scans held out                         12             12
   placed on the right stretch            12             12
-  placed across a crossing                0              0
+  placed across a mark                    0              0
   landed on the wrong stretch             0              0
   not on the map                          0              0
   mean error, of a stretch               7%             2%
@@ -99,7 +99,7 @@ Each outing held out in turn, and its scans located from the other outings:
   median error in metres                7 m            3 m
 ```
 
-(Two **synthetic** passes over the real 148 m Agraciada geometry in [`samples/`](../samples/README.md), not real outings. See *Limits* in [the README](../README.md).) The error is given twice on purpose. A fraction of a block is comparable between any two stretches, and metres are only known for the stretches whose crossings carry coordinates, so a map that mixes notebooks with and without them says how many of the answers the distances actually cover instead of averaging the measurable half and calling it the whole. Signal wins here because the synthetic levels were made to vary smoothly along the block. Only a real outing can say whether that survives different radios, bodies and days. The important structural point is that each pass is held out against the other outing, so none of these answers is the map recognising the walk it trained on. A scan answered on the stretch next door, a few metres past the corner, is placed across a crossing and measured through it. Only a stretch with no crossing in common is a different street.
+(Two **synthetic** passes over the real 148 m Agraciada geometry in [`samples/`](../samples/README.md), not real outings. See *Limits* in [the README](../README.md).) The error is given twice on purpose. A fraction of a block is comparable between any two stretches, and metres are only known for the stretches whose crossings carry coordinates, so a map that mixes notebooks with and without them says how many of the answers the distances actually cover instead of averaging the measurable half and calling it the whole. Signal wins here because the synthetic levels were made to vary smoothly along the block. Only a real outing can say whether that survives different radios, bodies and days. The important structural point is that each pass is held out against the other outing, so none of these answers is the map recognising the walk it trained on. A scan answered on the stretch next door, a few metres past the mark, is placed across a mark and measured through it. Only a stretch with no mark in common is a different street.
 
 ## What comes out
 
@@ -151,7 +151,7 @@ On a **synthetic** block that bends north and comes back, the middle scan moves 
 
 Everything downstream follows without being asked: the access point centroid, the GeoJSON, the coordinates the fingerprint map stores, the distances `--check-pace` measures.
 
-It is entirely optional and it never guesses. Without a streets file, or for a block Enodia has no drawing of, or where the drawing cannot be matched to both crossings within 25 metres, or where the way between them runs more than three times the straight distance (a loop, or the long way round a one-way pair), the position falls back to the straight line, which is what it has always done. The ways of one street are chained end to end before a block is looked for, since OpenStreetMap starts a new way wherever a tag changes, and the report says how many blocks followed the drawing.
+It is entirely optional and it never guesses. Without a streets file, or for a block Enodia has no drawing of, or where the drawing cannot be matched to both crossings within 25 metres, or where the way between them runs more than three times the straight distance (a loop, or the long way round a one-way pair), the position falls back to the straight line, which is what it has always done. The ways of one street are chained end to end before a block is looked for, since OpenStreetMap starts a new way wherever a tag changes, and the report says how many blocks followed the drawing. A mark is matched to the nearest point of the way rather than to a vertex, so a mark halfway down a straight block gets its drawing too.
 
 ## Drawing it
 

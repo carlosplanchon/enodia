@@ -1270,7 +1270,7 @@ def format_report(result: Reconciliation, with_scans: bool = False) -> str:
         lines.insert(
             3,
             f"Blocks: {drawn} of {len(blocks)} follow the street as drawn, "
-            f"{len(blocks) - drawn} on the straight line between their crossings",
+            f"{len(blocks) - drawn} on the straight line between their marks",
         )
     if with_scans:
         lines.append("Scans along the route:")

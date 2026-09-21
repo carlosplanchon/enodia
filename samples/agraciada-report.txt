@@ -1,7 +1,7 @@
 Crossings: 2, from 17:00:00 Avenida Agraciada y Doctor Salvador García Pintos to 17:05:00 Avenida Agraciada y San Fructuoso
 Scans: 6 placed, 0 before the first crossing, 0 after the last
 Networks placed: 7 (0 open)
-Blocks: 1 of 1 follow the street as drawn, 0 on the straight line between their crossings
+Blocks: 1 of 1 follow the street as drawn, 0 on the straight line between their marks
 
 Scans along the route:
   17:00:30    3 networks  between "Avenida Agraciada y Doctor Salvador García Pintos" and "Avenida Agraciada y San Fructuoso", 10% of the way

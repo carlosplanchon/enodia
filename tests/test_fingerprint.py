@@ -523,10 +523,10 @@ def test_an_abstention_is_neither_a_hit_nor_a_wrong_stretch():
     assert held.abstained and not held.wrong_stretch
 
 
-def test_a_scan_at_a_corner_answered_on_the_next_stretch_is_placed_across_it():
-    # The scan was taken two metres before the corner and the answer is two
+def test_a_scan_at_a_mark_answered_on_the_next_stretch_is_placed_across_it():
+    # The scan was taken two metres before the mark and the answer is two
     # metres past it, on the stretch next door. That is a four-metre error
-    # through the corner the two stretches share, and it was counted as landing
+    # through the mark the two stretches share, and it was counted as landing
     # on the wrong stretch, which the report calls a different street.
     lunes = mark(0.98, net("A"), net("B"), walk="lunes#0", street=("Alfa", "Bravo"))
     martes = [
@@ -535,12 +535,12 @@ def test_a_scan_at_a_corner_answered_on_the_next_stretch_is_placed_across_it():
     ]
     held, *_ = check_map([lunes, *martes])
     assert held.truth.fraction == 0.98
-    assert held.across_crossing and not held.wrong_stretch and not held.abstained
+    assert held.across_mark and not held.wrong_stretch and not held.abstained
     assert held.error_fraction == pytest.approx(0.04)
-    assert held.error_m == pytest.approx(4.0)  # dos metros hasta la esquina y dos después
+    assert held.error_m == pytest.approx(4.0)  # dos metros hasta la marca y dos después
 
 
-def test_an_error_across_a_crossing_is_the_straight_distance_when_both_have_coordinates():
+def test_an_error_across_a_mark_is_the_straight_distance_when_both_have_coordinates():
     before = Fingerprint(
         Place("Alfa", "Bravo", 0.98, -34.9000, -56.20002, 100.0), (net("A"),), "lunes", "lunes#0"
     )
@@ -548,15 +548,15 @@ def test_an_error_across_a_crossing_is_the_straight_distance_when_both_have_coor
         Place("Bravo", "Charlie", 0.02, -34.9000, -56.19998, 100.0), (net("A"),), "martes", "m#1"
     )
     held = check_map([before, after])[0]
-    assert held.across_crossing and held.error_fraction == pytest.approx(0.04)
+    assert held.across_mark and held.error_fraction == pytest.approx(0.04)
     assert held.error_m == pytest.approx(3.65, abs=0.1)  # 0.00004 grados de longitud
 
 
-def test_an_error_across_a_crossing_has_no_metres_when_a_stretch_has_no_length():
+def test_an_error_across_a_mark_has_no_metres_when_a_stretch_has_no_length():
     before = mark(0.98, net("A"), walk="lunes#0", street=("Alfa", "Bravo"))
     after = mark(0.02, net("A"), walk="martes#1", street=("Bravo", "Charlie"), length=None)
     held = check_map([before, after])[0]
-    assert held.across_crossing and held.error_fraction == pytest.approx(0.04)
+    assert held.across_mark and held.error_fraction == pytest.approx(0.04)
     assert held.error_m is None
 
 
@@ -578,7 +578,7 @@ def test_with_two_outings_the_whole_outing_is_held_out_and_its_next_stretch_with
         [*lunes, *martes], results, check_map([*lunes, *martes], by_signal=True)
     )
     assert "Each outing held out in turn, and its scans located from the other outings:" in report
-    assert "placed across a crossing                0              0" in report
+    assert "placed across a mark                    0              0" in report
 
 
 def test_the_check_reports_both_methods_side_by_side():
@@ -589,7 +589,7 @@ def test_the_check_reports_both_methods_side_by_side():
     assert "by networks" in report and "and by signal" in report
     assert "scans held out                          2              2" in report
     assert "placed on the right stretch             2              2" in report
-    assert "placed across a crossing                0              0" in report
+    assert "placed across a mark                    0              0" in report
     assert "mean error, of a stretch               5%             5%" in report
     assert "mean error in metres                  5 m            5 m" in report
     assert "median error in metres                5 m            5 m" in report

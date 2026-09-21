@@ -10,7 +10,7 @@ from enodia.streets import (
     StreetMap,
     distance_metres,
     line_length_m,
-    nearest_vertex,
+    nearest_point,
     point_along,
     read_streets,
     write_streets,
@@ -46,9 +46,33 @@ def test_a_line_of_one_point_or_no_length_is_that_point():
     assert point_along([(-34.9, -56.2), (-34.9, -56.2)], 0.5) == (-34.9, -56.2)
 
 
-def test_the_nearest_vertex_is_found_with_how_far_off_it_was():
-    where, gap = nearest_vertex(BEND, (-34.8993, -56.1975))
-    assert where == 2 and gap == pytest.approx(0, abs=0.5)
+def test_the_nearest_point_of_a_line_need_not_be_a_vertex():
+    # Beside the middle of the second segment, a little south of it.
+    beside = (-34.8996, -56.19825)
+    where, point, off = nearest_point(BEND, beside)
+    assert where[0] == 1 and 0.3 < where[1] < 0.7
+    assert off == pytest.approx(distance_metres(*beside, *point), abs=0.01) and off < 30
+    # At a vertex, and written as the start of the next segment whichever side found it.
+    assert nearest_point(BEND, BEND[2])[0] == (2, 0.0)
+    assert nearest_point(BEND, BEND[-1])[0] == (3, 1.0)  # the last vertex ends the last segment
+    # A segment of no length is a point, and being on it is being at it.
+    assert nearest_point((BEND[0], BEND[0], BEND[1]), BEND[0])[2] == 0.0
+
+
+def test_a_mark_halfway_down_a_straight_block_still_gets_its_drawing():
+    # OpenStreetMap puts vertices where a way bends or meets another, so a
+    # straight block is two vertices two hundred metres apart. Matched to the
+    # nearest vertex within 25 m, a mark halfway down it was a hundred metres
+    # from either and the block fell back to the chord.
+    corner_a, corner_b = (-34.8800, -56.1960), (-34.8800, -56.1938)
+    straight = StreetMap((Street("Recta", (corner_a, corner_b)),))
+    middle = point_along((corner_a, corner_b), 0.5)
+    drawn = straight.between(corner_a, middle)
+    assert drawn is not None and drawn[-1] == middle
+    assert line_length_m(drawn) == pytest.approx(distance_metres(*corner_a, *middle), abs=1)
+    # And on from there, the other half.
+    rest = straight.between(middle, corner_b)
+    assert rest is not None and line_length_m(rest) == pytest.approx(line_length_m(drawn), abs=1)
 
 
 def test_the_block_between_two_crossings_is_the_run_of_the_way_between_them():
@@ -95,8 +119,8 @@ def test_the_closest_drawing_wins_when_more_than_one_could_serve():
 
 
 def test_a_street_split_into_several_ways_is_one_line_for_the_block_between_them():
-    # OpenStreetMap starts a new way wherever a tag changes, so the two crossings
-    # of one block often sit on different ways of the same street. Looked for one
+    # OpenStreetMap starts a new way wherever a tag changes, so the two marks of
+    # one block often sit on different ways of the same street. Looked for one
     # way at a time, that block was never found and fell back to the chord.
     a, m, b = BEND[0], BEND[2], BEND[-1]
     for ways in (((a, m), (m, b)), ((a, m), (b, m)), ((m, a), (m, b)), ((m, a), (b, m))):
@@ -225,7 +249,7 @@ def test_the_report_says_how_many_blocks_followed_the_drawing(tmp_path, monkeypa
     )
     report = format_report(reconcile(log.path, nb, by_movement=False, streets=CURVE))
     assert (
-        "Blocks: 1 of 2 follow the street as drawn, 1 on the straight line between their crossings"
+        "Blocks: 1 of 2 follow the street as drawn, 1 on the straight line between their marks"
         in report
     )
     assert "Blocks:" not in format_report(reconcile(log.path, nb, by_movement=False))

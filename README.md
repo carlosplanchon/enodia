@@ -107,7 +107,7 @@ uv run enodia --locate
 
 - **Draw the route.** Add coordinates by hand or look up crossings with `--geocode`. Use `--streets` for street geometry and export with `--csv`, `--geojson` or `--svg`. Geocoding is the only command that accesses the internet, and it supports an explicit proxy.
 - **Check the estimates.** `--check-pace` compares inferred movement with the clock, `--check-passes` compares repeated passes, and `--check-map` holds out each outing in turn to test localisation.
-- **Share an outing.** `--export-public` produces a pseudonymised log and notebook. Review both before publishing. Stable fingerprints and route geometry can still identify a place.
+- **Share an outing.** `--export-public` produces a pseudonymised log and notebook. Review both before publishing. Stable fingerprints and route geometry can still identify a place. [Publishing a walk](docs/export.md) says what the export promises and what it cannot.
 
 See the [CLI reference](docs/cli.md) for command syntax and options.
 
@@ -128,6 +128,7 @@ Fresh Wi-Fi scans send probe requests. `--preflight` checks scan-address randomi
 - [File formats](docs/formats.md): the notebook you write and the log Enodia writes.
 - [Methodology](docs/methodology.md): positioning, fingerprints and what the self-checks measure.
 - [Design notes](docs/design.md): engineering decisions and the failure behind each one.
+- [Publishing a walk](docs/export.md): what `--export-public` promises, and the three things it cannot.
 - [From Python](docs/library.md): the same operations as function calls.
 
 ## License

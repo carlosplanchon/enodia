@@ -77,11 +77,45 @@ def point_along(line: Sequence[Place], fraction: float) -> Place:
     return line[-1]  # pragma: no cover
 
 
-def nearest_vertex(line: Sequence[Place], place: Place) -> tuple[int, float]:
-    """Which vertex of a line is closest to a place, and how far off it is."""
-    gaps = [distance_metres(*place, *vertex) for vertex in line]
-    best = min(range(len(gaps)), key=gaps.__getitem__)
-    return best, gaps[best]
+def _project(place: Place, start: Place, end: Place) -> tuple[float, Place, float]:
+    """Where a place falls along one segment: a fraction of it, the point there, and how far off.
+
+    A flat frame around the segment, the same approximation `distance_metres`
+    makes: fine over a block.
+    """
+    scale = cos(radians((start[0] + end[0]) / 2))
+    run = ((end[1] - start[1]) * scale, end[0] - start[0])
+    offset = ((place[1] - start[1]) * scale, place[0] - start[0])
+    length2 = run[0] * run[0] + run[1] * run[1]
+    along = 0.0
+    if length2 > 0:
+        along = max(0.0, min(1.0, (offset[0] * run[0] + offset[1] * run[1]) / length2))
+    point = (start[0] + (end[0] - start[0]) * along, start[1] + (end[1] - start[1]) * along)
+    return along, point, distance_metres(*place, *point)
+
+
+def nearest_point(line: Sequence[Place], place: Place) -> tuple[tuple[int, float], Place, float]:
+    """The point of a drawn line closest to a place: where along the line, the point, how far off.
+
+    "Where along the line" is the segment and the fraction of it, which orders
+    two such points the way the line runs. It is the nearest point and not the
+    nearest vertex, because OpenStreetMap puts vertices where a way bends or
+    meets another and nowhere along a straight run, so a mark halfway down a
+    straight block is a hundred metres from the nearest vertex and right on
+    the line. A place at a vertex is given as the start of the segment after
+    it rather than the end of the one before, so that two places at one vertex
+    compare equal.
+    """
+    best: tuple[tuple[int, float], Place, float] | None = None
+    for index in range(len(line) - 1):
+        along, point, off = _project(place, line[index], line[index + 1])
+        if best is None or off < best[2]:
+            best = ((index, along), point, off)
+    assert best is not None  # a line has two points: `_chained` and `_places` see to it
+    (index, along), point, off = best
+    if along >= 1.0 and index < len(line) - 2:
+        index, along = index + 1, 0.0
+    return (index, along), point, off
 
 
 @dataclass(frozen=True)
@@ -100,8 +134,8 @@ def _chained(streets: Sequence[Street]) -> tuple[Street, ...]:
     """The ways of each street that meet end to end, joined into one line apiece.
 
     OpenStreetMap starts a new way wherever a tag changes: the surface, the
-    number of lanes, a bridge. A block whose two crossings sit on different ways
-    of one street is still one block, and looked for one way at a time it was
+    number of lanes, a bridge. A block whose two marks sit on different ways of
+    one street is still one block, and looked for one way at a time it was
     never found and fell back to the chord without a word.
     """
     by_name: dict[str, list[Line]] = {}
@@ -152,28 +186,35 @@ class StreetMap:
         return _chained(self.streets)
 
     def between(self, here: Place, there: Place, within_m: float = NEAR_CROSSING_M) -> Line | None:
-        """The block from one crossing to the next, as drawn, or None to use the chord.
+        """The block from one mark to the next, as drawn, or None to use the chord.
 
-        Matched on the geometry and never on the crossings' names. A notebook
+        Matched on the geometry and never on the marks' names. A notebook
         writes "Agraciada y Freire" and the street is called "Avenida Agraciada",
-        the same corner turns up spelled two ways, and a crossing may have been
+        the same corner turns up spelled two ways, and a mark may have been
         typed in by hand rather than looked up. Two coordinates and a drawing
-        need none of that: the block is the run of the way that starts nearest
-        one and ends nearest the other.
+        need none of that: the block is the run of the way between the point
+        nearest one mark and the point nearest the other, cut there, whether or
+        not either is a vertex.
         """
         chord = distance_metres(*here, *there)
         best: tuple[float, Line] | None = None
         for street in self.runs:
-            first, off_first = nearest_vertex(street.line, here)
-            last, off_last = nearest_vertex(street.line, there)
-            if first == last or off_first > within_m or off_last > within_m:
+            at_here, point_here, off_here = nearest_point(street.line, here)
+            at_there, point_there, off_there = nearest_point(street.line, there)
+            if at_here == at_there or off_here > within_m or off_there > within_m:
                 continue
-            run = street.line[min(first, last) : max(first, last) + 1]
-            drawn = (here, *(run if first < last else run[::-1]), there)
+            forwards = at_here < at_there
+            (first, start), (last, end) = sorted(((at_here, point_here), (at_there, point_there)))
+            # The vertices strictly inside the run: the end points are the
+            # projections themselves, so a vertex one of them sits on is not
+            # written twice.
+            stop = last[0] + (1 if last[1] > 0.0 else 0)
+            run = (start, *street.line[first[0] + 1 : stop], end)
+            drawn = (here, *(run if forwards else run[::-1]), there)
             if chord > 0 and line_length_m(drawn) > chord * LONGEST_DETOUR:
                 continue
-            if best is None or off_first + off_last < best[0]:
-                best = (off_first + off_last, drawn)
+            if best is None or off_here + off_there < best[0]:
+                best = (off_here + off_there, drawn)
         return None if best is None else best[1]
 
 

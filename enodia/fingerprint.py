@@ -736,7 +736,7 @@ class HeldOutScan:
     error_m: float | None
     error_fraction: float | None
     outing: str = ""
-    across_crossing: bool = False
+    across_mark: bool = False
 
     @property
     def abstained(self) -> bool:
@@ -744,17 +744,17 @@ class HeldOutScan:
 
     @property
     def wrong_stretch(self) -> bool:
-        """True when the answer named a different street: a stretch with no crossing in common.
+        """True when the answer named a different street: a stretch with no mark in common.
 
-        The stretch next door is not that. A scan taken at a corner is on two
-        stretches at once, and an answer a few metres past that corner is a
-        small error measured through it, `across_crossing`, not a different
+        The stretch next door is not that. A scan taken at a mark is on two
+        stretches at once, and an answer a few metres past that mark is a
+        small error measured through it, `across_mark`, not a different
         street.
         """
         return (
             self.found is not None
             and self.found.place.key != self.truth.key
-            and not self.across_crossing
+            and not self.across_mark
         )
 
     @property
@@ -767,8 +767,8 @@ class HeldOutScan:
         return self.found is not None and set(self.found.outings) <= {self.outing}
 
 
-def _shared_crossing(truth: Place, found: Place) -> tuple[float, float] | None:
-    """Which end of each stretch is the corner the two share, as fractions, or None."""
+def _shared_mark(truth: Place, found: Place) -> tuple[float, float] | None:
+    """Which end of each stretch is the mark the two share, as fractions, or None."""
     for truth_end, name in enumerate(truth.key):
         for found_end, other in enumerate(found.key):
             if name == other:
@@ -790,18 +790,18 @@ def _measure(one: Fingerprint, found: Location | None) -> HeldOutScan:
         gap = abs(found.place.fraction - truth.fraction)
         metres = truth.metres(gap) if straight is None else straight
         return HeldOutScan(truth, found, metres, gap, one.outing)
-    corner = _shared_crossing(truth, found.place)
-    if corner is None:
+    shared = _shared_mark(truth, found.place)
+    if shared is None:
         return HeldOutScan(truth, found, None, None, one.outing)
-    # Through the corner: how far the scan was from it along its own stretch,
+    # Through the mark: how far the scan was from it along its own stretch,
     # plus how far the answer is from it along the next one.
-    to_corner = abs(truth.fraction - corner[0])
-    past_corner = abs(found.place.fraction - corner[1])
+    to_mark = abs(truth.fraction - shared[0])
+    past_mark = abs(found.place.fraction - shared[1])
     metres = straight
     if metres is None:
-        here_m, there_m = truth.metres(to_corner), found.place.metres(past_corner)
+        here_m, there_m = truth.metres(to_mark), found.place.metres(past_mark)
         metres = None if here_m is None or there_m is None else here_m + there_m
-    return HeldOutScan(truth, found, metres, to_corner + past_corner, one.outing, True)
+    return HeldOutScan(truth, found, metres, to_mark + past_mark, one.outing, True)
 
 
 @dataclass(frozen=True)
@@ -898,8 +898,8 @@ def _column(results: Sequence[HeldOutScan]) -> tuple[list[str], int, int]:
     metres = [r.error_m for r in results if r.error_m is not None]
     rows = [
         str(len(results)),
-        str(sum(1 for r in results if r.error_fraction is not None and not r.across_crossing)),
-        str(sum(1 for r in results if r.across_crossing)),
+        str(sum(1 for r in results if r.error_fraction is not None and not r.across_mark)),
+        str(sum(1 for r in results if r.across_mark)),
         str(sum(1 for r in results if r.wrong_stretch)),
         str(sum(1 for r in results if r.abstained)),
     ]
@@ -923,7 +923,7 @@ def format_map_check(
     labels = [
         "scans held out",
         "placed on the right stretch",
-        "placed across a crossing",
+        "placed across a mark",
         "landed on the wrong stretch",
         "not on the map",
         "mean error, of a stretch",
@@ -954,8 +954,8 @@ def format_map_check(
     lines.append(
         "  A scan that landed on the wrong stretch is not a small error, it is a "
         "different street,\n  so it is counted apart rather than averaged into the distances. "
-        "One placed across a\n  crossing is on the stretch next door, a few metres past the "
-        "corner the two share, and\n  its error is measured through that corner."
+        "One placed across a mark\n  is on the stretch next door, a few metres past the mark the "
+        "two share, and its error is\n  measured through that mark."
     )
     names = [name for one in fingerprints for name in one.place.stretch]
     confusable = format_confusable(confusable_crossings(names))
