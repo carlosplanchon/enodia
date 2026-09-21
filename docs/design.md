@@ -25,7 +25,7 @@ just met is.
 | why a write to the map or an export can fail without losing anything | the three sections from *The map is added to whole or not at all* |
 | what an export promises and what it cannot | *Publishing a walk without publishing a neighbourhood* |
 | why a missing button press is written down | *The kernel saying it lost your input* |
-| why the preflight says FAIL about a lid that is fine | *What a closed screen cannot tell you* |
+| why the preflight says FAIL about a lid that is fine | *The lid*, in [setting up the machine](setup.md) |
 | what a real walk changed | *What the first real outing falsified* |
 
 ## Not knowing is an answer
@@ -229,7 +229,7 @@ The README has asked for a long time for one real outing in the repository, and 
 hand means publishing the Wi-Fi landscape of somebody's street. `--export-public` is the layer
 that makes it possible, and most of its design is about not overstating what it does.
 
-**It is pseudonymization.** The command prints that word every time it runs, along with the
+**It is pseudonymisation.** The command prints that word every time it runs, along with the
 three things it cannot promise. A pseudonym is stable, so one appearing eighty times is
 one router appearing eighty times. A radio fingerprint locates itself, because the set of
 access points at a corner is that corner's identity, which is the mechanism `--locate` runs on,

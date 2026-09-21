@@ -16,7 +16,7 @@ The city is full of radios. Enodia uses them as landmarks.
 
 Walk down a street and networks appear, signals grow stronger, fade and disappear. A Linux laptop in your backpack records that changing landscape and speaks through your headphones.
 
-At each crossing, press the headset button: “Mark 1.” “Mark 2.” Write the crossing beside the mark number in a paper notebook. Without a button, write the crossing and the time you hear instead. The log keeps the moment. The notebook gives it a place.
+At each crossing, press the headset button: "Mark 1." "Mark 2." Write the crossing beside the mark number in a paper notebook. Without a button, write the crossing and the time you hear instead. The log keeps the moment. The notebook gives it a place.
 
 Back home, Enodia joins the two: scans placed along your route, estimates of where access points stand, and fingerprints you can keep. Walk there again and a new scan can tell you where you are: between these crossings, this far along.
 

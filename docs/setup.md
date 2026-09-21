@@ -59,8 +59,8 @@ the user is not on the daemon's D-Bus policy, and the usual fix is a group: `whe
 sudo usermod -aG network "$USER"     # or wheel, whichever the policy names
 ```
 
-The `-a` matters, for the same reason it matters below, and group membership is read when a
-session starts: log out and back in.
+The `-a` matters: without it, `-G` replaces your supplementary groups instead of adding one.
+Group membership is read when a session starts: log out and back in.
 
 A `scan` line saying the daemon scanned and found no networks is not a permission problem. That
 is a quiet street, and it is reported as a warning rather than a failure for that reason.
@@ -106,7 +106,7 @@ Reading `/dev/input` is what the button needs, and the devices there belong to `
 sudo usermod -aG input "$USER"
 ```
 
-The `-a` matters. Without it, `-G` replaces your supplementary groups and you lose `wheel`. Group membership is read when a session starts, so log out and back in, or reboot. Opening a new terminal is not enough. To try it right away in one shell, `newgrp input` starts a shell that already has the group.
+The `-a` matters here too. Without it, `-G` replaces your supplementary groups and you lose `wheel`. Group membership is read when a session starts, so log out and back in, or reboot. Opening a new terminal is not enough. To try it right away in one shell, `newgrp input` starts a shell that already has the group.
 
 If the preflight still fails afterwards, three commands say why:
 
@@ -130,9 +130,9 @@ sudo udevadm trigger --subsystem-match=input     # and for the devices already p
 
 `uaccess` has logind grant an ACL on that one device to the user of the active session, for as long as the session lasts, with no group involved. `getfacl /dev/input/eventN` shows the entry. `uv run enodia --button list` names the devices without needing any of this, since it reads `/sys`, and is how to find out which one is the headset before writing the rule.
 
-## Which device is the headset
+### Which device is the headset
 
-The devices are read straight from `/dev/input`, with no library in between: the kernel's `struct input_event` is a stable interface, and `/sys/class/input` says which devices have media keys. That needs permission to read `/dev/input`, usually the `input` group, and no root. Whether a 3.5 mm headset's button reaches the kernel at all depends on the sound codec (many laptop jacks only detect the plug), while USB and Bluetooth headsets report their buttons reliably. `evtest /dev/input/eventN` shows what a device actually sends, and is the way to find out before an outing rather than after.
+The devices are read straight from `/dev/input`, with no library in between: the kernel's `struct input_event` is a stable interface, and `/sys/class/input` says which devices have media keys. Whether a 3.5 mm headset's button reaches the kernel at all depends on the sound codec (many laptop jacks only detect the plug), while USB and Bluetooth headsets report their buttons reliably. `evtest /dev/input/eventN` shows what a device actually sends, and is the way to find out before an outing rather than after.
 
 See also the [README](../README.md) for what the button does during a walk, and
 [the CLI reference](cli.md) for `--button`.

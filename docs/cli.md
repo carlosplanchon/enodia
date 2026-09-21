@@ -12,7 +12,7 @@ watched), `-t` is `--interval`, `-l` is `--log`.
 ```bash
 uv run enodia                             # every Wi-Fi interface, every 5 s, one log per outing
 uv run enodia -i wlan0 -t 10              # one interface, every 10 s
-uv run enodia -l wifi.jsonl               # one log file of your choosing
+uv run enodia -l walk.jsonl               # one log file of your choosing
 uv run enodia --dir ~/walks              # one file per outing, in that directory
 uv run enodia --voice pico                # engine: auto (espeak-ng, else Pico) | espeak | pico | none
 uv run enodia --lang en-GB --ssid-lang es-ES # language of the announcements, and of the network names
@@ -153,13 +153,11 @@ uv run enodia --export-public walk.jsonl notebook.txt --outing 3f9a2b10   # one 
 
 Both files at once, and `--out` names the directory, `public/` by default. The directory is the
 export rather than a place to put files: it is built beside where it goes and moved into place
-whole, so `--out` must not already exist, since
-the second run is usually the one after somebody has read the first line by line. Two of these
-aimed at one directory are safe for the same reason. The first to finish wins and the second is
-told the place is taken. Not even an empty one: `rename` replaces
-those, along with their permissions, their owner and their ACLs. To read an export privately
-before deciding to publish it, `chmod 700` it afterwards, which keeps all three. It is written
-privately in the first place and opened up only when it is complete.
+whole. So `--out` must not already exist, not even empty, since the second run is usually the
+one after somebody has read the first line by line. Two exports aimed at one directory are safe
+for the same reason: the first to claim the name wins and the second is told the place is taken.
+The export is written privately and opened up only when it is complete. To read it privately
+before deciding whether to publish it, `chmod 700` it afterwards.
 
 An `event` this does not recognise is left out of the export with the rest of its record, and a
 `security` label the backends are not known to write is withheld. Both are counted in the

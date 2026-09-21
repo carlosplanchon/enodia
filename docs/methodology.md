@@ -6,7 +6,7 @@ synthetic route built to have a known answer, not from a walk: see *Limits* in [
 
 ## Where the access point is
 
-Every network gets the position of the scan where its signal was strongest: that is where *you* were. It also gets an estimate of where the *access point* stands, worked out from every place it was heard, which is a different question and a better answer. The estimate is a weighted centroid: under the log-distance model a signal falls off as `RSSI = A - 10 n log d`, so a sighting counts as `10 ** (RSSI / 10n)`, and the unknown transmit power cancels when the weights are normalised. The default path loss exponent is 3, a street with buildings on both sides. At n=1 the strongest sighting would swamp every other and tell you nothing the strongest sighting did not, which is the whole point of not just taking the strongest sighting.
+Every network gets the position of the scan where its signal was strongest: that is where *you* were. It also gets an estimate of where the *access point* stands, worked out from every place it was heard, which is a different question and a better answer. The estimate is a weighted centroid: under the log-distance model a signal falls off as `RSSI = A - 10 n log d`, so a sighting counts as `10 ** (RSSI / 10n)`, and the unknown transmit power cancels when the weights are normalised. The default path loss exponent is 3, a street with buildings on both sides. At n=1 the strongest sighting would swamp the rest and the estimate would add nothing to it, which is the whole reason for not taking it alone.
 
 With coordinates on the crossings the centroid is a latitude and longitude, and `spread_m` says in metres how far the sightings sat from it. Without them it still runs, in the one dimension a notebook always has: how far along a stretch between two named crossings you were. A notebook of bare crossing names therefore places every access point too, as a fraction of one block, and the spread comes out as a fraction as well.
 
@@ -102,7 +102,7 @@ Each walk held out in turn, and its scans located from the rest of the map:
 
 ## What comes out
 
-`--csv FILE` writes the located networks as a table, one row per network, with where you were when it came in strongest, the access point estimate along the route (`estimated_from`, `estimated_to`, `estimated_fraction`, `estimated_spread`), whether the walk pinned it down at all (`barely_pinned`) and, when the crossings have coordinates, the estimate on the map and its spread in metres. `--geojson FILE` writes all of it as GeoJSON, which umap or QGIS draw as it is: a Point per network at the estimate, or at the strongest sighting when there is none (`placed_by` says which), a Point per crossing, and the route as a LineString.
+`--csv FILE` writes the located networks as a table, one row per network, with where you were when it came in strongest, the access point estimate along the route (`estimated_from`, `estimated_to`, `estimated_fraction`, `estimated_spread`), whether the walk pinned it down at all (`barely_pinned`) and, when the crossings have coordinates, the estimate on the map and its spread in metres. `--geojson FILE` writes all of it as GeoJSON, which uMap or QGIS draw as it is: a Point per network at the estimate, or at the strongest sighting when there is none (`placed_by` says which), a Point per crossing, and the route as a LineString.
 
 ## The lookup refuses more than it resolves, on purpose
 
@@ -163,6 +163,6 @@ An SVG, written once, that opens in any browser with nothing fetched. The lines 
 
 No tiles, and that is deliberate rather than lazy. The OSM wiki says of the standard tile layer that it is *"not designed and suited for heavily used applications"* and asks that bulk downloading be respected, so a distributed tool that fetches tiles is the case the policy is about. Drawing the vector data offline sidesteps all of it, keeps the reconciliation offline, and keeps the geometry measurable instead of only visible.
 
-If you would rather have a real slippy map with a basemap, that already works and always did: `--geojson` writes the walk out and umap, QGIS or geojson.io draw it over OSM's own map, under their tile arrangements rather than Enodia's.
+If you would rather have a real slippy map with a basemap, that already works and always did: `--geojson` writes the walk out and uMap, QGIS or geojson.io draw it over OSM's own map, under their tile arrangements rather than Enodia's.
 
 **What the picture refuses to do is flatter itself.** A dot on a plan of real streets reads as a fact, and most of what a walk hears was never established. So an access point the walk pinned down is a dot, one it did not is a dashed ring the size of how far its sightings were spread, with nothing in the middle, and the legend says how many of each there were. Open networks get their own colour. There is a scale bar, because a plan you cannot measure is a drawing.

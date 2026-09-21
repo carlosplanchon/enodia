@@ -1,4 +1,4 @@
-# The two files you write, and the one Enodia writes
+# The file you write, and the one Enodia writes
 
 A walk produces a log, written by Enodia. You produce a notebook, written by hand. Everything afterwards is the two of them joined. This is what each one is, exactly.
 
@@ -16,6 +16,7 @@ Plaza Cagancha                                    # no time: takes the next butt
 #7 Plaza Fabini                                   # button mark 7, when one was skipped
 date 2026-09-06                                   # the lines below belong to another day
 03:25:00 McDonald's Paso Molino
+2026-09-07 03:40:00 Agraciada y Freire            # or the date on the line itself
 ```
 
 Seconds are optional. Coordinates go after an `@`, latitude then longitude, and they are what turns a fraction of a block into a point on a map. Times without a date belong to the day of the first scan in the log, a `date` line switches the day for the lines below it, a date written on a line switches it from there on too, and a time earlier than the previous one rolls over to the next day. A walk goes forwards, so a crossing dated earlier than the one above it is refused rather than placed, and so is a `date` line that would take the walk back past the crossing before it. A `#` starts a comment, except a leading `#7`, which names a button mark.
@@ -51,4 +52,4 @@ jq -r 'select(.event=="scan") | .networks[] | select(.security=="open") | .ssid'
 wc -l 2026-09-14T17-45-03.jsonl          # how many records the outing produced
 ```
 
-See [the CLI reference](cli.md) for the flags that read and write these, and [the design notes](design.md) for what is checked when a log is read back and why.
+See [the CLI reference](cli.md) for the flags that read and write these.
