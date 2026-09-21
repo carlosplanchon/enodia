@@ -15,7 +15,7 @@ asked for by name.
 Two things it is careful about, because they are the ones that would make it a
 lie rather than a feature.
 
-It is **pseudonymization**. A stable identifier stays a stable identifier: if
+It is **pseudonymisation**. A stable identifier stays a stable identifier: if
 `ap-1c8a74f992ae` appears eighty times it is still one thing appearing eighty times,
 which is exactly what makes the file useful and exactly what stops the word
 "anonymous" being true of it. And a radio fingerprint locates itself: the set of
@@ -27,7 +27,7 @@ names does not change that and is not claimed to.
 The second is what gets substituted. A network whose name is removed and whose
 address is replaced is still the same row of numbers; a **crossing** whose name
 survives is an address in plain text. The log and the notebook are exported
-together, with one set of pseudonyms across both, because a pseudonymized log
+together, with one set of pseudonyms across both, because a pseudonymised log
 beside a real notebook still says where somebody was walking and when.
 """
 

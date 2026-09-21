@@ -30,13 +30,29 @@ just met is.
 
 ## Not knowing is an answer
 
-Four rules do most of the work. **Not knowing is an answer**: off the map every fingerprint is a poor match and the best of them is still wrong, so below a floor it says "not on the map" rather than guessing confidently in a city it has never been to. The floor is applied to each fingerprint before any of them votes, which matters more than it sounds: a stretch wins on its fingerprints added up, so four readings too weak to be evidence used to outvote the one reading that cleared the floor, and the answer came back naming the losers' street. Nothing that is not evidence on its own becomes evidence by turning up four times.
+Four rules do most of the work. **Not knowing is an answer**: off the map every fingerprint is a
+poor match and the best of them is still wrong, so below a floor it says "not on the map" rather
+than guessing confidently in a city it has never been to. The floor is applied to each
+fingerprint before any of them votes, which matters more than it sounds: a stretch wins on its
+fingerprints added up, so four readings too weak to be evidence used to outvote the one reading
+that cleared the floor, and the answer came back naming the losers' street. Nothing that is not
+evidence on its own becomes evidence by turning up four times.
 
-**Two streets are never averaged**: when two stretches match about as well, both are reported, because the midpoint of two streets is inside the block between them, where you certainly were not.
+**Two streets are never averaged**: when two stretches match about as well, both are reported,
+because the midpoint of two streets is inside the block between them, where you certainly were
+not.
 
-**A stretch is one stretch whichever way you walked it**: the two crossing names are sorted before anything is stored, and compared with case, accents and spacing folded away, so `Yaguarón` one week and `Yaguaron` the next do not quietly become two streets that never match.
+**A stretch is one stretch whichever way you walked it**: the two crossing names are sorted
+before anything is stored, and compared with case, accents and spacing folded away, so
+`Yaguarón` one week and `Yaguaron` the next do not quietly become two streets that never match.
 
-And **a crossing name means one place**: matching is done on the networks in view, which know nothing about geography, so a map holding two towns that both have an "Artigas y Rivera" can win with fingerprints 200 km apart, and the weighted middle of them is a field between two cities. When the fingerprints behind the winner are further apart than three of that stretch's own lengths (five kilometres, for a stretch whose length nobody knows), the stretch is still named and the coordinates are withheld, with a line saying so. Crossing names have to be unique across a map, and no map fed one outing at a time can enforce that for you.
+And **a crossing name means one place**: matching is done on the networks in view, which know
+nothing about geography, so a map holding two towns that both have an "Artigas y Rivera" can win
+with fingerprints 200 km apart, and the weighted middle of them is a field between two cities.
+When the fingerprints behind the winner are further apart than three of that stretch's own
+lengths (five kilometres, for a stretch whose length nobody knows), the stretch is still named
+and the coordinates are withheld, with a line saying so. Crossing names have to be unique across
+a map, and no map fed one outing at a time can enforce that for you.
 
 ## A failure to read is not evidence of absence
 
@@ -45,7 +61,11 @@ be opened, a sysfs read that fails, a daemon that will not answer: none of those
 a file with nothing in it, and reporting them as an empty answer produces a confident, wrong
 result that looks exactly like a good one.
 
-A configuration file that is there and cannot be read is the same kind of answer. The daemons read those files with their own privileges and Enodia does not, so a drop-in in `/etc` that it cannot open is not a file that says nothing: it is a file that may say the opposite of everything else. Both the lid and the scan MAC lines say plainly that they could not establish the configuration in force, rather than reporting what the readable half of it said.
+A configuration file that is there and cannot be read is the same kind of answer. The daemons
+read those files with their own privileges and Enodia does not, so a drop-in in `/etc` that it
+cannot open is not a file that says nothing: it is a file that may say the opposite of
+everything else. Both the lid and the scan MAC lines say plainly that they could not establish
+the configuration in force, rather than reporting what the readable half of it said.
 
 The same argument is why `--streets` raises on a file it cannot read rather than falling back to
 a map with no streets in it. An empty map puts every block back on the straight line between its
@@ -59,15 +79,47 @@ yourself against an unknown map is worse than saying so.
 
 ## Refused at the door
 
-Nothing in the file is taken on trust when it is read back. It is a text file that gets copied about, cut in half and opened in an editor, and a value of the wrong type used to travel a long way before anything noticed. A `cycle` of `"oops"` stopped the next outing from starting at all, because the monitor reads the highest cycle in the file before its first scan and then compared a string to a number. So every value is checked at the door, and a field that fails is dropped rather than carried.
+Nothing in the file is taken on trust when it is read back. It is a text file that gets copied
+about, cut in half and opened in an editor, and a value of the wrong type used to travel a long
+way before anything noticed. A `cycle` of `"oops"` stopped the next outing from starting at all,
+because the monitor reads the highest cycle in the file before its first scan and then compared
+a string to a number. So every value is checked at the door, and a field that fails is dropped
+rather than carried.
 
-A measurement keeps its fraction, since a radio reporting -47.5 dBm has measured something. A `cycle` or a mark `number` is an identity and not a measurement, so a fraction there is refused instead of rounded: cycle 1.7 quietly becoming cycle 1 would fold a look at one place into a look at another. And a name that is not a string is not a name, which is how an SSID stopped arriving in the report printed as `['x']`.
+A measurement keeps its fraction, since a radio reporting -47.5 dBm has measured something. A
+`cycle` or a mark `number` is an identity and not a measurement, so a fraction there is refused
+instead of rounded: cycle 1.7 quietly becoming cycle 1 would fold a look at one place into a
+look at another. And a name that is not a string is not a name, which is how an SSID stopped
+arriving in the report printed as `['x']`.
 
-A timestamp has to carry its offset from UTC, which every timestamp Enodia writes does: Python refuses to compare a naive datetime with an aware one, so one edited line without an offset did not cost itself, it took down every scan in the file out of the sort that puts them in order. Being a number is not enough on its own either, so a reading also has to be one a receiver could have taken. A signal of 100000 dBm reached the weighting, which raises ten to it, and came back as an arithmetic error from inside an estimate. A plausible-looking 500 never raises anything and simply wins every weighting it is in, which is the worse of the two. Both the file and the live scan go through the same door.
+A timestamp has to carry its offset from UTC, which every timestamp Enodia writes does: Python
+refuses to compare a naive datetime with an aware one, so one edited line without an offset did
+not cost itself, it took down every scan in the file out of the sort that puts them in order.
+Being a number is not enough on its own either, so a reading also has to be one a receiver could
+have taken. A signal of 100000 dBm reached the weighting, which raises ten to it, and came back
+as an arithmetic error from inside an estimate. A plausible-looking 500 never raises anything
+and simply wins every weighting it is in, which is the worse of the two. Both the file and the
+live scan go through the same door.
 
-Because it is a file that gets copied about and edited by hand, every number in it is checked on the way back in rather than trusted: a latitude has to be a number and to be finite and to fall between -90 and 90, a fraction between 0 and 1, and half a coordinate is no coordinate. JSON will carry `NaN`, and Python reads it without complaint, and one of them poisons every average it reaches, so it is refused at the door where it costs one line instead of turning up later as an answer nobody can explain. The same goes for the log.
+Because it is a file that gets copied about and edited by hand, every number in it is checked on
+the way back in rather than trusted: a latitude has to be a number and to be finite and to fall
+between -90 and 90, a fraction between 0 and 1, and half a coordinate is no coordinate. JSON
+will carry `NaN`, and Python reads it without complaint, and one of them poisons every average
+it reaches, so it is refused at the door where it costs one line instead of turning up later as
+an answer nobody can explain. The same goes for the log.
 
-A line that cannot be right stops the reconciliation with its number and its reason rather than being read as best it can. The 31st of February is not a date, a latitude of 999 is not a place on the earth, `17:0 A` is a time typed wrong rather than a crossing named `17:0 A`, and `date 2026-9-18` is a directive typed wrong rather than a crossing named after it. The latitude matters more than it looks: the notebook is the ground truth every other check is measured against, so an impossible coordinate fails nowhere, it produces distances and geometry that are absurd and that look exactly as legitimate as the rest of the report. The directive is worth spelling out too: a line with no time is a crossing that takes the next button mark, and almost any line can be a crossing's name, so without a rule for it a typo stopped being an error and quietly became a notebook of a different kind. And somebody who typed `@` meant to give a coordinate, so reading the line as a crossing without one would quietly take the whole notebook down to the answers it can give with no coordinates anywhere.
+A line that cannot be right stops the reconciliation with its number and its reason rather than
+being read as best it can. The 31st of February is not a date, a latitude of 999 is not a place
+on the earth, `17:0 A` is a time typed wrong rather than a crossing named `17:0 A`, and
+`date 2026-9-18` is a directive typed wrong rather than a crossing named after it. The latitude
+matters more than it looks: the notebook is the ground truth every other check is measured
+against, so an impossible coordinate fails nowhere, it produces distances and geometry that are
+absurd and that look exactly as legitimate as the rest of the report. The directive is worth
+spelling out too: a line with no time is a crossing that takes the next button mark, and almost
+any line can be a crossing's name, so without a rule for it a typo stopped being an error and
+quietly became a notebook of a different kind. And somebody who typed `@` meant to give a
+coordinate, so reading the line as a crossing without one would quietly take the whole notebook
+down to the answers it can give with no coordinates anywhere.
 
 ## One record, and two ways of writing it down
 
@@ -117,7 +169,13 @@ derived is not a thing to store.
 
 ## Nothing else is allowed to end the walk
 
-Nothing else is allowed to end the walk. Reading which network a card is associated to is a question for the daemon, and reading its rfkill switch is a file in `/sys`, and either can fail on its own for reasons that say nothing about whether the radio works. A walk is four hours in a bag where the only recovery is getting home. So those reads are wrapped: the failure is said out loud and the cycle carries on scanning, and it is not written down as a failed scan, because the scan did not fail. `--preflight` is careful in the same direction, and says `switch unreadable` for a card it could not ask, which is not the same answer as a card that said it was blocked.
+Nothing else is allowed to end the walk. Reading which network a card is associated to is a
+question for the daemon, and reading its rfkill switch is a file in `/sys`, and either can fail
+on its own for reasons that say nothing about whether the radio works. A walk is four hours in a
+bag where the only recovery is getting home. So those reads are wrapped: the failure is said out
+loud and the cycle carries on scanning, and it is not written down as a failed scan, because the
+scan did not fail. `--preflight` is careful in the same direction, and says `switch unreadable`
+for a card it could not ask, which is not the same answer as a card that said it was blocked.
 
 That is the other half of the same argument. Refusing bad input at the door is worth doing
 because the alternative is a wrong answer. Refusing to carry on when a peripheral read fails
@@ -130,15 +188,47 @@ Three times over, the same lesson one size up. Something that was identified by 
 happened turned out to need an identity of its own, because the clock has one second of
 resolution and things that are genuinely different can share a second.
 
-A scan record carries the `cycle`, the pass of the loop it came from. Watching two interfaces writes a record each, and they are one look at one place from one pair of feet, so a reconciliation puts them back together before it reads the pace off them. The timestamp cannot say this: it has one second of resolution, and a cycle whose scans land either side of a second would come apart. The number is unique inside the file rather than inside the run, so a restart carries on from the highest one already written instead of beginning again at one and folding two places into one. A network is counted once per cycle and never once per instant, for the same reason: two cycles fit inside one second of the clock, and each is a real sighting from a real place.
+A scan record carries the `cycle`, the pass of the loop it came from. Watching two interfaces
+writes a record each, and they are one look at one place from one pair of feet, so a
+reconciliation puts them back together before it reads the pace off them. The timestamp cannot
+say this: it has one second of resolution, and a cycle whose scans land either side of a second
+would come apart. The number is unique inside the file rather than inside the run, so a restart
+carries on from the highest one already written instead of beginning again at one and folding
+two places into one. A network is counted once per cycle and never once per instant, for the
+same reason: two cycles fit inside one second of the clock, and each is a real sighting from a
+real place.
 
-The outing token answers the same question one size up: one file can hold several walks, the clock cannot tell apart two that began in the same second, and `--resume` adopts the token already in the file because that is the same walk continuing rather than a second one sharing the pages. It goes on every record and not only on the scans, because the button marks need it just as much. Every run numbers its marks from one, so a file of two walks holds two mark 1s, and read as one file the second walk's took the place of the first walk's: a notebook of `#1` and `#2` came back with the times of a walk on another day.
+The outing token answers the same question one size up: one file can hold several walks, the
+clock cannot tell apart two that began in the same second, and `--resume` adopts the token
+already in the file because that is the same walk continuing rather than a second one sharing
+the pages. It goes on every record and not only on the scans, because the button marks need it
+just as much.
 
-A scan record is always what the radio heard: a cycle without a trustworthy scan is a `scan_failed` record with its `reason` (`radio soft blocked (rfkill)` among them), never an empty scan. Records that belong to one interface carry `interface`, which is what keeps scans apart when more than one is watched. An association is recorded with its BSSID, so two `connected` records with the same name and different BSSIDs are a roam between two access points of one network, not a reconnection. It carries the signal in the same fields a scanned network uses, which is what makes a roam readable afterwards: you moved because the first one was fading.
+A scan record is always what the radio heard: a cycle without a trustworthy scan is a
+`scan_failed` record with its `reason` (`radio soft blocked (rfkill)` among them), never an
+empty scan. Records that belong to one interface carry `interface`, which is what keeps scans
+apart when more than one is watched. An association is recorded with its BSSID, so two
+`connected` records with the same name and different BSSIDs are a roam between two access points
+of one network, not a reconnection. It carries the signal in the same fields a scanned network
+uses, which is what makes a roam readable afterwards: you moved because the first one was
+fading.
 
-An outing is named by when it began and by the token the walk wrote on its own scans, never by the log's filename, since `--log walk.jsonl` reused every week appends to the same pages. Nor by the clock alone, which is what this was: the timestamp has one second of resolution and two walks can begin inside one, and then the map refused the second as already added and `--check-map` held the two out together as one. It is the lesson `cycle` taught one layer down. A log written before the token existed still falls back to the clock, the same way a log written before `cycle` falls back to it for grouping.
+An outing is named by when it began and by the token the walk wrote on its own scans, never by
+the log's filename, since `--log walk.jsonl` reused every week appends to the same pages. Nor by
+the clock alone, which is what this was: the timestamp has one second of resolution and two
+walks can begin inside one, and then the map refused the second as already added and
+`--check-map` held the two out together as one. It is the lesson `cycle` taught one layer down.
+A log written before the token existed still falls back to the clock, the same way a log written
+before `cycle` falls back to it for grouping.
 
-A network with nothing to identify it is kept in the log and left out of all of this. A network is known by its BSSID, or by its name when the backend gives no BSSID, which iwd sometimes does not, and a network that also hides its name leaves neither. Two of those are not the same network, they are two networks nothing can tell apart, and treated as one they agreed with each other completely: a fresh scan of one anonymous router scored a perfect match against a remembered, different one, and the map answered with a place. So they are never folded together, never matched, never counted as turnover and never placed. A coincidence of absence is not evidence.
+A network with nothing to identify it is kept in the log and left out of all of this. A network
+is known by its BSSID, or by its name when the backend gives no BSSID, which iwd sometimes does
+not, and a network that also hides its name leaves neither. Two of those are not the same
+network, they are two networks nothing can tell apart, and treated as one they agreed with each
+other completely: a fresh scan of one anonymous router scored a perfect match against a
+remembered, different one, and the map answered with a place. So they are never folded together,
+never matched, never counted as turnover and never placed. A coincidence of absence is not
+evidence.
 
 A BSSID is compared in one spelling of itself for the same reason. Hexadecimal written out has
 two of every letter, and that string is what one network being another is decided by, so
@@ -146,21 +236,72 @@ two of every letter, and that string is what one network being another is decide
 nothing in common. The SSID keeps its case, because `Casa` and `casa` are two names somebody
 chose rather than two spellings of one.
 
-A notebook is one walk's, so a reconciliation is one walk's too. The usual file holds exactly one and there is nothing to choose. `--log walk.jsonl` reused every week is the other case, and there Enodia reads the last walk in the file and says which one that was, with `--outing TOKEN` to name an older one. Everything that reads a log works this way: `--map-add`, `--locate LOG`, and `--geocode --marks LOG` too. Reading the whole file instead was wrong in two ways that both looked like answers. The day of a notebook without a `date` line came from the first scan in the file, so a notebook of the second walk was read against the first walk's date and every scan of it fell outside the notebook. And every run numbers its button marks from one, so the second walk's mark 1 took the place of the first walk's, and a notebook of `#1` and `#2` was given the times of a walk on another day. `--resume` counts on from this walk's marks for the same reason: an older walk in the same file that reached mark 100 would otherwise have the next press announced as 101, while the paper in your hand says 3.
+A notebook is one walk's, so a reconciliation is one walk's too. The usual file holds exactly
+one and there is nothing to choose. `--log walk.jsonl` reused every week is the other case, and
+there Enodia reads the last walk in the file and says which one that was, with `--outing TOKEN`
+to name an older one. Everything that reads a log works this way: `--map-add`, `--locate LOG`,
+and `--geocode --marks LOG` too.
+
+Reading the whole file instead was wrong in two ways that both looked like answers. The day of a
+notebook without a `date` line came from the first scan in the file, so a notebook of the second
+walk was read against the first walk's date and every scan of it fell outside the notebook. And
+every run numbers its button marks from one, so the second walk's mark 1 took the place of the
+first walk's, and a notebook of `#1` and `#2` was given the times of a walk on another day.
+`--resume` counts on from this walk's marks for the same reason: an older walk in the same file
+that reached mark 100 would otherwise have the next press announced as 101, while the paper in
+your hand says 3.
 
 ## The button, and which clock a press happened on
 
-The notebook's weak point is the time: heard through headphones, written by hand, one misheard digit moves a whole stretch of the route. A headset has a button, and Linux shows it as an input device that reports every press with the time the kernel stamped it with, which is when the press happened rather than when anything got round to reading it. Press it at each crossing and the time is the machine's. That stamp is what separates two presses: a thumb that bounces is one crossing, and two real presses that arrive together after a busy moment are two. Timing them by the reading instead made the second of those disappear. It is also what the `mark` record is dated by, back from the moment it was handled, so two crossings two seconds apart are two seconds apart on the paper as well.
+The notebook's weak point is the time: heard through headphones, written by hand, one misheard
+digit moves a whole stretch of the route. A headset has a button, and Linux shows it as an input
+device that reports every press with the time the kernel stamped it with, which is when the
+press happened rather than when anything got round to reading it. Press it at each crossing and
+the time is the machine's. That stamp is what separates two presses: a thumb that bounces is one
+crossing, and two real presses that arrive together after a busy moment are two. Timing them by
+the reading instead made the second of those disappear. It is also what the `mark` record is
+dated by, back from the moment it was handled, so two crossings two seconds apart are two
+seconds apart on the paper as well.
 
-Which clock evdev stamped it with is determined rather than assumed, by asking each clock the machine has what time it is and seeing which one puts the press in the recent past: they cannot both, since one counts from 1970 and the other from boot. That is what lets a press which sat in the buffer while the laptop was busy still be written when it happened. When no clock recognises the stamp, the last press of a batch is read as happening now, which is what every press was read as before any of this.
+Which clock evdev stamped it with is determined rather than assumed, by asking each clock the
+machine has what time it is and seeing which one puts the press in the recent past: they cannot
+both, since one counts from 1970 and the other from boot. That is what lets a press which sat in
+the buffer while the laptop was busy still be written when it happened. When no clock recognises
+the stamp, the last press of a batch is read as happening now, which is what every press was
+read as before any of this.
 
-Enodia answers *"Mark 7"*, and the notebook only needs the crossing's name next to that number. The `mark` records in the log carry the times, and the reconciliation joins the two by number. One press is one crossing, so a notebook that writes `#1` twice is refused, and so is a notebook whose numbers the log cannot answer: that usually means the wrong walk of the log was picked, which is what `--outing` is for. A notebook with no numbers and no log is the ordinary other case, and it says the times are simply not known.
+Enodia answers *"Mark 7"*, and the notebook only needs the crossing's name next to that number.
+The `mark` records in the log carry the times, and the reconciliation joins the two by number.
+One press is one crossing, so a notebook that writes `#1` twice is refused, and so is a notebook
+whose numbers the log cannot answer: that usually means the wrong walk of the log was picked,
+which is what `--outing` is for. A notebook with no numbers and no log is the ordinary other
+case, and it says the times are simply not known.
 
 ## What the machine says about itself
 
-Both Wi-Fi daemons can randomise the address used for scanning, which is a different setting from the one used once you are associated, and NetworkManager does it by default. `--preflight` reads what yours was told and says so on the `scan mac` line, and warns when somebody has turned it off. It says `OK` for one thing only: NetworkManager, set once, in a section NetworkManager reads device properties from, to a value NetworkManager documents, with no mask. A value that is neither a yes nor a no is a warning about a value the daemon was not asked for, since reading anything that is not an off as an on turned a typo into a green line. A file held back by `[.config] enable=false` is skipped the way NetworkManager skips it, and one held behind a version or environment predicate is reported as a file whose effect is not established. The same key under `[main]` parses perfectly and does nothing, so it is reported as doing nothing rather than as the machine's setting. A `wifi.scan-generate-mac-address-mask` fixes some bits of the scanning address and randomises only the rest, so with one set the word is withheld: how much of the address actually varies is not worked out here. And iwd's own setting is never an `OK`, because it is documented as the address the interface uses, which is a related question and not this one.
+Both Wi-Fi daemons can randomise the address used for scanning, which is a different setting
+from the one used once you are associated, and NetworkManager does it by default. `--preflight`
+reads what yours was told and says so on the `scan mac` line, and warns when somebody has turned
+it off.
 
-Enodia does not change it, on purpose: that needs root, which nothing else here does, and it fights the daemon that owns the interface and will be reverted. The daemons already have a supported way that survives reconnects and suspends, which matters when the laptop spends four hours in a bag. So this catches rather than corrects, the way the lid and the corner names do.
+It says `OK` for one thing only: NetworkManager, set once, in a section NetworkManager reads
+device properties from, to a value NetworkManager documents, with no mask. A value that is
+neither a yes nor a no is a warning about a value the daemon was not asked for, since reading
+anything that is not an off as an on turned a typo into a green line.
+
+A file held back by `[.config] enable=false` is skipped the way NetworkManager skips it, and one
+held behind a version or environment predicate is reported as a file whose effect is not
+established. The same key under `[main]` parses perfectly and does nothing, so it is reported as
+doing nothing rather than as the machine's setting. A `wifi.scan-generate-mac-address-mask`
+fixes some bits of the scanning address and randomises only the rest, so with one set the word
+is withheld: how much of the address actually varies is not worked out here. And iwd's own
+setting is never an `OK`, because it is documented as the address the interface uses, which is a
+related question and not this one.
+
+Enodia does not change it, on purpose: that needs root, which nothing else here does, and it
+fights the daemon that owns the interface and will be reverted. The daemons already have a
+supported way that survives reconnects and suspends, which matters when the laptop spends four
+hours in a bag. So this catches rather than corrects, the way the lid and the corner names do.
 
 ## Suggesting a next step without pretending to know one
 
@@ -202,7 +343,12 @@ what they would need:
 
 ## The map is added to whole or not at all
 
-Adding the same outing twice is refused rather than done, since a doubled outing pulls every answer towards itself. An outing goes on whole or not at all, written beside the map with the permissions the map already had, and moved into place, because that refusal is what makes a half-written walk unrepairable: the map would hold a third of it, call the outing present, and add nothing on a second run. The log is the opposite case and is appended line by line, since there everything already written is worth keeping.
+Adding the same outing twice is refused rather than done, since a doubled outing pulls every
+answer towards itself. An outing goes on whole or not at all, written beside the map with the
+permissions the map already had, and moved into place, because that refusal is what makes a
+half-written walk unrepairable: the map would hold a third of it, call the outing present, and
+add nothing on a second run. The log is the opposite case and is appended line by line, since
+there everything already written is worth keeping.
 
 ## A temporary file is a name somebody else can get to first
 
@@ -471,13 +617,28 @@ kernel to hand to something else.
 Some things go wrong in a backpack that nothing on a closed screen can tell you about, so
 Enodia says them out loud. Each of these was a silent failure first.
 
-If the laptop suspends anyway, it notices on waking: `CLOCK_BOOTTIME` keeps counting through a suspend and `CLOCK_MONOTONIC` does not, so the two drifting apart between one cycle and the next is exactly the time asleep. It says how long ("The laptop slept for 12 minutes") and writes a `suspended` record, so the hole in the log is explained rather than read later as a stretch with nothing on it.
+If the laptop suspends anyway, it notices on waking: `CLOCK_BOOTTIME` keeps counting through a
+suspend and `CLOCK_MONOTONIC` does not, so the two drifting apart between one cycle and the next
+is exactly the time asleep. It says how long ("The laptop slept for 12 minutes") and writes a
+`suspended` record, so the hole in the log is explained rather than read later as a stretch with
+nothing on it.
 
-A scan the Wi-Fi daemon refuses (not being in the `network` group is enough) is announced once, reminded once a minute while it lasts, and closed with "Scanning again" when it recovers, with a `scan_failed` record for every cycle it cost. Before this, that failure sounded exactly like a healthy walk: "Scanning", the time, "Scanning", the time, over a log filling with nothing.
+A scan the Wi-Fi daemon refuses (not being in the `network` group is enough) is announced once,
+reminded once a minute while it lasts, and closed with "Scanning again" when it recovers, with a
+`scan_failed` record for every cycle it cost. Before this, that failure sounded exactly like a
+healthy walk: "Scanning", the time, "Scanning", the time, over a log filling with nothing.
 
 ## What the first real outing falsified
 
-A radio switched off by rfkill (an airplane-mode key knocked inside the backpack, `rfkill block wifi` left on from the desk) hears nothing, which looks exactly like a street with no Wi-Fi on it. Enodia reads the kernel's switches before every scan and treats a blocked radio as a failed scan: "Radio blocked on wlan0", the reminders, a `scan_failed` record with the reason, and no scan record at all, so afterwards a hole is a hole and an empty scan is an empty street. What it does not read is the interface's operational state, and the first real outing is why: a walk is spent associated to no network, which the kernel reports as `DOWN` while forty networks are in view, and an earlier Enodia that took `DOWN` for a dead radio announced it all the way and threw every scan out as evidence of pace.
+A radio switched off by rfkill (an airplane-mode key knocked inside the backpack,
+`rfkill block wifi` left on from the desk) hears nothing, which looks exactly like a street with
+no Wi-Fi on it. Enodia reads the kernel's switches before every scan and treats a blocked radio
+as a failed scan: "Radio blocked on wlan0", the reminders, a `scan_failed` record with the
+reason, and no scan record at all, so afterwards a hole is a hole and an empty scan is an empty
+street. What it does not read is the interface's operational state, and the first real outing is
+why: a walk is spent associated to no network, which the kernel reports as `DOWN` while forty
+networks are in view, and an earlier Enodia that took `DOWN` for a dead radio announced it all
+the way and threw every scan out as evidence of pace.
 
 That is the only claim in Enodia so far that a real walk has settled either way, and it settled
 it against the code. Everything else in the README that carries a measured result comes from

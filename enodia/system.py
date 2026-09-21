@@ -72,7 +72,7 @@ def config_dir(environ: Mapping[str, str] | None = None, home: Path | None = Non
     """Where what Enodia is told goes: `$XDG_CONFIG_HOME/enodia`, or `~/.config/enodia`.
 
     Apart from the data directory, which is where the walks go. The one thing
-    that lives here is the key `--export-public` pseudonymizes with, and a
+    that lives here is the key `--export-public` pseudonymises with, and a
     secret has no business sitting among the outings: `session_log_path` picks
     the newest file in the data directory to resume from, and a directory Enodia
     writes logs into is not the place to leave something that must not be

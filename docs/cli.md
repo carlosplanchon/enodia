@@ -114,12 +114,13 @@ it, or four numbers `s,w,n,e` for a bounding box.
 
 The original notebook is never touched. Without `--out`, the result goes beside it with `.geo`
 before the suffix. `--proxy` sends the one request through SOCKS5 and the proxy resolves the
-hostname, never this machine; `ALL_PROXY` and the rest of the environment are deliberately never
+hostname, never this machine. `ALL_PROXY` and the rest of the environment are deliberately never
 read, and if the proxy cannot be reached nothing is sent. It needs `uv sync --extra socks`.
 
 ## What is spoken
 
-Every message is printed as `Say (Silent: ...) > text`. Events are spoken. The per-cycle status is only printed unless you pass `--say-status`.
+Every message is printed as `Say (Silent: ...) > text`. Events are spoken. The per-cycle status
+is only printed unless you pass `--say-status`.
 
 | Message | Spoken by default | With `--say-status` |
 |---|---|---|
@@ -138,11 +139,24 @@ Every message is printed as `Say (Silent: ...) > text`. Events are spoken. The p
 | The time, at the end of every cycle, on the 24-hour clock | no, printed only | yes |
 | The time every `--say-time-every` seconds, never skipped | with the flag | with the flag, instead of the per-cycle one |
 
-Speech runs in its own thread and never holds up a scan. It is slow (espeak-ng takes nearly four seconds just to say the time), so when there is more to say than time to say it, network names are dropped and everything else still gets through. The per-cycle status ("Scanning", the signal, the time) is said only when the voice is free. Said late it would be wrong, and the time is what the notebook is written from, so a status that arrives while speech is behind is skipped and the next cycle brings a current one. Events are never skipped.
+Speech runs in its own thread and never holds up a scan. It is slow (espeak-ng takes nearly four
+seconds just to say the time), so when there is more to say than time to say it, network names
+are dropped and everything else still gets through. The per-cycle status ("Scanning", the
+signal, the time) is said only when the voice is free. Said late it would be wrong, and the time
+is what the notebook is written from, so a status that arrives while speech is behind is skipped
+and the next cycle brings a current one. Events are never skipped.
 
-`--quiet` turns the table around: nothing about networks or connections is spoken (it is all in the log), and what remains is the time, every cycle or every `--say-time-every` seconds, the button's marks, and the failures, which you cannot afford to miss. `--no-hour` silences the time everywhere, `--quiet` included: with a headset button the marks carry it, and `--quiet --no-hour` leaves nothing but the marks and the failures. If you would rather have the time on a fixed beat, `--say-time-every 30` says it every thirty seconds as an event, never skipped, at the cost of hearing it a few seconds late when it lands in the middle of a name.
+`--quiet` turns the table around: nothing about networks or connections is spoken (it is all in
+the log), and what remains is the time, every cycle or every `--say-time-every` seconds, the
+button's marks, and the failures, which you cannot afford to miss. `--no-hour` silences the time
+everywhere, `--quiet` included: with a headset button the marks carry it, and
+`--quiet --no-hour` leaves nothing but the marks and the failures. If you would rather have the
+time on a fixed beat, `--say-time-every 30` says it every thirty seconds as an event, never
+skipped, at the cost of hearing it a few seconds late when it lands in the middle of a name.
 
-Scans keep the interval asked for: a cycle sleeps only what is left of it after the scanning is done. Every message is printed whether or not it is spoken, and the log always has every network, so nothing is lost but the audio.
+Scans keep the interval asked for: a cycle sleeps only what is left of it after the scanning is
+done. Every message is printed whether or not it is spoken, and the log always has every
+network, so nothing is lost but the audio.
 
 ## Sharing a walk
 
@@ -241,13 +255,13 @@ Without `--log`, an outing writes to `$XDG_DATA_HOME/enodia/` (that is `~/.local
 unless you set the variable), or to the directory `--dir` names, in a file named by the time it
 started, and the button's marks count from one. The path is printed when the outing starts and
 again when it stops, since by then the first line is long gone. `--resume` carries on with the
-outing under way instead, when the newest log there was written to less than thirty minutes
-ago: a laptop that ran out of battery, a walk stopped by mistake. Older than that, it starts a
-new outing like any other run. `--log FILE` appends to one file of your choosing, whatever its
-age, and there the marks start again from one inside the same file, so restarting mid-outing
-with `--log` wants `--resume` too. The fingerprint map lives in `$XDG_DATA_HOME/enodia/map/map.jsonl`, in a directory of
-its own so that `--resume` never mistakes it for an outing's log, and `--map FILE` puts it
-anywhere you like.
+outing under way instead, when the newest log there was written to less than thirty minutes ago:
+a laptop that ran out of battery, a walk stopped by mistake. Older than that, it starts a new
+outing like any other run. `--log FILE` appends to one file of your choosing, whatever its age,
+and there the marks start again from one inside the same file, so restarting mid-outing with
+`--log` wants `--resume` too. The fingerprint map lives in
+`$XDG_DATA_HOME/enodia/map/map.jsonl`, in a directory of its own so that `--resume` never
+mistakes it for an outing's log, and `--map FILE` puts it anywhere you like.
 
 See [the README](../README.md) for what these commands do, and [the design notes](design.md)
 for why several of them refuse more than they answer.
