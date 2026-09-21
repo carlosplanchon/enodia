@@ -6,7 +6,7 @@ reconciliation that places every access point along the walk.
 
 from importlib.metadata import version
 
-__version__ = version(__package__)
+__version__ = version("enodia")
 
 from enodia.button import ButtonMarker, InputDevice, find_button_devices, list_input_devices
 from enodia.draw import Frame, svg_map
