@@ -4,7 +4,9 @@ A talking Wi-Fi scanner in a backpack, a paper notebook of street crossings, and
 reconciliation that places every access point along the walk.
 """
 
-__version__ = "0.1.5"
+from importlib.metadata import version
+
+__version__ = version(__package__)
 
 from enodia.button import ButtonMarker, InputDevice, find_button_devices, list_input_devices
 from enodia.draw import Frame, svg_map
