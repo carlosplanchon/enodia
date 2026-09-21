@@ -12,7 +12,7 @@ The quickest answer needs no configuration at all, because systemd has an inhibi
 exactly this. It lifts the lid handling for one command and puts it back when that command ends:
 
 ```bash
-systemd-inhibit --what=handle-lid-switch --why="Enodia is walking" uv run enodia --say-status
+systemd-inhibit --what=handle-lid-switch --why="Enodia is walking" enodia --say-status
 ```
 
 **The preflight will still say `FAIL` on its `lid` line while you do this, and the walk is safe
@@ -51,7 +51,7 @@ rather than the first, since a second card that cannot scan is a warning about t
 not a reason to stay home:
 
 ```bash
-uv run enodia --preflight
+enodia --preflight
 ```
 
 It says `FAIL` with the daemon's own error when the answer was refused. The usual cause is that
@@ -84,9 +84,9 @@ have said and the walk is otherwise unaffected.
   so it also needs a player, and the first of `paplay`, `pw-play` and `aplay` found is used.
 
 ```bash
-uv run enodia --voice espeak       # force one engine
-uv run enodia --voice pico
-uv run enodia --voice none         # print instead of speaking
+enodia --voice espeak              # force one engine
+enodia --voice pico
+enodia --voice none                # print instead of speaking
 ```
 
 The preflight's `voice` line **actually says something** rather than looking for a binary,
@@ -143,7 +143,7 @@ sudo udevadm trigger --subsystem-match=input     # and for the devices already p
 
 `uaccess` has logind grant an ACL on that one device to the user of the active session, for as
 long as the session lasts, with no group involved. `getfacl /dev/input/eventN` shows the entry.
-`uv run enodia --button list` names the devices without needing any of this, since it reads
+`enodia --button list` names the devices without needing any of this, since it reads
 `/sys`, and is how to find out which one is the headset before writing the rule.
 
 ### Which device is the headset

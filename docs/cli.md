@@ -1,7 +1,9 @@
 # Every flag
 
 `enodia --help` is the authoritative list, and the one that cannot go out of date. `enodia
---version` says which Enodia this is. This page groups the flags by the command you reach for
+--version` says which Enodia this is. Installed with `uv tool install enodia` the command is
+`enodia`. From a clone of the repository it is `uv run enodia`, and everything below reads
+the same. This page groups the flags by the command you reach for
 them with, and says what each is for and what it does when you leave it out.
 
 Short forms: `-i` is `--interface` (repeatable, and without it every Wi-Fi interface is
@@ -10,42 +12,42 @@ watched), `-t` is `--interval`, `-l` is `--log`.
 ## On the walk
 
 ```bash
-uv run enodia                             # every Wi-Fi interface, every 5 s, one log per outing
-uv run enodia -i wlan0 -t 10              # one interface, every 10 s
-uv run enodia -l walk.jsonl               # one log file of your choosing
-uv run enodia --dir ~/walks              # one file per outing, in that directory
-uv run enodia --voice pico                # engine: auto (espeak-ng, else Pico) | espeak | pico | none
-uv run enodia --lang en-GB --ssid-lang es-ES # language of the announcements, and of the network names
-uv run enodia --say-status                # also say "Scanning" and the time every cycle
-uv run enodia --say-status --say-signal   # ...and the signal quality, which seldom changes
-uv run enodia --say-time-every 30         # the time every 30 s, never skipped, with or without --say-status
-uv run enodia --quiet --say-time-every 30 # only the time, the button's marks and the failures
-uv run enodia --quiet --no-hour           # only the button's marks and the failures
-uv run enodia --say-names 0               # read only the open networks' names, never the rest
-uv run enodia --button /dev/input/event7  # mark crossings with that device's button. 'list', 'off'
-uv run enodia --no-fresh                  # read the daemon's view instead of scanning
-uv run enodia --no-log-every-scan         # log only connection changes and new networks
-uv run enodia --resume                    # carry on with the outing under way, if its log is under 30 minutes old
-uv run enodia --cycles 3                  # stop after 3 scans instead of running until Ctrl+C
+enodia                                    # every Wi-Fi interface, every 5 s, one log per outing
+enodia -i wlan0 -t 10                     # one interface, every 10 s
+enodia -l walk.jsonl                      # one log file of your choosing
+enodia --dir ~/walks                     # one file per outing, in that directory
+enodia --voice pico                       # engine: auto (espeak-ng, else Pico) | espeak | pico | none
+enodia --lang en-GB --ssid-lang es-ES        # language of the announcements, and of the network names
+enodia --say-status                       # also say "Scanning" and the time every cycle
+enodia --say-status --say-signal          # ...and the signal quality, which seldom changes
+enodia --say-time-every 30                # the time every 30 s, never skipped, with or without --say-status
+enodia --quiet --say-time-every 30        # only the time, the button's marks and the failures
+enodia --quiet --no-hour                  # only the button's marks and the failures
+enodia --say-names 0                      # read only the open networks' names, never the rest
+enodia --button /dev/input/event7         # mark crossings with that device's button. 'list', 'off'
+enodia --no-fresh                         # read the daemon's view instead of scanning
+enodia --no-log-every-scan                # log only connection changes and new networks
+enodia --resume                           # carry on with the outing under way, if its log is under 30 minutes old
+enodia --cycles 3                         # stop after 3 scans instead of running until Ctrl+C
 ```
 
 ## Before the walk
 
 ```bash
-uv run enodia --preflight                 # check everything an outing needs and exit
+enodia --preflight                        # check everything an outing needs and exit
 ```
 
 ## Reading a log back
 
 ```bash
-uv run enodia --reconcile LOG notebook.txt                     # the report
-uv run enodia --reconcile LOG notebook.txt --pace clock        # share out each stretch on time
-uv run enodia --reconcile LOG notebook.txt --outing 3f9a2b10    # one walk of a file that holds several
-uv run enodia --reconcile LOG notebook.txt --scans              # also list where every scan landed
-uv run enodia --reconcile LOG notebook.txt --csv networks.csv --geojson walk.geojson
-uv run enodia --reconcile LOG notebook.geo.txt --streets streets.jsonl          # along the streets
-uv run enodia --reconcile LOG notebook.geo.txt --streets streets.jsonl --svg plan.svg
-uv run enodia --open-networks LOG                              # the unencrypted ones, strongest first
+enodia --reconcile LOG notebook.txt                            # the report
+enodia --reconcile LOG notebook.txt --pace clock               # share out each stretch on time
+enodia --reconcile LOG notebook.txt --outing 3f9a2b10           # one walk of a file that holds several
+enodia --reconcile LOG notebook.txt --scans                     # also list where every scan landed
+enodia --reconcile LOG notebook.txt --csv networks.csv --geojson walk.geojson
+enodia --reconcile LOG notebook.geo.txt --streets streets.jsonl                 # along the streets
+enodia --reconcile LOG notebook.geo.txt --streets streets.jsonl --svg plan.svg
+enodia --open-networks LOG                                     # the unencrypted ones, strongest first
 ```
 
 `--pace movement` is the default and reads the pace from how much the networks in view turn
@@ -69,10 +71,10 @@ report itself goes to standard output, so capturing it wants a run without them.
 ## Does any of it work
 
 ```bash
-uv run enodia --reconcile LOG notebook.geo.txt --check-pace     # which pace method finds the crossings again
-uv run enodia --reconcile LOG notebook.txt --check-passes       # how far apart two passes put the same networks
-uv run enodia --check-map                                      # hold out a pass and locate it from the rest
-uv run enodia --check-map --match signal                       # the same, scored on signal as well
+enodia --reconcile LOG notebook.geo.txt --check-pace            # which pace method finds the crossings again
+enodia --reconcile LOG notebook.txt --check-passes              # how far apart two passes put the same networks
+enodia --check-map                                             # hold out a pass and locate it from the rest
+enodia --check-map --match signal                              # the same, scored on signal as well
 ```
 
 `--check-pace` needs coordinates on the crossings, since it measures in metres. `--check-passes`
@@ -87,13 +89,13 @@ choosing the path, the two ways `--sequence` names.
 ## The map, and finding yourself again
 
 ```bash
-uv run enodia --map-add LOG notebook.txt                        # add an outing to the map
-uv run enodia --map-add LOG notebook.txt --streets streets.jsonl # along the street shapes
-uv run enodia --locate                                         # scan now: where am I?
-uv run enodia --locate LOG                                     # or a log's last scan, with the ones before it
-uv run enodia --locate LOG --sequence path                     # let the scans before it choose the path
-uv run enodia --locate --match signal                          # score on signal strength too
-uv run enodia --map other.jsonl --locate                        # a map somewhere else
+enodia --map-add LOG notebook.txt                               # add an outing to the map
+enodia --map-add LOG notebook.txt --streets streets.jsonl        # along the street shapes
+enodia --locate                                                # scan now: where am I?
+enodia --locate LOG                                            # or a log's last scan, with the ones before it
+enodia --locate LOG --sequence path                            # let the scans before it choose the path
+enodia --locate --match signal                                 # score on signal strength too
+enodia --map other.jsonl --locate                               # a map somewhere else
 ```
 
 `--match networks` is the default and matches on which networks are in view. `--match signal`
@@ -117,13 +119,13 @@ flag: `--check-map` reports both.
 ## Putting the notebook on the map
 
 ```bash
-uv run enodia --geocode notebook.txt --area Montevideo                          # look the corners up
-uv run enodia --geocode notebook.txt --area Montevideo --out notebook.geo.txt    # name the output
-uv run enodia --geocode notebook.txt --area Montevideo --marks LOG              # time the untimed lines
-uv run enodia --geocode notebook.txt --area Montevideo --proxy socks5://127.0.0.1:9050
-uv run enodia --geocode notebook.txt --area Montevideo --streets streets.jsonl   # keep the street shapes
-uv run enodia --geocode notebook.txt --area Montevideo --streets streets.jsonl --buildings
-uv run enodia --geocode notebook.txt --area Montevideo --overpass-url https://overpass.kumi.systems/api/interpreter
+enodia --geocode notebook.txt --area Montevideo                                 # look the corners up
+enodia --geocode notebook.txt --area Montevideo --out notebook.geo.txt           # name the output
+enodia --geocode notebook.txt --area Montevideo --marks LOG                     # time the untimed lines
+enodia --geocode notebook.txt --area Montevideo --proxy socks5://127.0.0.1:9050
+enodia --geocode notebook.txt --area Montevideo --streets streets.jsonl          # keep the street shapes
+enodia --geocode notebook.txt --area Montevideo --streets streets.jsonl --buildings
+enodia --geocode notebook.txt --area Montevideo --overpass-url https://overpass.kumi.systems/api/interpreter
 ```
 
 This is the one command in Enodia that goes online, and only when you type it. `--area` is not
@@ -133,7 +135,8 @@ it, or four numbers `s,w,n,e` for a bounding box.
 The original notebook is never touched. Without `--out`, the result goes beside it with `.geo`
 before the suffix. `--proxy` sends the one request through SOCKS5 and the proxy resolves the
 hostname, never this machine. `ALL_PROXY` and the rest of the environment are deliberately never
-read, and if the proxy cannot be reached nothing is sent. It needs `uv sync --extra socks`.
+read, and if the proxy cannot be reached nothing is sent. It needs the `socks` extra:
+`uv tool install "enodia[socks]"`, or `uv sync --extra socks` in a clone.
 
 ## What is spoken
 
@@ -179,12 +182,12 @@ network, so nothing is lost but the audio.
 ## Sharing a walk
 
 ```bash
-uv run enodia --export-public walk.jsonl notebook.txt --out published/
-uv run enodia --export-public walk.jsonl notebook.txt --ssid pseudonym  # names kept apart, not dropped
-uv run enodia --export-public walk.jsonl notebook.txt --ssid keep       # names as they are
-uv run enodia --export-public walk.jsonl notebook.txt --mac-shaped      # d2:17:43:.. rather than ap-1c8a74f992ae
-uv run enodia --export-public walk.jsonl notebook.txt --key-file ~/keys/enodia.key
-uv run enodia --export-public walk.jsonl notebook.txt --outing 3f9a2b10   # one walk of a file that holds several
+enodia --export-public walk.jsonl notebook.txt --out published/
+enodia --export-public walk.jsonl notebook.txt --ssid pseudonym         # names kept apart, not dropped
+enodia --export-public walk.jsonl notebook.txt --ssid keep              # names as they are
+enodia --export-public walk.jsonl notebook.txt --mac-shaped             # d2:17:43:.. rather than ap-1c8a74f992ae
+enodia --export-public walk.jsonl notebook.txt --key-file ~/keys/enodia.key
+enodia --export-public walk.jsonl notebook.txt --outing 3f9a2b10          # one walk of a file that holds several
 ```
 
 Both files at once, and `--out` names the directory, `public/` by default. The directory is the
@@ -216,10 +219,10 @@ is there.
 ## The menu, if you would rather not remember any of this
 
 ```bash
-uv run enodia --assistant                          # the whole workflow, one screen at a time
-uv run enodia --assistant --dir ~/walks --map other.jsonl   # over a different directory and map
-uv run enodia --assistant --log walk.jsonl         # over one file, and every walk inside it
-uv run enodia --assistant -i wlan0 --voice pico    # and every walk it starts uses these
+enodia --assistant                                 # the whole workflow, one screen at a time
+enodia --assistant --dir ~/walks --map other.jsonl          # over a different directory and map
+enodia --assistant --log walk.jsonl                # over one file, and every walk inside it
+enodia --assistant -i wlan0 --voice pico           # and every walk it starts uses these
 ```
 
 `--assistant` takes the configuration flags and refuses the command ones: `--preflight`,

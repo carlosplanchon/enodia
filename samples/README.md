@@ -22,13 +22,13 @@ Build the sample map from two synthetic passes over the real block:
 
 ```bash
 rm -f /tmp/enodia-agraciada-map.jsonl
-uv run enodia --map-add samples/agraciada-2026-09-14.jsonl \
+enodia --map-add samples/agraciada-2026-09-14.jsonl \
   samples/agraciada-2026-09-14.txt --streets samples/agraciada-streets.jsonl \
   --pace clock --map /tmp/enodia-agraciada-map.jsonl
-uv run enodia --map-add samples/agraciada-2026-09-17.jsonl \
+enodia --map-add samples/agraciada-2026-09-17.jsonl \
   samples/agraciada-2026-09-17.txt --streets samples/agraciada-streets.jsonl \
   --pace clock --map /tmp/enodia-agraciada-map.jsonl
-uv run enodia --locate samples/agraciada-query.jsonl \
+enodia --locate samples/agraciada-query.jsonl \
   --map /tmp/enodia-agraciada-map.jsonl --voice none
 ```
 
@@ -44,7 +44,7 @@ every test run and compares the results to the files beside it, so they cannot d
 - `agraciada-report.txt`: reconciliation report for the first pass
 
   ```bash
-  uv run enodia --reconcile samples/agraciada-2026-09-14.jsonl \
+  enodia --reconcile samples/agraciada-2026-09-14.jsonl \
     samples/agraciada-2026-09-14.txt --streets samples/agraciada-streets.jsonl \
     --pace clock --scans > samples/agraciada-report.txt
   ```
@@ -57,7 +57,7 @@ every test run and compares the results to the files beside it, so they cannot d
   these flags adds a line to the report saying where it wrote its file.
 
   ```bash
-  uv run enodia --reconcile samples/agraciada-2026-09-14.jsonl \
+  enodia --reconcile samples/agraciada-2026-09-14.jsonl \
     samples/agraciada-2026-09-14.txt --streets samples/agraciada-streets.jsonl \
     --pace clock --csv samples/agraciada-networks.csv \
     --geojson samples/agraciada-walk.geojson --svg samples/agraciada-plan.svg
@@ -66,5 +66,5 @@ every test run and compares the results to the files beside it, so they cannot d
 - `agraciada-map-check.txt`: validation of the two-pass map, each outing held out and located from the other
 
   ```bash
-  uv run enodia --check-map --map samples/agraciada-map.jsonl > samples/agraciada-map-check.txt
+  enodia --check-map --map samples/agraciada-map.jsonl > samples/agraciada-map-check.txt
   ```

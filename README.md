@@ -28,28 +28,28 @@ No GNSS receiver and no external geolocation database: position comes from a rad
 
 You need Linux, Python 3.10+, and a Wi-Fi interface managed by iwd, NetworkManager or wpa_supplicant, with permission to scan through D-Bus. For speech, install `espeak-ng` or SVOX Pico. Without a voice engine, Enodia prints its announcements.
 
-Install from source with [uv](https://docs.astral.sh/uv/):
+Install it as a command with [uv](https://docs.astral.sh/uv/):
 
 ```bash
-git clone https://github.com/carlosplanchon/enodia.git
-cd enodia
-uv sync
+uv tool install enodia
 ```
+
+`uv tool upgrade enodia` follows new releases, and `uvx enodia --help` runs it once without installing anything. `--geocode --proxy` needs the `socks` extra: `uv tool install "enodia[socks]"`. From a clone of the repository, `uv sync` and then `uv run enodia` do the same as `enodia` below.
 
 For a guided terminal menu covering the whole workflow:
 
 ```bash
-uv run enodia --assistant
+enodia --assistant
 ```
 
 Before walking, follow [machine setup](docs/setup.md) to keep the laptop awake with its lid closed and enable the headset button.
 
 ## See it work
 
-Try the bundled example without scanning any radios:
+Try the bundled example, from a clone of the repository, without scanning any radios:
 
 ```bash
-uv run enodia --locate samples/agraciada-query.jsonl \
+enodia --locate samples/agraciada-query.jsonl \
   --map samples/agraciada-map.jsonl --voice none
 ```
 
@@ -67,8 +67,8 @@ The street names, coordinates and geometry are real OpenStreetMap data. The radi
 **1. Check the machine, then start a short outing.**
 
 ```bash
-uv run enodia --preflight --log walk.jsonl
-uv run enodia --say-status --log walk.jsonl
+enodia --preflight --log walk.jsonl
+enodia --say-status --log walk.jsonl
 ```
 
 Resolve preflight failures before leaving. Check that you hear announcements with the lid closed. Use a new log filename for each outing.
@@ -91,8 +91,8 @@ Coordinates are optional: append `@ latitude, longitude` after a crossing name. 
 **4. Reconcile the walk and add it to your map.**
 
 ```bash
-uv run enodia --reconcile walk.jsonl notebook.txt
-uv run enodia --map-add walk.jsonl notebook.txt
+enodia --reconcile walk.jsonl notebook.txt
+enodia --map-add walk.jsonl notebook.txt
 ```
 
 Reconciliation places scans between crossings and estimates access-point positions. Adding the walk to the map keeps its scans as fingerprints.
@@ -100,7 +100,7 @@ Reconciliation places scans between crossings and estimates access-point positio
 On a later visit, ask where you are:
 
 ```bash
-uv run enodia --locate
+enodia --locate
 ```
 
 ## Go further
