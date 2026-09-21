@@ -25,11 +25,12 @@ from enodia.fingerprint import (
     format_location,
     format_map_check,
     locate_scan,
+    locate_sequence,
     map_summary,
     outing_name,
     read_map,
-    scan_from_log,
     scan_now,
+    scans_from_log,
     similarity,
     write_map,
 )
@@ -443,14 +444,14 @@ def test_the_last_scan_of_a_log_is_what_gets_located(tmp_path, monkeypatch):
         ],
         "17:00 Alfa\n17:10 Bravo\n",
     )
-    assert [n.ssid for n in scan_from_log(log)] == ["Ahora"]
+    assert [n.ssid for n in scans_from_log(log)[-1]] == ["Ahora"]
 
 
 def test_a_log_with_no_scans_cannot_be_located(tmp_path):
     log = tmp_path / "vacio.jsonl"
     log.write_text('{"time": "2026-09-05T17:00:00-03:00", "event": "mark", "number": 1}\n')
     with pytest.raises(NotebookError, match="no timestamped scans found"):
-        scan_from_log(log)
+        scans_from_log(log)
 
 
 def test_a_scan_with_no_time_costs_only_itself(tmp_path):
@@ -463,12 +464,12 @@ def test_a_scan_with_no_time_costs_only_itself(tmp_path):
         '{"time": "2026-09-05T17:00:01-03:00", "event": "scan", "cycle": 2, "networks": '
         '[{"ssid": "X", "bssid": "aa:bb:cc:dd:ee:01", "signal_dbm": -50}]}\n'
     )
-    assert [network.ssid for network in scan_from_log(log)] == ["X"]
+    assert [network.ssid for network in scans_from_log(log)[-1]] == ["X"]
 
     only_bad = tmp_path / "solo-torcido.jsonl"
     only_bad.write_text('{"event": "scan", "cycle": 1, "networks": []}\n')
     with pytest.raises(NotebookError, match="no timestamped scans found"):
-        scan_from_log(only_bad)
+        scans_from_log(only_bad)
 
 
 # --- measuring ----------------------------------------------------------------
@@ -575,7 +576,10 @@ def test_with_two_outings_the_whole_outing_is_held_out_and_its_next_stretch_with
     results = check_map([*lunes, *martes])
     assert [held.abstained for held in results] == [True, True, True]
     report = format_map_check(
-        [*lunes, *martes], results, check_map([*lunes, *martes], by_signal=True)
+        [*lunes, *martes],
+        results,
+        check_map([*lunes, *martes], by_signal=True),
+        check_map([*lunes, *martes], in_sequence=True),
     )
     assert "Each outing held out in turn, and its scans located from the other outings:" in report
     assert "placed across a mark                    0              0" in report
@@ -583,7 +587,12 @@ def test_with_two_outings_the_whole_outing_is_held_out_and_its_next_stretch_with
 
 def test_the_check_reports_both_methods_side_by_side():
     walks = two_walks()
-    report = format_map_check(walks, check_map(walks), check_map(walks, by_signal=True))
+    report = format_map_check(
+        walks,
+        check_map(walks),
+        check_map(walks, by_signal=True),
+        check_map(walks, in_sequence=True),
+    )
     assert "Map: 2 fingerprints, 2 walks over 1 stretches, 1 outings." in report
     assert "Each walk held out in turn" in report
     assert "by networks" in report and "and by signal" in report
@@ -602,7 +611,12 @@ def test_the_check_reports_fractions_when_no_stretch_has_a_length():
         mark(0.2, net("A"), walk="paseo#0", length=None),
         mark(0.4, net("A"), walk="paseo#1", length=None),
     ]
-    report = format_map_check(walks, check_map(walks), check_map(walks, by_signal=True))
+    report = format_map_check(
+        walks,
+        check_map(walks),
+        check_map(walks, by_signal=True),
+        check_map(walks, in_sequence=True),
+    )
     assert "mean error, of a stretch              20%            20%" in report
     assert "mean error in metres                    -              -" in report
     assert "The distances cover" not in report  # ninguno tiene largo, nada que aclarar
@@ -613,7 +627,12 @@ def test_the_check_reports_nothing_measurable_when_every_scan_missed():
         mark(0.2, net("A"), walk="paseo#0", street=("Alfa", "Bravo")),
         mark(0.2, net("A"), walk="paseo#1", street=("Charlie", "Delta")),
     ]
-    report = format_map_check(walks, check_map(walks), check_map(walks, by_signal=True))
+    report = format_map_check(
+        walks,
+        check_map(walks),
+        check_map(walks, by_signal=True),
+        check_map(walks, in_sequence=True),
+    )
     assert "mean error, of a stretch                -              -" in report
     assert "mean error in metres                    -              -" in report
     assert "landed on the wrong stretch             2              2" in report
@@ -627,12 +646,17 @@ def test_the_median_of_an_even_and_an_odd_number_of_errors():
         mark(0.6, net("A"), walk="paseo#2"),
     ]
     # Tres pasadas, tres errores: la mediana es el del medio, no un promedio.
-    report = format_map_check(walks, check_map(walks), check_map(walks, by_signal=True))
+    report = format_map_check(
+        walks,
+        check_map(walks),
+        check_map(walks, by_signal=True),
+        check_map(walks, in_sequence=True),
+    )
     assert "median error" in report
 
 
 def test_nothing_to_check_is_said_rather_than_shown_as_an_empty_table():
-    report = format_map_check([], [], [])
+    report = format_map_check([], [], [], [])
     assert "Nothing to check" in report and "turn round at the corner" in report
 
 
@@ -685,7 +709,12 @@ def test_the_check_says_when_a_map_only_recognised_its_own_walk():
     # Everything here came from one outing, so the map is recognising a walk,
     # not a place, and the report has to say so rather than look accurate.
     walks = two_walks()
-    report = format_map_check(walks, check_map(walks), check_map(walks, by_signal=True))
+    report = format_map_check(
+        walks,
+        check_map(walks),
+        check_map(walks, by_signal=True),
+        check_map(walks, in_sequence=True),
+    )
     assert "2 of 2 answers were backed only by the outing the scan came from" in report
     assert "recognising a walk, not a place" in report
 
@@ -695,7 +724,12 @@ def test_a_second_outing_over_the_same_street_is_not_flattered():
         Fingerprint(Place("Alfa", "Bravo", 0.2, None, None, 100.0), (net("A"),), "lunes", "l#0"),
         Fingerprint(Place("Alfa", "Bravo", 0.3, None, None, 100.0), (net("A"),), "martes", "m#0"),
     ]
-    report = format_map_check(walks, check_map(walks), check_map(walks, by_signal=True))
+    report = format_map_check(
+        walks,
+        check_map(walks),
+        check_map(walks, by_signal=True),
+        check_map(walks, in_sequence=True),
+    )
     assert "backed only by the outing" not in report
 
 
@@ -720,7 +754,12 @@ def test_a_map_of_mixed_notebooks_does_not_average_metres_over_a_subset():
         mark(0.2, net("C"), net("D"), walk="p#2", street=("Charlie", "Delta"), length=None),
         mark(0.7, net("C"), net("D"), walk="p#3", street=("Charlie", "Delta"), length=None),
     ]
-    report = format_map_check(walks, check_map(walks), check_map(walks, by_signal=True))
+    report = format_map_check(
+        walks,
+        check_map(walks),
+        check_map(walks, by_signal=True),
+        check_map(walks, in_sequence=True),
+    )
     assert "placed on the right stretch             4              4" in report
     assert "mean error, of a stretch              30%            30%" in report  # las cuatro
     assert "mean error in metres                 10 m           10 m" in report  # solo dos
@@ -734,10 +773,116 @@ def test_the_map_check_names_crossings_written_both_ways_round():
         mark(0.2, net("A"), walk="p#0", street=("Agraciada y Freire", "Solari")),
         mark(0.3, net("A"), walk="p#1", street=("Freire y Agraciada", "Solari")),
     ]
-    report = format_map_check(walks, check_map(walks), check_map(walks, by_signal=True))
+    report = format_map_check(
+        walks,
+        check_map(walks),
+        check_map(walks, by_signal=True),
+        check_map(walks, in_sequence=True),
+    )
     assert "written both ways round" in report
     assert '"Agraciada y Freire" and "Freire y Agraciada"' in report
     assert "  Settle on one spelling in the notebook" in report
+
+
+# --- the scans before a tie ---------------------------------------------------
+
+
+def lookalike_map():
+    """Two corners a scan cannot tell apart, on two streets that share no mark.
+
+    Alfa-Bravo is the street being walked: at 0.7 it hears A, B, C and E, and
+    at its corner, 0.9, A and B alone. Charlie-Delta is a corner elsewhere that
+    sounds the same: A and B at 0.9, and A, B and D a little back.
+    """
+    return [
+        mark(0.9, net("A"), net("B"), walk="far#0", street=("Charlie", "Delta")),
+        mark(0.7, net("A"), net("B"), net("D"), walk="far#0", street=("Charlie", "Delta")),
+        mark(0.9, net("A"), net("B"), walk="near#0", street=("Alfa", "Bravo")),
+        mark(0.7, net("A"), net("B"), net("C"), net("E"), walk="near#0", street=("Alfa", "Bravo")),
+    ]
+
+
+WALKED = [net("A"), net("B"), net("C"), net("E")]  # unmistakably Alfa-Bravo
+CORNER = [net("A"), net("B")]  # either corner
+
+
+def test_a_scan_alone_cannot_tell_two_lookalike_corners_apart():
+    found = locate_scan(lookalike_map(), CORNER)
+    assert found is not None and found.uncertain and found.settled == 0
+    assert found.place.stretch == ("Charlie", "Delta")
+    assert found.alternative is not None and found.alternative.stretch == ("Alfa", "Bravo")
+
+
+def test_the_scans_before_a_tie_settle_it():
+    # Walking down Alfa-Bravo, the two scans before this one were unmistakably
+    # there, and this one alone could be either corner. A walk does not jump a
+    # block in five seconds, so the corner on the street being walked is the one.
+    found = locate_sequence(lookalike_map(), [WALKED, WALKED, CORNER])
+    assert found is not None and not found.uncertain and found.settled == 2
+    assert found.place.stretch == ("Alfa", "Bravo")
+    assert found.alternative is not None and found.alternative.stretch == ("Charlie", "Delta")
+    report = format_location(found, "mapa.jsonl")
+    assert 'The scan alone could as easily be between "Charlie" and "Delta"' in report
+    assert "The 2 scans before it settle it here." in report
+
+
+def test_a_stretch_sharing_a_mark_with_the_scans_before_is_the_same_walk():
+    # The scan before was on Bravo-Echo, which meets Alfa-Bravo at Bravo.
+    beyond = [mark(0.5, net("F"), net("G"), walk="near#1", street=("Bravo", "Echo"))]
+    found = locate_sequence(lookalike_map() + beyond, [[net("F"), net("G")], CORNER])
+    assert found is not None and found.settled == 1
+    assert found.place.stretch == ("Alfa", "Bravo")
+    assert "The scan before it settles it here." in format_location(found, "mapa.jsonl")
+
+
+def test_a_tie_the_scans_before_cannot_break_stays_a_tie():
+    # Scans before that the map does not know say nothing, and scans before that
+    # were torn the same way name both streets: neither helps, and the answer
+    # is as uncertain as it was.
+    found = locate_sequence(lookalike_map(), [[net("Z")], CORNER])
+    assert found is not None and found.uncertain and found.settled == 0
+    found = locate_sequence(lookalike_map(), [CORNER, CORNER, CORNER])
+    assert found is not None and found.uncertain and found.settled == 0
+
+
+def test_the_scans_before_never_put_a_scan_on_a_map_that_does_not_know_it():
+    assert locate_sequence(lookalike_map(), [WALKED, WALKED, [net("Z")]]) is None
+    # And a run of one is the scan alone.
+    assert locate_sequence(lookalike_map(), [WALKED]) == locate_scan(lookalike_map(), WALKED)
+
+
+def test_the_check_in_sequence_settles_what_a_scan_alone_could_not():
+    # Three outings: two down Alfa-Bravo and one past a corner elsewhere that
+    # sounds like Alfa-Bravo's. Held out, the last scan of lunes is placed on
+    # the lookalike when it stands alone, and where it was when the two scans
+    # before it, unmistakably on Alfa-Bravo, get their say.
+    def outing(name, *scans):
+        return [mark(f, *nets, walk=f"{name}#0", street=street) for f, nets, street in scans]
+
+    elsewhere = ("Charlie", "Delta")
+    here = ("Alfa", "Bravo")
+    fingerprints = (
+        outing("far", (0.9, CORNER, elsewhere), (0.7, [net("A"), net("B"), net("D")], elsewhere))
+        + outing("lunes", (0.3, WALKED, here), (0.5, WALKED, here), (0.9, CORNER, here))
+        + outing("martes", (0.5, WALKED, here), (0.9, CORNER, here))
+    )
+
+    def last(results):
+        return next(r for r in results if r.outing == "lunes" and r.truth.fraction == 0.9)
+
+    alone = last(check_map(fingerprints))
+    assert alone.wrong_stretch and alone.found is not None and alone.found.uncertain
+    run = last(check_map(fingerprints, in_sequence=True))
+    assert not run.wrong_stretch and run.found is not None and run.found.settled == 2
+    # A little back from the corner: the fingerprint at 0.5 of the same street has a say.
+    assert run.error_fraction == pytest.approx(0.13, abs=0.01)
+    report = format_map_check(
+        fingerprints,
+        check_map(fingerprints),
+        check_map(fingerprints, by_signal=True),
+        check_map(fingerprints, in_sequence=True),
+    )
+    assert "in sequence" in report and "settled by the" in report
 
 
 # --- two outings, which is the only way the map proves anything ---------------
@@ -789,7 +934,9 @@ def test_a_map_of_two_outings_finds_one_of_them_from_the_other(tmp_path, monkeyp
     # here leaves only the other, so the report stops warning that the map is
     # recognising a walk rather than a place.
     assert not any(held.own_outing_only for held in results)
-    report = format_map_check(fingerprints, check_map(fingerprints), results)
+    report = format_map_check(
+        fingerprints, check_map(fingerprints), results, check_map(fingerprints, in_sequence=True)
+    )
     assert "Map: 8 fingerprints, 2 walks over 1 stretches, 2 outings." in report
     assert "backed only by the outing" not in report
     assert "recognising a walk, not a place" not in report
@@ -805,7 +952,12 @@ def test_one_outing_alone_can_only_recognise_itself(tmp_path, monkeypatch):
     results = check_map(fingerprints)
     answered = [held for held in results if not held.abstained]
     assert answered and all(held.own_outing_only for held in answered)
-    report = format_map_check(fingerprints, results, check_map(fingerprints, by_signal=True))
+    report = format_map_check(
+        fingerprints,
+        results,
+        check_map(fingerprints, by_signal=True),
+        check_map(fingerprints, in_sequence=True),
+    )
     assert "1 outings." in report and "recognising a walk, not a place" in report
 
 
@@ -1056,8 +1208,8 @@ def test_locating_from_a_log_reads_the_last_walk_in_it(tmp_path):
         + "\n"
     )
     with pytest.raises(NotebookError, match="no timestamped scans found"):
-        scan_from_log(log)
-    assert [n.ssid for n in scan_from_log(log, "vieja111")] == ["Old place"]
+        scans_from_log(log)
+    assert [n.ssid for n in scans_from_log(log, "vieja111")[-1]] == ["Old place"]
 
 
 def test_a_match_too_weak_to_be_evidence_cannot_win_by_turning_up_four_times(tmp_path):
@@ -1197,7 +1349,9 @@ def test_a_map_can_be_counted_without_being_checked(tmp_path):
     assert counted.walks == 2 and counted.stretches == 1
     assert counted.outings == ("paseo",)
     assert counted.describe() == "Map: 2 fingerprints, 2 walks over 1 stretches, 1 outings."
-    assert counted.describe() in format_map_check(walks, check_map(walks), check_map(walks, True))
+    assert counted.describe() in format_map_check(
+        walks, check_map(walks), check_map(walks, True), check_map(walks, in_sequence=True)
+    )
 
     assert map_summary([]) == MapSummary(0, 0, 0, ())
 

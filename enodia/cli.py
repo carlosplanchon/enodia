@@ -19,10 +19,10 @@ from enodia.fingerprint import (
     check_map,
     format_location,
     format_map_check,
-    locate_scan,
+    locate_sequence,
     read_map,
-    scan_from_log,
     scan_now,
+    scans_from_log,
 )
 from enodia.geocode import (
     OVERPASS_URL,
@@ -554,7 +554,10 @@ def run_map(args: argparse.Namespace, map_file: Path) -> int:
             return 1
         print(
             format_map_check(
-                fingerprints, check_map(fingerprints), check_map(fingerprints, by_signal=True)
+                fingerprints,
+                check_map(fingerprints),
+                check_map(fingerprints, by_signal=True),
+                check_map(fingerprints, in_sequence=True),
             )
         )
         return 0
@@ -562,10 +565,12 @@ def run_map(args: argparse.Namespace, map_file: Path) -> int:
     voice = make_voice(args.voice)
     try:
         try:
-            networks = (
-                scan_from_log(args.locate, say_which_walk(args.locate, args.outing))
+            # A fresh scan stands alone. A log has the scans before its last
+            # one, and they are what settles a tie between two stretches.
+            scans = (
+                scans_from_log(args.locate, say_which_walk(args.locate, args.outing))
                 if args.locate
-                else scan_now(args.interface)
+                else [scan_now(args.interface)]
             )
         except RadioBlocked as exc:
             print(f"Cannot scan: {exc}")
@@ -579,7 +584,7 @@ def run_map(args: argparse.Namespace, map_file: Path) -> int:
         except OSError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
-        found = locate_scan(known, networks, by_signal=by_signal)
+        found = locate_sequence(known, scans, by_signal=by_signal)
         print(format_location(found, map_file))
         say_location(voice, found, args.lang, args.ssid_lang)
         return 0

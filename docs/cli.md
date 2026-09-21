@@ -79,7 +79,9 @@ uv run enodia --check-map --match signal                       # the same, score
 needs none: it compares two passes over one stretch against each other. `--check-map` needs a
 map with at least two passes in it, and holds out one outing at a time, or one pass down one
 stretch when the map holds a single outing, never a single scan, since a scan's neighbour was
-taken five seconds later and sees almost the same networks.
+taken five seconds later and sees almost the same networks. Its table has three columns: each
+scan alone by networks, by signal as well, and in sequence, with the scans before it settling a
+tie.
 [The methodology notes](methodology.md) say what each of the three can and cannot tell you.
 
 ## The map, and finding yourself again
@@ -88,7 +90,7 @@ taken five seconds later and sees almost the same networks.
 uv run enodia --map-add LOG notebook.txt                        # add an outing to the map
 uv run enodia --map-add LOG notebook.txt --streets streets.jsonl # along the street shapes
 uv run enodia --locate                                         # scan now: where am I?
-uv run enodia --locate LOG                                     # or place a log's last scan
+uv run enodia --locate LOG                                     # or a log's last scan, with the ones before it
 uv run enodia --locate --match signal                          # score on signal strength too
 uv run enodia --map other.jsonl --locate                        # a map somewhere else
 ```
@@ -97,6 +99,12 @@ uv run enodia --map other.jsonl --locate                        # a map somewher
 also weighs how strongly each came in, which is more precise and less portable between radios,
 since two cards report different numbers for the same room. An outing already in the map is not
 added twice.
+
+A fresh scan stands alone. `--locate LOG` has the scans before the last one, and when two
+stretches match that scan about as well, the stretch the scans before it were on, or one next to
+it, settles which: a walk does not jump a block in five seconds. They choose between two answers
+and never make one up, so a scan the map does not know stays unknown however sure the scans
+before it were.
 
 ## Putting the notebook on the map
 

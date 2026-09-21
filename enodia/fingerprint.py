@@ -494,11 +494,16 @@ class Location:
     when: datetime | None = None
     outings: tuple[str, ...] = ()
     scattered_m: float | None = None
+    settled: int = 0
 
     @property
     def uncertain(self) -> bool:
-        """True when a second stretch of street matched nearly as well."""
-        return self.alternative is not None
+        """True when a second stretch matched nearly as well and nothing settled which.
+
+        `settled` is how many of the scans before this one settled it, and
+        `alternative` then names the stretch they ruled out.
+        """
+        return self.alternative is not None and not self.settled
 
     @property
     def scattered(self) -> bool:
@@ -534,6 +539,113 @@ def _gather(group: Sequence[tuple[float, Fingerprint]]) -> tuple[Place, float]:
     return Place(first.name_from, first.name_to, fraction, lat, lon, length), spread
 
 
+@dataclass(frozen=True)
+class Candidate:
+    """One stretch a scan could be on, and the evidence behind it."""
+
+    place: Place
+    spread: float
+    score: float  # the best single match on this stretch
+    weight: float  # every match on it added up, which is what the stretches are ranked on
+    matches: int
+    when: datetime | None
+    outings: tuple[str, ...]
+    apart: float | None
+
+
+def _candidates(
+    fingerprints: Sequence[Fingerprint],
+    networks: Iterable[SeenNetwork],
+    by_signal: bool = False,
+    neighbours: int = NEIGHBOURS,
+    floor: float = SIMILARITY_FLOOR,
+) -> list[Candidate]:
+    """The stretches a scan could be on, best first, or nothing when the map does not know.
+
+    The floor is applied here, before anything is put to a vote, and not to
+    the best one alone. A stretch wins on the sum of its fingerprints, so
+    four readings that were each too weak to be evidence used to outvote one
+    that cleared the floor, and the answer came back naming the street with
+    the best of the losers: "you are here, best similarity 11%", under a
+    floor of 15%. Nothing that is not evidence on its own becomes evidence by
+    turning up four times.
+    """
+    query = {n.key: (n.strength if n.has_signal else None) for n in networks if n.identified}
+    if not query:
+        return []
+    scored = [
+        (score, one)
+        for score, one in ((similarity(query, one, by_signal), one) for one in fingerprints)
+        if score > 0.0 and score >= floor
+    ]
+    if not scored:
+        return []
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+
+    groups: dict[tuple[str, str], list[tuple[float, Fingerprint]]] = {}
+    for score, one in scored[:neighbours]:
+        groups.setdefault(one.place.key, []).append((score, one))
+    ranked = sorted(groups.values(), key=lambda group: sum(s for s, _ in group), reverse=True)
+    candidates = []
+    for group in ranked:
+        place, spread = _gather(group)
+        candidates.append(
+            Candidate(
+                place,
+                spread,
+                # The best of this street, not the best of all of them. One
+                # fingerprint of a street that lost can score higher than any
+                # of the winner's while the winner still carries more
+                # evidence, and printing that number beside the winner's name
+                # says "this place matched 100%" about a place that matched 67%.
+                max(score for score, _ in group),
+                sum(score for score, _ in group),
+                len(group),
+                max((one.time for _, one in group if one.time is not None), default=None),
+                tuple(sorted({one.outing for _, one in group if one.outing})),
+                _spread_of(group),
+            )
+        )
+    return candidates
+
+
+def _tied(ranked: Sequence[Candidate]) -> bool:
+    """Whether the second stretch matched nearly as well as the first."""
+    return len(ranked) > 1 and ranked[0].weight / sum(one.weight for one in ranked) < DOMINANCE
+
+
+def _location(candidate: Candidate, alternative: Place | None, settled: int = 0) -> Location:
+    place = candidate.place
+    far = place.metres(ONE_PLACE_BLOCKS) or ONE_PLACE_M
+    if candidate.apart is not None and candidate.apart > far:
+        # Two places in the map answer to the same pair of crossing names, and
+        # the weighted middle of them is a point in between that is neither.
+        # A stretch's identity is its names, and names are only unique if
+        # somebody kept them so, which the map cannot check when it is fed
+        # outing by outing. The coordinates are withheld rather than averaged:
+        # an invented place on a map is worse than no place.
+        return Location(
+            Place(place.name_from, place.name_to, place.fraction, None, None, place.length_m),
+            candidate.score,
+            candidate.matches,
+            candidate.spread,
+            None,
+            candidate.when,
+            candidate.outings,
+            candidate.apart,
+        )
+    return Location(
+        place,
+        candidate.score,
+        candidate.matches,
+        candidate.spread,
+        alternative,
+        candidate.when,
+        candidate.outings,
+        settled=settled,
+    )
+
+
 def locate_scan(
     fingerprints: Sequence[Fingerprint],
     networks: Iterable[SeenNetwork],
@@ -552,63 +664,61 @@ def locate_scan(
     inside the block between them, where you certainly were not. When neither
     dominates, both are reported and the answer is marked uncertain.
     """
-    query = {n.key: (n.strength if n.has_signal else None) for n in networks if n.identified}
-    if not query:
+    ranked = _candidates(fingerprints, networks, by_signal, neighbours, floor)
+    if not ranked:
         return None
-    # The floor is applied here, before anything is put to a vote, and not to
-    # the best one alone. A stretch wins on the sum of its fingerprints, so
-    # four readings that were each too weak to be evidence used to outvote one
-    # that cleared the floor, and the answer came back naming the street with
-    # the best of the losers: "you are here, best similarity 11%", under a
-    # floor of 15%. Nothing that is not evidence on its own becomes evidence by
-    # turning up four times.
-    scored = [
-        (score, one)
-        for score, one in ((similarity(query, one, by_signal), one) for one in fingerprints)
-        if score > 0.0 and score >= floor
-    ]
-    if not scored:
+    return _location(ranked[0], ranked[1].place if _tied(ranked) else None)
+
+
+# How many of the scans before the last one get a say in a tie. Five-second
+# cycles, so three of them are the last quarter of a minute of walking.
+LOOK_BACK = 3
+
+
+def _same_walk(here: Place, there: Place) -> bool:
+    """Whether two places are on one stretch, or on stretches that share a mark."""
+    return here.key == there.key or bool(set(here.key) & set(there.key))
+
+
+def locate_sequence(
+    fingerprints: Sequence[Fingerprint],
+    scans: Sequence[Iterable[SeenNetwork]],
+    by_signal: bool = False,
+    neighbours: int = NEIGHBOURS,
+    floor: float = SIMILARITY_FLOOR,
+) -> Location | None:
+    """Where the last of a run of scans puts you, with the scans before it settling a tie.
+
+    The last scan is placed exactly as `locate_scan` places it, and when two
+    stretches match it about as well, the scans before it get a say: each of
+    them names where it was, and of the two, the stretch those scans were on,
+    or one sharing a mark with it, is the one the walk supports, since a walk
+    does not jump a block in five seconds.
+
+    They choose between two answers that each cleared the floor, and never
+    make one up: a scan the map does not know stays unknown however sure the
+    scans before it were, and a tie they cannot break, because they were
+    unknown too or torn the same way, stays a tie and is reported as one.
+    """
+    *before, last = scans
+    ranked = _candidates(fingerprints, last, by_signal, neighbours, floor)
+    if not ranked:
         return None
-    scored.sort(key=lambda pair: pair[0], reverse=True)
-
-    best = scored[:neighbours]
-    groups: dict[tuple[str, str], list[tuple[float, Fingerprint]]] = {}
-    for score, one in best:
-        groups.setdefault(one.place.key, []).append((score, one))
-    ranked = sorted(groups.values(), key=lambda group: sum(s for s, _ in group), reverse=True)
-    winner = ranked[0]
-    dominance = sum(s for s, _ in winner) / sum(s for s, _ in best)
-
-    place, spread = _gather(winner)
-    apart = _spread_of(winner)
-    far = place.metres(ONE_PLACE_BLOCKS) or ONE_PLACE_M
-    if apart is not None and apart > far:
-        # Two places in the map answer to the same pair of crossing names, and
-        # the weighted middle of them is a point in between that is neither.
-        # A stretch's identity is its names, and names are only unique if
-        # somebody kept them so, which the map cannot check when it is fed
-        # outing by outing. The coordinates are withheld rather than averaged:
-        # an invented place on a map is worse than no place.
-        return Location(
-            Place(place.name_from, place.name_to, place.fraction, None, None, place.length_m),
-            max(score for score, _ in winner),
-            len(winner),
-            spread,
-            None,
-            max((one.time for _, one in winner if one.time is not None), default=None),
-            tuple(sorted({one.outing for _, one in winner if one.outing})),
-            apart,
-        )
-    alternative = _gather(ranked[1])[0] if len(ranked) > 1 and dominance < DOMINANCE else None
-    when = max((one.time for _, one in winner if one.time is not None), default=None)
-    outings = tuple(sorted({one.outing for _, one in winner if one.outing}))
-    # The best of the street that won, not the best of all of them. One
-    # fingerprint of a street that lost can score higher than any of the
-    # winner's while the winner still carries more evidence, and printing that
-    # number beside the winner's name says "this place matched 100%" about a
-    # place that matched 67%.
-    best = max(score for score, _ in winner)
-    return Location(place, best, len(winner), spread, alternative, when, outings)
+    if not _tied(ranked):
+        return _location(ranked[0], None)
+    votes = [0, 0]
+    for networks in before[-LOOK_BACK:]:
+        earlier = _candidates(fingerprints, networks, by_signal, neighbours, floor)
+        if not earlier:
+            continue
+        named = [one.place for one in earlier[: 2 if _tied(earlier) else 1]]
+        for index, candidate in enumerate(ranked[:2]):
+            if any(_same_walk(candidate.place, place) for place in named):
+                votes[index] += 1
+    if votes[0] == votes[1]:
+        return _location(ranked[0], ranked[1].place)
+    chosen, other = (0, 1) if votes[0] > votes[1] else (1, 0)
+    return _location(ranked[chosen], ranked[other].place, settled=votes[chosen])
 
 
 def format_location(location: Location | None, map_path: str | Path) -> str:
@@ -630,7 +740,17 @@ def format_location(location: Location | None, map_path: str | Path) -> str:
     )
     if location.when is not None:
         lines.append(f"  from evidence last gathered {location.when.strftime('%Y-%m-%d %H:%M')}")
-    if location.alternative is not None:
+    if location.alternative is not None and location.settled:
+        before = (
+            "The scan before it settles"
+            if location.settled == 1
+            else f"The {location.settled} scans before it settle"
+        )
+        lines.append(
+            f"  The scan alone could as easily be {location.alternative.describe()}. "
+            f"{before} it here."
+        )
+    elif location.alternative is not None:
         lines.append(f"  Uncertain: it could as easily be {location.alternative.describe()}")
     if location.scattered_m is not None:
         lines.append(
@@ -700,11 +820,15 @@ def scan_now(interfaces: Sequence[str] | None = None) -> list[SeenNetwork]:
     return [*seen.values(), *anonymous]
 
 
-def scan_from_log(log_path: str | Path, outing: str | None = None) -> list[SeenNetwork]:
-    """The networks of the last cycle of one walk, to locate without a radio.
+def scans_from_log(
+    log_path: str | Path, outing: str | None = None, count: int = LOOK_BACK + 1
+) -> list[list[SeenNetwork]]:
+    """The networks of the last cycles of one walk, oldest first, to locate without a radio.
 
-    The last cycle and not the last record. With two interfaces the last record
-    is whichever card was asked second, and half of what was in view.
+    The last cycles and not the last records. With two interfaces the last
+    record is whichever card was asked second, and half of what was in view.
+    The last one is the scan to place, and the ones before it are what settles
+    a tie, which a fresh scan on its own never has.
 
     And one walk, the last in the file unless another is named. A file can hold
     several, and the last walk in it may have nothing usable in it at all: a
@@ -721,7 +845,7 @@ def scan_from_log(log_path: str | Path, outing: str | None = None) -> list[SeenN
     )
     if not scans:
         raise NotebookError(f"{log_path}: no timestamped scans found")
-    return list(scans[-1].networks)
+    return [list(scan.networks) for scan in scans[-count:]]
 
 
 # --- Is the map any good? ----------------------------------------------------
@@ -844,6 +968,7 @@ def _by_outing(fingerprints: Sequence[Fingerprint]) -> bool:
 def check_map(
     fingerprints: Sequence[Fingerprint],
     by_signal: bool = False,
+    in_sequence: bool = False,
 ) -> list[HeldOutScan]:
     """Hold out one outing at a time, or one walk when there is only one, and locate its scans.
 
@@ -861,6 +986,10 @@ def check_map(
     recognising a walk rather than a place. Holding out one scan at a time
     would be worthless either way, since consecutive scans are five seconds and
     a few metres apart and see almost exactly the same networks.
+
+    `in_sequence` places each held-out scan with the scans before it in the
+    same group, the way `--locate LOG` does, so that what the walk adds to a
+    scan alone is measured rather than assumed.
     """
     by_outing = _by_outing(fingerprints)
     groups: dict[str, list[Fingerprint]] = {}
@@ -871,8 +1000,13 @@ def check_map(
     results = []
     for key, held in groups.items():
         rest = [one for one in fingerprints if (one.outing if by_outing else one.walk) != key]
-        for one in held:
-            results.append(_measure(one, locate_scan(rest, one.networks, by_signal)))
+        for index, one in enumerate(held):
+            if in_sequence:
+                run = [earlier.networks for earlier in held[max(0, index - LOOK_BACK) : index + 1]]
+                found = locate_sequence(rest, run, by_signal)
+            else:
+                found = locate_scan(rest, one.networks, by_signal)
+            results.append(_measure(one, found))
     return results
 
 
@@ -912,6 +1046,7 @@ def format_map_check(
     fingerprints: Sequence[Fingerprint],
     by_networks: Sequence[HeldOutScan],
     by_signal: Sequence[HeldOutScan],
+    in_sequence: Sequence[HeldOutScan],
 ) -> str:
     """Human-readable verdict on how well the map locates a walk it has not seen."""
     if not by_networks:
@@ -933,6 +1068,7 @@ def format_map_check(
     ]
     left, placed, measured = _column(by_networks)
     right, _, _ = _column(by_signal)
+    third, _, _ = _column(in_sequence)
     counted = map_summary(fingerprints)
     held = (
         "Each outing held out in turn, and its scans located from the other outings:"
@@ -944,18 +1080,20 @@ def format_map_check(
         "",
         held,
         "",
-        f"  {'':<28}{'by networks':>13}{'and by signal':>15}",
+        f"  {'':<28}{'by networks':>13}{'and by signal':>15}{'in sequence':>14}",
     ]
     lines += [
-        f"  {label:<28}{one:>13}{other:>15}"
-        for label, one, other in zip(labels, left, right, strict=True)
+        f"  {label:<28}{one:>13}{other:>15}{run:>14}"
+        for label, one, other, run in zip(labels, left, right, third, strict=True)
     ]
     lines.append("")
     lines.append(
         "  A scan that landed on the wrong stretch is not a small error, it is a "
         "different street,\n  so it is counted apart rather than averaged into the distances. "
         "One placed across a mark\n  is on the stretch next door, a few metres past the mark the "
-        "two share, and its error is\n  measured through that mark."
+        "two share, and its error is\n  measured through that mark. In sequence, a tie between two "
+        "stretches is settled by the\n  scans before the one held out: the stretch they were on, "
+        "or one sharing a mark with it,\n  is the one the walk supports."
     )
     names = [name for one in fingerprints for name in one.place.stretch]
     confusable = format_confusable(confusable_crossings(names))

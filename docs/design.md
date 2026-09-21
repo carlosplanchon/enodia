@@ -17,6 +17,7 @@ one feature with somebody else's privacy on the line and its decisions fill a pa
 |---|---|
 | why an answer is missing rather than approximate | *Not knowing is an answer* |
 | why a scan after a hole in the log is not placed too early | *A hole in the scans is not a step* |
+| how a scan that could be at either of two corners is placed | *A tie is settled by the walk, not by the scan* |
 | what `--check-map` holds out, and what a scan placed across a mark is | *A scan at a mark is on two stretches* |
 | why a block came out on the chord with the street drawn | *A street is more than one way* |
 | why an unreadable file is not an absent one | *A failure to read is not evidence of absence* |
@@ -44,7 +45,8 @@ evidence on its own becomes evidence by turning up four times.
 
 **Two streets are never averaged**: when two stretches match about as well, both are reported,
 because the midpoint of two streets is inside the block between them, where you certainly were
-not.
+not. When the scan is one of a run, the scans before it can settle which of the two: see *A tie
+is settled by the walk, not by the scan*.
 
 **A stretch is one stretch whichever way you walked it**: the two crossing names are sorted
 before anything is stored, and compared with case, accents and spacing folded away, so
@@ -76,6 +78,26 @@ still for four cycles with one card failing once, the scans landed at 0.2, 0.2, 
 the stretch, since that missing half was the only movement the stretch appeared to hold. A
 step between a look one card made and a look two cards made, or between looks from different
 cards, is no evidence either way, and is filled like a hole.
+
+## A tie is settled by the walk, not by the scan
+
+`--locate` placed one scan and nothing else: the five fingerprints most like it, grouped by
+stretch, and the stretch with the most similarity added up. When a second stretch matched
+nearly as well the answer named both and said it was uncertain, which is honest and not much
+use standing at a corner. Two corners of one neighbourhood can sound alike to a scan, the same
+routers heard through the same walls from a block away, and a scan that reached the map through
+`--locate LOG` had the scans before it two lines up in the same file, each of them unambiguous,
+and never looked.
+
+So a run of scans is placed by its last one, and the scans before it settle a tie. Each of them
+names where it was, and of the two stretches the last scan cannot choose between, the one those
+scans were on, or one sharing a mark with it, is the one the walk supports: a walk does not
+jump a block in five seconds. Nothing else changes. A scan the map does not know stays unknown,
+since the scans before it choose between two answers that each cleared the floor and never make
+one up, and a tie they cannot break, because they were unknown too or torn the same way, stays
+a tie and is reported as one. A fresh scan stands alone, having nothing before it. And
+`--check-map` reports the run beside the scan alone, in a third column, so that what the walk
+adds is measured rather than assumed.
 
 ## A scan at a mark is on two stretches
 
