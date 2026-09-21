@@ -579,7 +579,8 @@ def test_with_two_outings_the_whole_outing_is_held_out_and_its_next_stretch_with
         [*lunes, *martes],
         results,
         check_map([*lunes, *martes], by_signal=True),
-        check_map([*lunes, *martes], in_sequence=True),
+        check_map([*lunes, *martes], sequence="tie"),
+        check_map([*lunes, *martes], sequence="path"),
     )
     assert "Each outing held out in turn, and its scans located from the other outings:" in report
     assert "placed across a mark                    0              0" in report
@@ -591,7 +592,8 @@ def test_the_check_reports_both_methods_side_by_side():
         walks,
         check_map(walks),
         check_map(walks, by_signal=True),
-        check_map(walks, in_sequence=True),
+        check_map(walks, sequence="tie"),
+        check_map(walks, sequence="path"),
     )
     assert "Map: 2 fingerprints, 2 walks over 1 stretches, 1 outings." in report
     assert "Each walk held out in turn" in report
@@ -615,7 +617,8 @@ def test_the_check_reports_fractions_when_no_stretch_has_a_length():
         walks,
         check_map(walks),
         check_map(walks, by_signal=True),
-        check_map(walks, in_sequence=True),
+        check_map(walks, sequence="tie"),
+        check_map(walks, sequence="path"),
     )
     assert "mean error, of a stretch              20%            20%" in report
     assert "mean error in metres                    -              -" in report
@@ -631,7 +634,8 @@ def test_the_check_reports_nothing_measurable_when_every_scan_missed():
         walks,
         check_map(walks),
         check_map(walks, by_signal=True),
-        check_map(walks, in_sequence=True),
+        check_map(walks, sequence="tie"),
+        check_map(walks, sequence="path"),
     )
     assert "mean error, of a stretch                -              -" in report
     assert "mean error in metres                    -              -" in report
@@ -650,13 +654,14 @@ def test_the_median_of_an_even_and_an_odd_number_of_errors():
         walks,
         check_map(walks),
         check_map(walks, by_signal=True),
-        check_map(walks, in_sequence=True),
+        check_map(walks, sequence="tie"),
+        check_map(walks, sequence="path"),
     )
     assert "median error" in report
 
 
 def test_nothing_to_check_is_said_rather_than_shown_as_an_empty_table():
-    report = format_map_check([], [], [], [])
+    report = format_map_check([], [], [], [], [])
     assert "Nothing to check" in report and "turn round at the corner" in report
 
 
@@ -713,7 +718,8 @@ def test_the_check_says_when_a_map_only_recognised_its_own_walk():
         walks,
         check_map(walks),
         check_map(walks, by_signal=True),
-        check_map(walks, in_sequence=True),
+        check_map(walks, sequence="tie"),
+        check_map(walks, sequence="path"),
     )
     assert "2 of 2 answers were backed only by the outing the scan came from" in report
     assert "recognising a walk, not a place" in report
@@ -728,7 +734,8 @@ def test_a_second_outing_over_the_same_street_is_not_flattered():
         walks,
         check_map(walks),
         check_map(walks, by_signal=True),
-        check_map(walks, in_sequence=True),
+        check_map(walks, sequence="tie"),
+        check_map(walks, sequence="path"),
     )
     assert "backed only by the outing" not in report
 
@@ -758,7 +765,8 @@ def test_a_map_of_mixed_notebooks_does_not_average_metres_over_a_subset():
         walks,
         check_map(walks),
         check_map(walks, by_signal=True),
-        check_map(walks, in_sequence=True),
+        check_map(walks, sequence="tie"),
+        check_map(walks, sequence="path"),
     )
     assert "placed on the right stretch             4              4" in report
     assert "mean error, of a stretch              30%            30%" in report  # las cuatro
@@ -777,7 +785,8 @@ def test_the_map_check_names_crossings_written_both_ways_round():
         walks,
         check_map(walks),
         check_map(walks, by_signal=True),
-        check_map(walks, in_sequence=True),
+        check_map(walks, sequence="tie"),
+        check_map(walks, sequence="path"),
     )
     assert "written both ways round" in report
     assert '"Agraciada y Freire" and "Freire y Agraciada"' in report
@@ -804,6 +813,8 @@ def lookalike_map():
 
 WALKED = [net("A"), net("B"), net("C"), net("E")]  # unmistakably Alfa-Bravo
 CORNER = [net("A"), net("B")]  # either corner
+SURE_WRONG = [net("A"), net("B"), net("D")]  # heard on Alfa-Bravo, sounds like Charlie-Delta
+BOTH = pytest.mark.parametrize("sequence", ["tie", "path"])
 
 
 def test_a_scan_alone_cannot_tell_two_lookalike_corners_apart():
@@ -813,11 +824,12 @@ def test_a_scan_alone_cannot_tell_two_lookalike_corners_apart():
     assert found.alternative is not None and found.alternative.stretch == ("Alfa", "Bravo")
 
 
-def test_the_scans_before_a_tie_settle_it():
+@BOTH
+def test_the_scans_before_a_tie_settle_it(sequence):
     # Walking down Alfa-Bravo, the two scans before this one were unmistakably
     # there, and this one alone could be either corner. A walk does not jump a
     # block in five seconds, so the corner on the street being walked is the one.
-    found = locate_sequence(lookalike_map(), [WALKED, WALKED, CORNER])
+    found = locate_sequence(lookalike_map(), [WALKED, WALKED, CORNER], sequence)
     assert found is not None and not found.uncertain and found.settled == 2
     assert found.place.stretch == ("Alfa", "Bravo")
     assert found.alternative is not None and found.alternative.stretch == ("Charlie", "Delta")
@@ -826,36 +838,101 @@ def test_the_scans_before_a_tie_settle_it():
     assert "The 2 scans before it settle it here." in report
 
 
-def test_a_stretch_sharing_a_mark_with_the_scans_before_is_the_same_walk():
+@BOTH
+def test_a_stretch_sharing_a_mark_with_the_scans_before_is_the_same_walk(sequence):
     # The scan before was on Bravo-Echo, which meets Alfa-Bravo at Bravo.
     beyond = [mark(0.5, net("F"), net("G"), walk="near#1", street=("Bravo", "Echo"))]
-    found = locate_sequence(lookalike_map() + beyond, [[net("F"), net("G")], CORNER])
+    found = locate_sequence(lookalike_map() + beyond, [[net("F"), net("G")], CORNER], sequence)
     assert found is not None and found.settled == 1
     assert found.place.stretch == ("Alfa", "Bravo")
     assert "The scan before it settles it here." in format_location(found, "mapa.jsonl")
 
 
-def test_a_tie_the_scans_before_cannot_break_stays_a_tie():
+@BOTH
+def test_a_tie_the_scans_before_cannot_break_stays_a_tie(sequence):
     # Scans before that the map does not know say nothing, and scans before that
     # were torn the same way name both streets: neither helps, and the answer
     # is as uncertain as it was.
-    found = locate_sequence(lookalike_map(), [[net("Z")], CORNER])
+    found = locate_sequence(lookalike_map(), [[net("Z")], CORNER], sequence)
     assert found is not None and found.uncertain and found.settled == 0
-    found = locate_sequence(lookalike_map(), [CORNER, CORNER, CORNER])
+    found = locate_sequence(lookalike_map(), [CORNER, CORNER, CORNER], sequence)
     assert found is not None and found.uncertain and found.settled == 0
 
 
-def test_the_scans_before_never_put_a_scan_on_a_map_that_does_not_know_it():
-    assert locate_sequence(lookalike_map(), [WALKED, WALKED, [net("Z")]]) is None
+@BOTH
+def test_the_scans_before_never_put_a_scan_on_a_map_that_does_not_know_it(sequence):
+    assert locate_sequence(lookalike_map(), [WALKED, WALKED, [net("Z")]], sequence) is None
     # And a run of one is the scan alone.
-    assert locate_sequence(lookalike_map(), [WALKED]) == locate_scan(lookalike_map(), WALKED)
+    alone = locate_scan(lookalike_map(), WALKED)
+    assert locate_sequence(lookalike_map(), [WALKED], sequence) == alone
 
 
-def test_the_check_in_sequence_settles_what_a_scan_alone_could_not():
+def test_a_sequence_that_is_neither_tie_nor_path_is_refused():
+    with pytest.raises(ValueError, match="'tie' or 'path'"):
+        locate_sequence(lookalike_map(), [CORNER], "vote")
+
+
+def test_the_path_overrules_a_scan_that_was_sure_and_wrong():
+    # {A, B, D} alone prefers Charlie-Delta at 61% and does not tie, so settling
+    # ties leaves it there. Three scans before it, unmistakably on Alfa-Bravo,
+    # make the likeliest path stay on Alfa-Bravo with a share of 0.75. With two
+    # of them the share is 0.64, a hair over DOMINANCE, so the test uses three.
+    run = [WALKED, WALKED, WALKED, SURE_WRONG]
+    tie = locate_sequence(lookalike_map(), run, "tie")
+    assert tie is not None and tie.place.stretch == ("Charlie", "Delta") and not tie.uncertain
+    path = locate_sequence(lookalike_map(), run, "path")
+    assert path is not None and path.place.stretch == ("Alfa", "Bravo")
+    assert path.settled == 3 and path.alternative is None and not path.uncertain
+    assert path.alone is not None and path.alone.stretch == ("Charlie", "Delta")
+    report = format_location(path, "mapa.jsonl")
+    assert 'The scan alone would have said between "Charlie" and "Delta"' in report
+    assert "The 3 scans before it put it here." in report
+
+
+def test_earlier_scans_weigh_by_their_evidence():
+    # A scan torn between the two corners adds its candidates and no lean, so
+    # after one of them the answer is the scan's own, Charlie-Delta at its own
+    # 0.61, which does not depend on the price of a jump. One scan that was sure
+    # of Alfa-Bravo turns that into a tie, 0.52, and two of them settle it.
+    torn = locate_sequence(lookalike_map(), [CORNER, SURE_WRONG], "path")
+    assert torn is not None and torn.place.stretch == ("Charlie", "Delta")
+    assert not torn.uncertain and torn.settled == 0 and torn.alone is None
+    one = locate_sequence(lookalike_map(), [WALKED, SURE_WRONG], "path")
+    assert one is not None and one.uncertain and one.place.stretch == ("Alfa", "Bravo")
+    two = locate_sequence(lookalike_map(), [WALKED, WALKED, SURE_WRONG], "path")
+    assert two is not None and not two.uncertain and two.settled == 2
+    assert two.place.stretch == ("Alfa", "Bravo")
+
+
+def test_standing_at_a_lookalike_corner_stays_uncertain_however_long():
+    # Four torn scans in a row, which is what scans_from_log hands over after
+    # twenty seconds at the corner. Each adds its two candidates and no lean, so
+    # the path is as torn as any one of them, where four small leans the same
+    # way used to add up to a verdict: 0.60 after four, 0.58 after three.
+    found = locate_sequence(lookalike_map(), [CORNER] * 4, "path")
+    assert found is not None and found.uncertain and found.settled == 0
+
+
+def test_the_path_can_overrule_a_scan_that_was_right():
+    # The cost of the flag, on the record. Three scans leaning 61/39 towards
+    # the lookalike corner and then one that was sure of Alfa-Bravo: the
+    # likeliest path stays on Charlie-Delta with a share of 0.70, and says the
+    # last scan alone would have said Alfa-Bravo. Settling ties keeps that scan.
+    run = [SURE_WRONG, SURE_WRONG, SURE_WRONG, WALKED]
+    tie = locate_sequence(lookalike_map(), run, "tie")
+    assert tie is not None and tie.place.stretch == ("Alfa", "Bravo") and not tie.uncertain
+    path = locate_sequence(lookalike_map(), run, "path")
+    assert path is not None and path.place.stretch == ("Charlie", "Delta")
+    assert path.settled == 3 and path.alone is not None
+    assert path.alone.stretch == ("Alfa", "Bravo")
+
+
+@BOTH
+def test_the_check_in_sequence_settles_what_a_scan_alone_could_not(sequence):
     # Three outings: two down Alfa-Bravo and one past a corner elsewhere that
     # sounds like Alfa-Bravo's. Held out, the last scan of lunes is placed on
     # the lookalike when it stands alone, and where it was when the two scans
-    # before it, unmistakably on Alfa-Bravo, get their say.
+    # before it, unmistakably on Alfa-Bravo, get their say, either way they get it.
     def outing(name, *scans):
         return [mark(f, *nets, walk=f"{name}#0", street=street) for f, nets, street in scans]
 
@@ -872,7 +949,7 @@ def test_the_check_in_sequence_settles_what_a_scan_alone_could_not():
 
     alone = last(check_map(fingerprints))
     assert alone.wrong_stretch and alone.found is not None and alone.found.uncertain
-    run = last(check_map(fingerprints, in_sequence=True))
+    run = last(check_map(fingerprints, sequence=sequence))
     assert not run.wrong_stretch and run.found is not None and run.found.settled == 2
     # A little back from the corner: the fingerprint at 0.5 of the same street has a say.
     assert run.error_fraction == pytest.approx(0.13, abs=0.01)
@@ -880,9 +957,10 @@ def test_the_check_in_sequence_settles_what_a_scan_alone_could_not():
         fingerprints,
         check_map(fingerprints),
         check_map(fingerprints, by_signal=True),
-        check_map(fingerprints, in_sequence=True),
+        check_map(fingerprints, sequence="tie"),
+        check_map(fingerprints, sequence="path"),
     )
-    assert "in sequence" in report and "settled by the" in report
+    assert "settling ties" in report and "choosing the path" in report
 
 
 # --- two outings, which is the only way the map proves anything ---------------
@@ -935,7 +1013,11 @@ def test_a_map_of_two_outings_finds_one_of_them_from_the_other(tmp_path, monkeyp
     # recognising a walk rather than a place.
     assert not any(held.own_outing_only for held in results)
     report = format_map_check(
-        fingerprints, check_map(fingerprints), results, check_map(fingerprints, in_sequence=True)
+        fingerprints,
+        check_map(fingerprints),
+        results,
+        check_map(fingerprints, sequence="tie"),
+        check_map(fingerprints, sequence="path"),
     )
     assert "Map: 8 fingerprints, 2 walks over 1 stretches, 2 outings." in report
     assert "backed only by the outing" not in report
@@ -956,7 +1038,8 @@ def test_one_outing_alone_can_only_recognise_itself(tmp_path, monkeypatch):
         fingerprints,
         results,
         check_map(fingerprints, by_signal=True),
-        check_map(fingerprints, in_sequence=True),
+        check_map(fingerprints, sequence="tie"),
+        check_map(fingerprints, sequence="path"),
     )
     assert "1 outings." in report and "recognising a walk, not a place" in report
 
@@ -1350,7 +1433,11 @@ def test_a_map_can_be_counted_without_being_checked(tmp_path):
     assert counted.outings == ("paseo",)
     assert counted.describe() == "Map: 2 fingerprints, 2 walks over 1 stretches, 1 outings."
     assert counted.describe() in format_map_check(
-        walks, check_map(walks), check_map(walks, True), check_map(walks, in_sequence=True)
+        walks,
+        check_map(walks),
+        check_map(walks, True),
+        check_map(walks, sequence="tie"),
+        check_map(walks, sequence="path"),
     )
 
     assert map_summary([]) == MapSummary(0, 0, 0, ())

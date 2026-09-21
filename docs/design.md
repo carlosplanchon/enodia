@@ -18,6 +18,7 @@ one feature with somebody else's privacy on the line and its decisions fill a pa
 | why an answer is missing rather than approximate | *Not knowing is an answer* |
 | why a scan after a hole in the log is not placed too early | *A hole in the scans is not a step* |
 | how a scan that could be at either of two corners is placed | *A tie is settled by the walk, not by the scan* |
+| what `--sequence path` does, and what it costs | *The path or the point, and why it is a flag* |
 | what `--check-map` holds out, and what a scan placed across a mark is | *A scan at a mark is on two stretches* |
 | why a block came out on the chord with the street drawn | *A street is more than one way* |
 | why an unreadable file is not an absent one | *A failure to read is not evidence of absence* |
@@ -96,8 +97,38 @@ jump a block in five seconds. Nothing else changes. A scan the map does not know
 since the scans before it choose between two answers that each cleared the floor and never make
 one up, and a tie they cannot break, because they were unknown too or torn the same way, stays
 a tie and is reported as one. A fresh scan stands alone, having nothing before it. And
-`--check-map` reports the run beside the scan alone, in a third column, so that what the walk
-adds is measured rather than assumed.
+`--check-map` reports each way of using the run beside the scan alone, in columns of their
+own, so that what the walk adds is measured rather than assumed.
+
+## The path or the point, and why it is a flag
+
+`--sequence tie` is the rule above: the scans before the last one speak only when it cannot
+choose between two stretches. A scan that is sure and wrong never asks them. Two corners of a
+neighbourhood that sound alike can leave a scan 61/39 for the wrong one, and then three scans
+unmistakably on the other street, two lines up in the same log, count for nothing.
+
+`--sequence path` asks them every time. It is a small Viterbi over stretches: each scan's
+candidates are its states, the share of the scan's evidence a candidate carries is its
+emission, and a step between scans costs nothing to stay on a stretch, a little to move onto
+one that shares a mark, and a lot to jump anywhere else. The answer is the last stretch of the
+likeliest path, which can only be a candidate of the last scan, so nothing is invented. On the
+synthetic pair of lookalike corners, the scan that was sure and wrong is put back on its
+street with a share of 0.75 after three sure scans, where settling ties left it wrong.
+
+Two things had to be settled before that was honest. A scan that is torn between two corners
+contributes its candidates and no lean: without that, standing at the lookalike corner for
+twenty seconds turned four ties into a verdict, since four small leans the same way added up
+to 0.60 where three added up to 0.58. Nothing that is not evidence on its own becomes
+evidence by turning up four times, here as at the floor. And the path cuts both ways. Three
+scans leaning 61/39 towards the wrong corner and then one that was sure of the right street
+come out on the wrong corner with a share of 0.70, overruling a scan that was right, where
+settling ties would have kept it. The report says so in as many words: the scan alone would
+have said the other place.
+
+That cost, and the price of a jump, which is a number nobody has measured, are why this is a
+flag and not the new rule. It is the same reason `--pace` and `--match` are flags: choosing
+for the operator before a real walk has measured the two would be inventing the result, and
+`--check-map` reports both, in columns of their own, so that the walk can.
 
 ## A scan at a mark is on two stretches
 

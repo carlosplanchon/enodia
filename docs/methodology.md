@@ -87,19 +87,19 @@ Map: 12 fingerprints, 2 walks over 1 stretches, 2 outings.
 
 Each outing held out in turn, and its scans located from the other outings:
 
-                                by networks  and by signal   in sequence
-  scans held out                         12             12            12
-  placed on the right stretch            12             12            12
-  placed across a mark                    0              0             0
-  landed on the wrong stretch             0              0             0
-  not on the map                          0              0             0
-  mean error, of a stretch               7%             2%            7%
-  median error, of a stretch             5%             2%            5%
-  mean error in metres                 10 m            3 m          10 m
-  median error in metres                7 m            3 m           7 m
+                                by networks  and by signal  settling ties choosing the path
+  scans held out                         12             12             12                12
+  placed on the right stretch            12             12             12                12
+  placed across a mark                    0              0              0                 0
+  landed on the wrong stretch             0              0              0                 0
+  not on the map                          0              0              0                 0
+  mean error, of a stretch               7%             2%             7%                7%
+  median error, of a stretch             5%             2%             5%                5%
+  mean error in metres                 10 m            3 m           10 m              10 m
+  median error in metres                7 m            3 m            7 m               7 m
 ```
 
-(Two **synthetic** passes over the real 148 m Agraciada geometry in [`samples/`](../samples/README.md), not real outings. See *Limits* in [the README](../README.md).) The error is given twice on purpose. A fraction of a block is comparable between any two stretches, and metres are only known for the stretches whose crossings carry coordinates, so a map that mixes notebooks with and without them says how many of the answers the distances actually cover instead of averaging the measurable half and calling it the whole. Signal wins here because the synthetic levels were made to vary smoothly along the block. Only a real outing can say whether that survives different radios, bodies and days. The important structural point is that each pass is held out against the other outing, so none of these answers is the map recognising the walk it trained on. A scan answered on the stretch next door, a few metres past the mark, is placed across a mark and measured through it. Only a stretch with no mark in common is a different street. The third column places each scan with the scans before it, the way `--locate LOG` does: when two stretches match a scan about as well, the stretch the scans before it were on, or one sharing a mark with it, is taken, since a walk does not jump. A scan the map does not know stays unknown in every column.
+(Two **synthetic** passes over the real 148 m Agraciada geometry in [`samples/`](../samples/README.md), not real outings. See *Limits* in [the README](../README.md).) The error is given twice on purpose. A fraction of a block is comparable between any two stretches, and metres are only known for the stretches whose crossings carry coordinates, so a map that mixes notebooks with and without them says how many of the answers the distances actually cover instead of averaging the measurable half and calling it the whole. Signal wins here because the synthetic levels were made to vary smoothly along the block. Only a real outing can say whether that survives different radios, bodies and days. The important structural point is that each pass is held out against the other outing, so none of these answers is the map recognising the walk it trained on. A scan answered on the stretch next door, a few metres past the mark, is placed across a mark and measured through it. Only a stretch with no mark in common is a different street. The last two columns place each scan with the scans before it in the same outing, the way `--locate LOG` does, one for each `--sequence`. Settling ties takes the stretch the scans before it were on, or one sharing a mark with it, and only when two stretches match a scan about as well. Choosing the path takes the likeliest path through all of them, which can overrule the scan itself. Two scans in a row there can be several cycles apart where scans fell outside the notebook, and the path prices that as one step. A scan the map does not know stays unknown in every column.
 
 ## What comes out
 

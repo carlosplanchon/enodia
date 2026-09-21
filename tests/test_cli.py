@@ -696,6 +696,17 @@ def test_check_map_from_the_command_line_reports_both_methods(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "Map: 4 fingerprints" in out
     assert "by networks" in out and "and by signal" in out
+    assert "settling ties" in out and "choosing the path" in out
+
+
+def test_locate_from_a_log_can_take_the_path_the_scans_before_it_make_likeliest(tmp_path, capsys):
+    log, nb, mapa = mapped(tmp_path)
+    cli.main(["--map-add", str(log), str(nb), "--map", str(mapa)])
+    capsys.readouterr()
+    command = ["--locate", str(log), "--map", str(mapa), "--sequence", "path", "--voice", "none"]
+    assert cli.main(command) == 0
+    assert "You are " in capsys.readouterr().out
+    assert cli.build_parser().parse_args([]).sequence == "tie"
 
 
 def test_the_map_defaults_to_its_own_directory_under_the_data_directory(tmp_path, capsys):
@@ -708,7 +719,12 @@ def test_the_map_defaults_to_its_own_directory_under_the_data_directory(tmp_path
 
 @pytest.mark.parametrize(
     "flags",
-    [["--map", "m.jsonl"], ["--match", "signal"], ["--map", "m.jsonl", "--match", "signal"]],
+    [
+        ["--map", "m.jsonl"],
+        ["--match", "signal"],
+        ["--sequence", "path"],
+        ["--map", "m.jsonl", "--match", "signal"],
+    ],
 )
 def test_map_flags_without_a_map_command_are_an_error(flags, capsys):
     with pytest.raises(SystemExit) as stopped:

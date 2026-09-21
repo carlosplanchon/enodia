@@ -79,9 +79,9 @@ uv run enodia --check-map --match signal                       # the same, score
 needs none: it compares two passes over one stretch against each other. `--check-map` needs a
 map with at least two passes in it, and holds out one outing at a time, or one pass down one
 stretch when the map holds a single outing, never a single scan, since a scan's neighbour was
-taken five seconds later and sees almost the same networks. Its table has three columns: each
-scan alone by networks, by signal as well, and in sequence, with the scans before it settling a
-tie.
+taken five seconds later and sees almost the same networks. Its table has four columns: each
+scan alone by networks, by signal as well, and with the scans before it settling a tie or
+choosing the path, the two ways `--sequence` names.
 [The methodology notes](methodology.md) say what each of the three can and cannot tell you.
 
 ## The map, and finding yourself again
@@ -91,6 +91,7 @@ uv run enodia --map-add LOG notebook.txt                        # add an outing 
 uv run enodia --map-add LOG notebook.txt --streets streets.jsonl # along the street shapes
 uv run enodia --locate                                         # scan now: where am I?
 uv run enodia --locate LOG                                     # or a log's last scan, with the ones before it
+uv run enodia --locate LOG --sequence path                     # let the scans before it choose the path
 uv run enodia --locate --match signal                          # score on signal strength too
 uv run enodia --map other.jsonl --locate                        # a map somewhere else
 ```
@@ -105,6 +106,13 @@ stretches match that scan about as well, the stretch the scans before it were on
 it, settles which: a walk does not jump a block in five seconds. They choose between two answers
 and never make one up, so a scan the map does not know stays unknown however sure the scans
 before it were.
+
+`--sequence tie` is that, and the default. `--sequence path` asks the scans before it every
+time, not only on a tie: it chooses the likeliest path through all of them, staying on a
+stretch for nothing, stepping onto one that shares a mark for a little, jumping anywhere else
+for a lot, and the answer is where that path ends. It can overrule the last scan, in both
+directions, and the price of a jump is a number no walk has measured yet, which is why it is a
+flag: `--check-map` reports both.
 
 ## Putting the notebook on the map
 
@@ -256,7 +264,9 @@ says which flag is the odd one.
 | `--ssid`, `--mac-shaped`, `--key-file` | `--export-public` |
 | `--streets` | `--geocode`, `--reconcile` or `--map-add` |
 | `--buildings` | `--geocode` and `--streets` |
-| `--svg`, `--pace`, `--check-pace`, `--check-passes`, `--csv`, `--geojson`, `--scans` | `--reconcile` |
+| `--svg`, `--check-pace`, `--check-passes`, `--csv`, `--geojson`, `--scans` | `--reconcile` |
+| `--pace` | `--reconcile` or `--map-add` |
+| `--map`, `--match`, `--sequence` | `--map-add`, `--locate`, `--check-map` or `--assistant` |
 | `--outing` | `--reconcile`, `--map-add`, `--export-public`, `--locate LOG` or `--geocode --marks` |
 
 Each of those exits with status 2, the way a bad command line does.

@@ -376,6 +376,14 @@ def build_parser() -> argparse.ArgumentParser:
         "strong they came in, which is more precise and less portable between radios "
         "(default: networks)",
     )
+    parser.add_argument(
+        "--sequence",
+        choices=["tie", "path"],
+        default="tie",
+        help="with --locate LOG: what the scans before the last one do. 'tie' settles a tie "
+        "between two stretches; 'path' chooses the likeliest path through all of them, "
+        "and can overrule the last scan (default: tie)",
+    )
     return parser
 
 
@@ -557,7 +565,8 @@ def run_map(args: argparse.Namespace, map_file: Path) -> int:
                 fingerprints,
                 check_map(fingerprints),
                 check_map(fingerprints, by_signal=True),
-                check_map(fingerprints, in_sequence=True),
+                check_map(fingerprints, sequence="tie"),
+                check_map(fingerprints, sequence="path"),
             )
         )
         return 0
@@ -584,7 +593,7 @@ def run_map(args: argparse.Namespace, map_file: Path) -> int:
         except OSError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
-        found = locate_sequence(known, scans, by_signal=by_signal)
+        found = locate_sequence(known, scans, sequence=args.sequence, by_signal=by_signal)
         print(format_location(found, map_file))
         say_location(voice, found, args.lang, args.ssid_lang)
         return 0
@@ -828,7 +837,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--pace: only meaningful together with --reconcile or --map-add")
     map_only = [
         flag
-        for flag, given in (("--map", args.map is not None), ("--match", args.match != "networks"))
+        for flag, given in (
+            ("--map", args.map is not None),
+            ("--match", args.match != "networks"),
+            ("--sequence", args.sequence != "tie"),
+        )
         if given
     ]
     if map_only and not chooses_a_map:
