@@ -28,6 +28,7 @@ import json
 import os
 import stat
 import tempfile
+from collections import deque
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -57,7 +58,6 @@ from enodia.reconcile import (
     folded,
     format_confusable,
     merged_scans,
-    network_turnover,
     reconcile,
 )
 from enodia.streets import StreetMap
@@ -443,18 +443,65 @@ SIMILARITY_FLOOR = 0.15
 RSSI_SCALE = 10.0
 SIGNAL_UNKNOWN = 0.75
 DOMINANCE = 0.6
+# How far apart in time two scans of one walk can be and still be one look at
+# one place. Fifteen seconds each way is the quarter of a minute LOOK_BACK is
+# built on too, twenty metres at a walking pace: near enough that the scans
+# see one place, wide enough that one lucky reading is not a look by itself.
+ONE_LOOK_S = 15.0
+# How much likelier the stretch is whose best look matched a tenth better:
+# three to one, so two tenths is nine to one. This turns a similarity into a
+# share of the evidence, which the tie and the path are judged on. Measured on
+# the sample: at two to one the path lagged a scan more at each mark and four
+# scans mid-block were called ties, at four to one nothing changed but one tie
+# fewer at a mark, where a tie is the honest answer.
+ODDS_PER_TENTH = 3.0
+
+
+@dataclass(frozen=True)
+class Rarity:
+    """What each network in a map says about where you are: the rarer, the more.
+
+    A router heard from thirty metres of one street places you; one heard down
+    ten blocks hardly does, and counting the two alike let the long-range ones
+    drown the short. The weight is `log(1 + N / df)`, `N` the fingerprints in
+    the map and `df` how many of them hear the network: heard in all of them it
+    still weighs `log 2`, never nothing, since it says you are on the map even
+    if not where; heard in one it weighs `log(1 + N)`. A network the map never
+    heard weighs as one heard once, which is the treatment it always had: it
+    enters the union and lowers every match alike, and enough of them is what
+    "too much of it has changed" is for.
+    """
+
+    weights: Mapping[str, float]
+    unknown: float
+
+    def __call__(self, key: str) -> float:
+        return self.weights.get(key, self.unknown)
+
+
+def key_weights(fingerprints: Sequence[Fingerprint]) -> Rarity:
+    """The rarity of every network in a map, from one pass over it."""
+    counted: dict[str, int] = {}
+    for one in fingerprints:
+        for key in one.keys:
+            counted[key] = counted.get(key, 0) + 1
+    total = len(fingerprints)
+    return Rarity({key: log(1 + total / seen) for key, seen in counted.items()}, log(1 + total))
 
 
 def similarity(
     query: Mapping[str, float | None],
     fingerprint: Fingerprint,
     by_signal: bool = False,
+    weights: Rarity | None = None,
 ) -> float:
     """How alike a scan and a fingerprint are: 1 identical, 0 nothing in common.
 
     The first term is which access points are in view, as a Jaccard similarity
-    over their BSSIDs. It is the robust half: it survives a router dropping out
-    of one scan, and it means the same thing on any radio.
+    over their BSSIDs, each weighed by how rare it is in the map (`Rarity`)
+    when `weights` is given, and alike when not. It is the robust half: it
+    survives a router dropping out of one scan, and it means the same thing on
+    any radio.
 
     `by_signal` multiplies that by how closely the shared access points matched
     in strength, `exp(-mean|dRSSI| / RSSI_SCALE)`. It is the precise half and
@@ -468,7 +515,11 @@ def similarity(
     """
     keys = set(query)
     here = fingerprint.keys
-    alike = 1.0 - network_turnover(keys, here)
+    union = keys | here
+    if not union:
+        return 0.0
+    weigh = weights if weights is not None else (lambda key: 1.0)
+    alike = sum(weigh(key) for key in keys & here) / sum(weigh(key) for key in union)
     if not by_signal or alike <= 0.0:
         return alike
     signals = fingerprint.signals
@@ -517,29 +568,92 @@ class Location:
         return self.place.describe()
 
 
-def _spread_of(group: Sequence[tuple[float, Fingerprint]]) -> float | None:
-    """How far apart the placed fingerprints of a group sit, or None without coordinates."""
-    places = [where for _, one in group if (where := one.place.coordinates) is not None]
-    if len(places) < 2:
+def _spread_of(places: Sequence[Place]) -> float | None:
+    """How far apart the places behind an answer sit, or None without coordinates."""
+    known = [where for one in places if (where := one.coordinates) is not None]
+    if len(known) < 2:
         return None
-    return max(distance_metres(*here, *there) for here in places for there in places)
+    return max(distance_metres(*here, *there) for here in known for there in known)
 
 
-def _gather(group: Sequence[tuple[float, Fingerprint]]) -> tuple[Place, float]:
-    """The weighted middle of a set of matches, and how spread out they were."""
-    total = sum(score for score, _ in group)
-    fraction = sum(score * one.place.fraction for score, one in group) / total
-    spread = sum(score * abs(one.place.fraction - fraction) for score, one in group) / total
-    placed = [(score, one.place.coordinates) for score, one in group]
-    known = [(score, where) for score, where in placed if where is not None]
+def _gather(pairs: Sequence[tuple[float, Place]]) -> tuple[Place, float]:
+    """The weighted middle of a set of matched places, and how spread out they were."""
+    total = sum(score for score, _ in pairs)
+    fraction = sum(score * place.fraction for score, place in pairs) / total
+    spread = sum(score * abs(place.fraction - fraction) for score, place in pairs) / total
+    known = [(score, where) for score, place in pairs if (where := place.coordinates) is not None]
     lat = lon = None
     if known:
         weight = sum(score for score, _ in known)
         lat = sum(score * where[0] for score, where in known) / weight
         lon = sum(score * where[1] for score, where in known) / weight
-    first = group[0][1].place
-    length = next((one.place.length_m for _, one in group if one.place.length_m is not None), None)
+    first = pairs[0][1]
+    length = next((place.length_m for _, place in pairs if place.length_m is not None), None)
     return Place(first.name_from, first.name_to, fraction, lat, lon, length), spread
+
+
+@dataclass(frozen=True)
+class Look:
+    """One walk's look at a scan: the part of the walk that matched it best, as one witness.
+
+    Consecutive scans of one pass see almost the same networks and are one
+    look at one place, not several. Counted one by one they were: a pass that
+    scanned every five seconds filled every seat among the neighbours and
+    outvoted a single better match from another outing, so the map favoured
+    whoever had walked slowest. Each walk speaks once instead, with the part
+    of it that matched best: the scans taken within `ONE_LOOK_S` of one of
+    them, whichever such neighbourhood has the highest mean similarity. The
+    mean and not the best single scan, because on a run of nearly alike scans
+    the best one is a lucky reading until the scans beside it agree, and the
+    scans beside it are also what say where the look was taken from. A walk
+    that scanned rarely gets a look of one scan and no penalty for it. A
+    fingerprint that names no walk, from a map older than the field or built
+    by hand, is a look by itself.
+    """
+
+    place: Place  # the weighted middle of the scans in it
+    score: float  # their mean similarity: what the walk says, and what it is ranked on
+    best: float  # the best single scan among them
+    when: datetime | None
+    outing: str
+
+
+def _look(scored: Sequence[tuple[float, Fingerprint]], floor: float) -> Look | None:
+    """The neighbourhood of one walk that matched best, or None when none is evidence.
+
+    The floor is applied to the look, before anything is put to a vote, and
+    not to the best scan alone. Nothing that is not evidence on its own becomes
+    evidence by turning up four times: four readings that were each too weak
+    used to outvote one that cleared the floor, and the answer came back naming
+    the street with the best of the losers, "you are here, best similarity
+    11%", under a floor of 15%.
+    """
+    # Every scan without a time is a neighbourhood of one. The rest are sorted
+    # by the clock and swept once, each with the scans within reach of it.
+    neighbourhoods = [(score, [(score, one)]) for score, one in scored if one.time is None]
+    timed = sorted(
+        ((one.time.timestamp(), score, one) for score, one in scored if one.time is not None),
+        key=lambda stamped: stamped[0],
+    )
+    low = high = 0
+    for stamp, _, _ in timed:
+        while timed[low][0] < stamp - ONE_LOOK_S:
+            low += 1
+        while high < len(timed) and timed[high][0] <= stamp + ONE_LOOK_S:
+            high += 1
+        beside = [(score, one) for _, score, one in timed[low:high]]
+        neighbourhoods.append((sum(score for score, _ in beside) / len(beside), beside))
+    mean, beside = max(neighbourhoods, key=lambda found: found[0])
+    if mean <= 0.0 or mean < floor:
+        return None
+    place, _ = _gather([(score, one.place) for score, one in beside])
+    return Look(
+        place,
+        mean,
+        max(score for score, _ in beside),
+        max((one.time for _, one in beside if one.time is not None), default=None),
+        beside[0][1].outing,
+    )
 
 
 @dataclass(frozen=True)
@@ -549,7 +663,7 @@ class Candidate:
     place: Place
     spread: float
     score: float  # the best single match on this stretch
-    weight: float  # every match on it added up, which is what the stretches are ranked on
+    weight: float  # how well its best look matched: what the stretches are ranked on
     matches: int
     when: datetime | None
     outings: tuple[str, ...]
@@ -562,36 +676,43 @@ def _candidates(
     by_signal: bool = False,
     neighbours: int = NEIGHBOURS,
     floor: float = SIMILARITY_FLOOR,
+    by_rarity: bool = True,
 ) -> list[Candidate]:
     """The stretches a scan could be on, best first, or nothing when the map does not know.
 
-    The floor is applied here, before anything is put to a vote, and not to
-    the best one alone. A stretch wins on the sum of its fingerprints, so
-    four readings that were each too weak to be evidence used to outvote one
-    that cleared the floor, and the answer came back naming the street with
-    the best of the losers: "you are here, best similarity 11%", under a
-    floor of 15%. Nothing that is not evidence on its own becomes evidence by
-    turning up four times.
+    `by_rarity` weighs each network by how rare it is in the map (`Rarity`);
+    off, every network counts the same, which is the matching as it was before
+    the weights and is kept so that a real map can measure them.
+
+    Each walk of the map speaks once, with its best look (`Look`), and the
+    `neighbours` best looks are grouped by stretch. A stretch is ranked on its
+    best look and not on its looks added up: added up, the stretch walked most
+    often won at every mark, where the two stretches match about alike, and on
+    the sample that put 29 scans across a mark where the best look alone puts
+    7. Two walks that agree are reported, then, and not counted twice.
     """
     query = {n.key: (n.strength if n.has_signal else None) for n in networks if n.identified}
     if not query:
         return []
-    scored = [
-        (score, one)
-        for score, one in ((similarity(query, one, by_signal), one) for one in fingerprints)
-        if score > 0.0 and score >= floor
-    ]
-    if not scored:
+    weights = key_weights(fingerprints) if by_rarity else None
+    by_walk: dict[object, list[tuple[float, Fingerprint]]] = {}
+    for one in fingerprints:
+        score = similarity(query, one, by_signal, weights)
+        by_walk.setdefault(one.walk or id(one), []).append((score, one))
+    looks = [look for scored in by_walk.values() if (look := _look(scored, floor)) is not None]
+    if not looks:
         return []
-    scored.sort(key=lambda pair: pair[0], reverse=True)
+    looks.sort(key=lambda look: look.score, reverse=True)
 
-    groups: dict[tuple[str, str], list[tuple[float, Fingerprint]]] = {}
-    for score, one in scored[:neighbours]:
-        groups.setdefault(one.place.key, []).append((score, one))
-    ranked = sorted(groups.values(), key=lambda group: sum(s for s, _ in group), reverse=True)
+    groups: dict[tuple[str, str], list[Look]] = {}
+    for look in looks[:neighbours]:
+        groups.setdefault(look.place.key, []).append(look)
+    ranked = sorted(
+        groups.values(), key=lambda group: max(one.score for one in group), reverse=True
+    )
     candidates = []
     for group in ranked:
-        place, spread = _gather(group)
+        place, spread = _gather([(look.score, look.place) for look in group])
         candidates.append(
             Candidate(
                 place,
@@ -601,20 +722,34 @@ def _candidates(
                 # of the winner's while the winner still carries more
                 # evidence, and printing that number beside the winner's name
                 # says "this place matched 100%" about a place that matched 67%.
-                max(score for score, _ in group),
-                sum(score for score, _ in group),
+                max(look.best for look in group),
+                max(look.score for look in group),
                 len(group),
-                max((one.time for _, one in group if one.time is not None), default=None),
-                tuple(sorted({one.outing for _, one in group if one.outing})),
-                _spread_of(group),
+                max((look.when for look in group if look.when is not None), default=None),
+                tuple(sorted({look.outing for look in group if look.outing})),
+                _spread_of([look.place for look in group]),
             )
         )
     return candidates
 
 
+def _shares(candidates: Sequence[Candidate]) -> list[float]:
+    """Each candidate's share of the scan's evidence, from how well its best look matched.
+
+    A similarity is not a share. Two stretches matching 86% and 69% are not a
+    56/44 split: the second is the poorer match by a margin that no scan taken
+    mid-block on the sample ever showed between the right stretch and a
+    neighbour. `ODDS_PER_TENTH` says what a margin is worth, and the shares
+    are the odds normalised, which is what `DOMINANCE` and the path read.
+    """
+    odds = [ODDS_PER_TENTH ** (10.0 * one.weight) for one in candidates]
+    total = sum(odds)
+    return [one / total for one in odds]
+
+
 def _tied(ranked: Sequence[Candidate]) -> bool:
     """Whether the second stretch matched nearly as well as the first."""
-    return len(ranked) > 1 and ranked[0].weight / sum(one.weight for one in ranked) < DOMINANCE
+    return len(ranked) > 1 and _shares(ranked)[0] < DOMINANCE
 
 
 def _location(
@@ -658,6 +793,7 @@ def locate_scan(
     by_signal: bool = False,
     neighbours: int = NEIGHBOURS,
     floor: float = SIMILARITY_FLOOR,
+    by_rarity: bool = True,
 ) -> Location | None:
     """Where a scan puts you on the map, or None when the map does not know.
 
@@ -670,7 +806,7 @@ def locate_scan(
     inside the block between them, where you certainly were not. When neither
     dominates, both are reported and the answer is marked uncertain.
     """
-    ranked = _candidates(fingerprints, networks, by_signal, neighbours, floor)
+    ranked = _candidates(fingerprints, networks, by_signal, neighbours, floor, by_rarity)
     if not ranked:
         return None
     return _location(ranked[0], ranked[1].place if _tied(ranked) else None)
@@ -693,6 +829,7 @@ def locate_sequence(
     by_signal: bool = False,
     neighbours: int = NEIGHBOURS,
     floor: float = SIMILARITY_FLOOR,
+    by_rarity: bool = True,
 ) -> Location | None:
     """Where the last of a run of scans puts you, with the scans before it having a say.
 
@@ -710,18 +847,18 @@ def locate_sequence(
     unknown too or torn the same way, stays a tie and is reported as one.
     """
     if sequence == "path":
-        return _along_the_path(fingerprints, scans, by_signal, neighbours, floor)
+        return _along_the_path(fingerprints, scans, by_signal, neighbours, floor, by_rarity)
     if sequence != "tie":
         raise ValueError(f"sequence is 'tie' or 'path', not {sequence!r}")
     *before, last = scans
-    ranked = _candidates(fingerprints, last, by_signal, neighbours, floor)
+    ranked = _candidates(fingerprints, last, by_signal, neighbours, floor, by_rarity)
     if not ranked:
         return None
     if not _tied(ranked):
         return _location(ranked[0], None)
     votes = [0, 0]
     for networks in before[-LOOK_BACK:]:
-        earlier = _candidates(fingerprints, networks, by_signal, neighbours, floor)
+        earlier = _candidates(fingerprints, networks, by_signal, neighbours, floor, by_rarity)
         if not earlier:
             continue
         named = [one.place for one in earlier[: 2 if _tied(earlier) else 1]]
@@ -749,12 +886,14 @@ def _leans(candidates: Sequence[Candidate]) -> dict[tuple[str, str], tuple[float
     candidates and no lean at all. Nothing that is not evidence on its own
     becomes evidence by turning up four times: without this, twenty seconds
     standing at a lookalike corner turned four ties into a verdict, since four
-    small leans the same way added up to 0.60 where three added up to 0.58.
+    small leans the same way added up to one where three did not.
     """
     if _tied(candidates):
         return {one.place.key: (0.0, one) for one in candidates}
-    total = sum(one.weight for one in candidates)
-    return {one.place.key: (log(one.weight / total), one) for one in candidates}
+    return {
+        one.place.key: (log(share), one)
+        for share, one in zip(_shares(candidates), candidates, strict=True)
+    }
 
 
 def _step_cost(here: Place, there: Place) -> float:
@@ -769,6 +908,7 @@ def _along_the_path(
     by_signal: bool,
     neighbours: int,
     floor: float,
+    by_rarity: bool = True,
 ) -> Location | None:
     """Where the last of a run of scans puts you, on the likeliest path through all of them.
 
@@ -790,12 +930,12 @@ def _along_the_path(
     names where the scan by itself would have gone.
     """
     *before, last = scans
-    ranked = _candidates(fingerprints, last, by_signal, neighbours, floor)
+    ranked = _candidates(fingerprints, last, by_signal, neighbours, floor, by_rarity)
     if not ranked:
         return None
     layers = []
     for networks in before[-LOOK_BACK:]:
-        earlier = _candidates(fingerprints, networks, by_signal, neighbours, floor)
+        earlier = _candidates(fingerprints, networks, by_signal, neighbours, floor, by_rarity)
         if earlier:
             layers.append(earlier)
     if not layers:
@@ -832,6 +972,30 @@ def _along_the_path(
     return _location(best, None, settled=earlier, alone=ranked[0].place)
 
 
+def follow(
+    fingerprints: Sequence[Fingerprint],
+    scans: Iterable[Iterable[SeenNetwork]],
+    sequence: str = "tie",
+    by_signal: bool = False,
+    by_rarity: bool = True,
+) -> Iterator[Location | None]:
+    """Where each scan of a live run puts you, with the scans before it having a say.
+
+    One answer per scan, each what `locate_sequence` says of the last
+    `LOOK_BACK + 1` of them, so a tie is settled by the walk the way
+    `--locate LOG` settles it, and the path can be chosen the same way, on
+    scans taken a few seconds apart as they happen rather than read back from
+    a file. No clock and no voice, which are the command's. The scans come
+    from outside rather than being taken here so that a cycle whose scan
+    failed is simply not handed in: the run keeps what the cycles before it
+    knew, and one cycle without a radio does not throw away the walk.
+    """
+    run: deque[list[SeenNetwork]] = deque(maxlen=LOOK_BACK + 1)
+    for scan in scans:
+        run.append(list(scan))
+        yield locate_sequence(fingerprints, list(run), sequence, by_signal, by_rarity=by_rarity)
+
+
 def format_location(location: Location | None, map_path: str | Path) -> str:
     """Human-readable answer to "where am I"."""
     if location is None:
@@ -844,8 +1008,9 @@ def format_location(location: Location | None, map_path: str | Path) -> str:
     if where is not None:
         lines.append(f"  around [{where[0]:.5f}, {where[1]:.5f}]")
     spread = location.place.metres(location.spread)
+    agree = "1 walk" if location.matches == 1 else f"{location.matches} walks agree"
     lines.append(
-        f"  {location.matches} fingerprints agree, best similarity {location.score:.0%}, "
+        f"  {agree}, best similarity {location.score:.0%}, "
         f"spread {location.spread:.0%} of the stretch"
         + ("" if spread is None else f" ({spread:.0f} m)")
     )
@@ -1085,6 +1250,7 @@ def check_map(
     fingerprints: Sequence[Fingerprint],
     by_signal: bool = False,
     sequence: str | None = None,
+    by_rarity: bool = True,
 ) -> list[HeldOutScan]:
     """Hold out one outing at a time, or one walk when there is only one, and locate its scans.
 
@@ -1121,10 +1287,10 @@ def check_map(
         rest = [one for one in fingerprints if (one.outing if by_outing else one.walk) != key]
         for index, one in enumerate(held):
             if sequence is None:
-                found = locate_scan(rest, one.networks, by_signal)
+                found = locate_scan(rest, one.networks, by_signal, by_rarity=by_rarity)
             else:
                 run = [earlier.networks for earlier in held[max(0, index - LOOK_BACK) : index + 1]]
-                found = locate_sequence(rest, run, sequence, by_signal)
+                found = locate_sequence(rest, run, sequence, by_signal, by_rarity=by_rarity)
             results.append(_measure(one, found))
     return results
 

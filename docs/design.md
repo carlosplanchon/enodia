@@ -16,6 +16,7 @@ one feature with somebody else's privacy on the line and its decisions fill a pa
 | If you are wondering | Read |
 |---|---|
 | why an answer is missing rather than approximate | *Not knowing is an answer* |
+| why five scans of one pass are one witness, and a router heard everywhere counts for little | *One walk, one look* |
 | why a scan after a hole in the log is not placed too early | *A hole in the scans is not a step* |
 | how a scan that could be at either of two corners is placed | *A tie is settled by the walk, not by the scan* |
 | what `--sequence path` does, and what it costs | *The path or the point, and why it is a flag* |
@@ -38,10 +39,10 @@ one feature with somebody else's privacy on the line and its decisions fill a pa
 
 Four rules do most of the work. **Not knowing is an answer**: off the map every fingerprint is a
 poor match and the best of them is still wrong, so below a floor it says "not on the map" rather
-than guessing confidently in a city it has never been to. The floor is applied to each
-fingerprint before any of them votes, which matters more than it sounds: a stretch wins on its
-fingerprints added up, so four readings too weak to be evidence used to outvote the one reading
-that cleared the floor, and the answer came back naming the losers' street. Nothing that is not
+than guessing confidently in a city it has never been to. The floor is applied to each walk's
+look before any of them votes, which matters more than it sounds: when a stretch won on its
+fingerprints added up, four readings too weak to be evidence outvoted the one reading that
+cleared the floor, and the answer came back naming the losers' street. Nothing that is not
 evidence on its own becomes evidence by turning up four times.
 
 **Two streets are never averaged**: when two stretches match about as well, both are reported,
@@ -60,6 +61,47 @@ When the fingerprints behind the winner are further apart than three of that str
 lengths (five kilometres, for a stretch whose length nobody knows), the stretch is still named
 and the coordinates are withheld, with a line saying so. Crossing names have to be unique across
 a map, and no map fed one outing at a time can enforce that for you.
+
+## One walk, one look
+
+Two things about the matching changed together, and the sample measured both.
+
+**A network is worth what it is rare.** A router heard along thirty metres of one street says
+where you are, and one heard down ten blocks hardly does, but a Jaccard over the BSSIDs in view
+counted the two alike, so the long-range routers, which are also the ones every scan in the
+neighbourhood shares, drowned the short. Each network now weighs `log(1 + N/df)`, `N` the
+fingerprints in the map and `df` how many of them hear it: heard in every one it still weighs
+`log 2` and never nothing, since it says you are on the map even if not where, and heard in one
+it weighs `log(1 + N)`, seven times as much on the sample. A network the map never heard weighs
+as one heard once, which is the treatment it always had: it enters the union and lowers every
+match alike, and enough of them is what "too much of it has changed" is for. `--weigh alike`
+turns the weights off, so that a real map can measure them the way the sample did.
+
+**A walk speaks once.** Consecutive scans of one pass see almost the same networks and are one
+look at one place, not several. Counted one by one they were: the answer was the five
+fingerprints most like the scan, wherever they came from, so a pass that scanned every five
+seconds filled every seat and outvoted a single better match from another outing, and the map
+favoured whoever had walked slowest. Each walk of the map now gives one look, the part of it
+that matched best: the scans taken within fifteen seconds of one of them, whichever such
+neighbourhood has the highest mean similarity. The mean and not the best single scan, because
+on a run of nearly alike scans the best one is a lucky reading until the scans beside it agree.
+A walk that scanned rarely gets a look of one scan and no penalty for it.
+
+The first version added the looks of a stretch up, as the fingerprints had been, and the sample
+refused it: 29 scans across a mark where there had been 8. At a mark the two stretches match
+about alike, and the one walked twice won on both sides of it, every time. A stretch is judged
+by its best look, then, and two walks that agree are reported as agreeing, not counted twice.
+Once a stretch is a similarity rather than a sum of seats, a tie has to be read differently
+too: 86% against 69% is not a 56/44 split. A tenth of similarity is three to one, and the
+shares that gives, which are what the tie and the path read, call three scans of the sample
+ties, two of them at a mark. At two to one the path lagged a scan more at each mark and four
+scans mid-block were called ties, and at four to one only a tie at a mark went, where a tie is
+the honest answer.
+
+Measured on the sample, the two together change nothing on the scan alone, place two more
+scans right by signal, and cost the path one, a scan at a mark: a look a few metres past a
+mark is barely surer than the one before it, and the path needs a margin to move. That is the
+bet the path always made, made visible.
 
 ## A hole in the scans is not a step
 
@@ -82,10 +124,10 @@ cards, is no evidence either way, and is filled like a hole.
 
 ## A tie is settled by the walk, not by the scan
 
-`--locate` placed one scan and nothing else: the five fingerprints most like it, grouped by
-stretch, and the stretch with the most similarity added up. When a second stretch matched
-nearly as well the answer named both and said it was uncertain, which is honest and not much
-use standing at a corner. Two corners of one neighbourhood can sound alike to a scan, the same
+`--locate` placed one scan and nothing else: the fingerprints most like it, grouped by
+stretch, and the stretch that matched best. When a second stretch matched nearly as well the
+answer named both and said it was uncertain, which is honest and not much use standing at a
+corner. Two corners of one neighbourhood can sound alike to a scan, the same
 routers heard through the same walls from a block away, and a scan that reached the map through
 `--locate LOG` had the scans before it two lines up in the same file, each of them unambiguous,
 and never looked.
@@ -96,15 +138,16 @@ scans were on, or one sharing a mark with it, is the one the walk supports: a wa
 jump a block in five seconds. Nothing else changes. A scan the map does not know stays unknown,
 since the scans before it choose between two answers that each cleared the floor and never make
 one up, and a tie they cannot break, because they were unknown too or torn the same way, stays
-a tie and is reported as one. A fresh scan stands alone, having nothing before it. And
-`--check-map` reports each way of using the run beside the scan alone, in columns of their
-own, so that what the walk adds is measured rather than assumed.
+a tie and is reported as one. A fresh scan stands alone, having nothing before it, unless
+`--locate --watch` is keeping the run, in which case each scan is placed with the ones taken
+before it as they happen. And `--check-map` reports each way of using the run beside the scan
+alone, in columns of their own, so that what the walk adds is measured rather than assumed.
 
 ## The path or the point, and why it is a flag
 
 `--sequence tie` is the rule above: the scans before the last one speak only when it cannot
 choose between two stretches. A scan that is sure and wrong never asks them. Two corners of a
-neighbourhood that sound alike can leave a scan 61/39 for the wrong one, and then three scans
+neighbourhood that sound alike can leave a scan 6 to 1 for the wrong one, and then three scans
 unmistakably on the other street, two lines up in the same log, count for nothing.
 
 `--sequence path` asks them every time. It is a small Viterbi over stretches: each scan's
@@ -113,17 +156,19 @@ emission, and a step between scans costs nothing to stay on a stretch, a little 
 one that shares a mark, and a lot to jump anywhere else. The answer is the last stretch of the
 likeliest path, which can only be a candidate of the last scan, so nothing is invented. On the
 synthetic pair of lookalike corners, the scan that was sure and wrong is put back on its
-street with a share of 0.75 after three sure scans, where settling ties left it wrong.
+street with a share of 0.76 after one scan sure of the right one, and no surer after three,
+since what they settle is where the path was, where settling ties left it wrong.
 
 Two things had to be settled before that was honest. A scan that is torn between two corners
 contributes its candidates and no lean: without that, standing at the lookalike corner for
 twenty seconds turned four ties into a verdict, since four small leans the same way added up
-to 0.60 where three added up to 0.58. Nothing that is not evidence on its own becomes
-evidence by turning up four times, here as at the floor. And the path cuts both ways. Three
-scans leaning 61/39 towards the wrong corner and then one that was sure of the right street
-come out on the wrong corner with a share of 0.70, overruling a scan that was right, where
-settling ties would have kept it. The report says so in as many words: the scan alone would
-have said the other place.
+to one where three did not. Nothing that is not evidence on its own becomes evidence by
+turning up four times, here as at the floor. And the path cuts both ways. Three scans leaning
+6 to 1 towards the wrong corner and then one leaning 8 to 1 towards the right street come out
+on the wrong corner with a share of 0.72, overruling a scan that was right, where settling
+ties would have kept it. The report says so in as many words: the scan alone would have said
+the other place. A last scan that was beyond doubt is kept: overruling it would cost a jump,
+and its lean is worth more than one.
 
 That cost, and the price of a jump, which is a number nobody has measured, are why this is a
 flag and not the new rule. It is the same reason `--pace` and `--match` are flags: choosing

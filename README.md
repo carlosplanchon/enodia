@@ -54,10 +54,10 @@ enodia --locate samples/rivera-query.jsonl \
 ```
 
 ```text
-You are between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 59% of the way
-  around [-34.90311, -56.15844]
-  5 fingerprints agree, best similarity 90%, spread 11% of the stretch (14 m)
-  from evidence last gathered 2026-09-14 17:03
+You are between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 53% of the way
+  around [-34.90311, -56.15836]
+  2 walks agree, best similarity 89%, spread 0% of the stretch (1 m)
+  from evidence last gathered 2026-09-17 17:02
 ```
 
 The street names, coordinates and geometry are real OpenStreetMap data. The radio observations are synthetic. This demonstrates the workflow, not measured accuracy on a real walk. [Inputs and reproduction commands](samples/README.md).
@@ -97,10 +97,11 @@ enodia --map-add walk.jsonl notebook.txt
 
 Reconciliation places scans between crossings and estimates access-point positions. Adding the walk to the map keeps its scans as fingerprints.
 
-On a later visit, ask where you are:
+On a later visit, ask where you are, once or as you walk:
 
 ```bash
 enodia --locate
+enodia --locate --watch
 ```
 
 ## Go further

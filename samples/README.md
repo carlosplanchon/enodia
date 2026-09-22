@@ -122,4 +122,4 @@ And the answer the README shows, the query scan located against that map:
 enodia --locate samples/rivera-query.jsonl --map samples/rivera-map.jsonl --voice none
 ```
 
-It comes out 59% of the way from Brito del Pino to Simón Bolívar. The scan was taken at 60%.
+It comes out 53% of the way from Brito del Pino to Simón Bolívar. The scan was taken at 60%.

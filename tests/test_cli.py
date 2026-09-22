@@ -632,7 +632,7 @@ def test_locate_from_a_log_prints_and_speaks_where_you_are(tmp_path, capsys):
     capsys.readouterr()
     assert cli.main(["--locate", str(log), "--map", str(mapa), "--voice", "none"]) == 0
     out = capsys.readouterr().out
-    assert "You are " in out and "fingerprints agree" in out
+    assert "You are " in out and "2 walks agree, best similarity" in out
     assert "Say (Silent: False) > Alfa to Bravo" in out or "Say (Silent: False) > Alfa" in out
 
 
@@ -676,6 +676,160 @@ def test_locate_scans_live_when_given_no_log(monkeypatch, tmp_path, capsys):
     assert "You are " in capsys.readouterr().out
 
 
+def two_streets(tmp_path):
+    """A map of two stretches that hear different networks, written as a map file is."""
+    rows = [
+        (
+            "Alfa",
+            "Bravo",
+            0.2,
+            "a#0",
+            [("Casa", "aa:bb:cc:dd:ee:01"), ("Kiosco", "aa:bb:cc:dd:ee:03")],
+        ),
+        (
+            "Alfa",
+            "Bravo",
+            0.8,
+            "a#0",
+            [("Casa", "aa:bb:cc:dd:ee:01"), ("Pan", "aa:bb:cc:dd:ee:04")],
+        ),
+        ("Charlie", "Delta", 0.5, "c#0", [("Bar", "aa:bb:cc:dd:ee:02")]),
+    ]
+    mapa = tmp_path / "mapa.jsonl"
+    mapa.write_text(
+        "".join(
+            json.dumps(
+                {
+                    "outing": walk.split("#")[0],
+                    "walk": walk,
+                    "from": name_from,
+                    "to": name_to,
+                    "fraction": fraction,
+                    "length_m": 100.0,
+                    "networks": [
+                        {"ssid": ssid, "bssid": bssid, "signal_dbm": -60} for ssid, bssid in nets
+                    ],
+                }
+            )
+            + "\n"
+            for name_from, name_to, fraction, walk, nets in rows
+        )
+    )
+    return mapa
+
+
+def heard(*names):
+    """What a fake radio hears: access points by the names two_streets uses."""
+    addresses = {
+        "Casa": "aa:bb:cc:dd:ee:01",
+        "Bar": "aa:bb:cc:dd:ee:02",
+        "Kiosco": "aa:bb:cc:dd:ee:03",
+        "Pan": "aa:bb:cc:dd:ee:04",
+    }
+    return [AccessPoint(name, addresses[name], 2412, -60, 60, "psk", False) for name in names]
+
+
+def watching(monkeypatch, views, switches=None):
+    """A radio that answers each cycle with the next view, and a switch that may be off."""
+    from enodia import fingerprint
+
+    answers = iter(views)
+    flips = iter(switches or [])
+    monkeypatch.setattr(fingerprint.ifpeek, "get_wifi_interfaces", lambda: ["wlan0"])
+    monkeypatch.setattr(fingerprint.ifpeek, "interface_rfkill", lambda interface: next(flips, None))
+    monkeypatch.setattr(
+        fingerprint.ifpeek, "scan_access_points", lambda interface=None, fresh=False: next(answers)
+    )
+
+
+WATCH = ["--locate", "--watch", "--voice", "none", "-i", "wlan0", "-t", "0"]
+
+
+def test_locate_watch_prints_every_scan_and_speaks_what_changes(monkeypatch, tmp_path, capsys):
+    # Along Alfa-Bravo, then off the map, then onto Charlie-Delta. A new stretch
+    # and the map losing or finding you are said in full; another tenth of the
+    # way along the same stretch is said as a status line.
+    mapa = two_streets(tmp_path)
+    views = [heard("Casa", "Kiosco"), heard("Casa", "Pan"), [], heard("Bar")]
+    watching(monkeypatch, views)
+    assert cli.main([*WATCH, "--map", str(mapa), "--cycles", "4"]) == 0
+    out = capsys.readouterr().out
+    lines = [line for line in out.splitlines() if line[:2].isdigit() and line[2] == ":"]
+    assert [line[10:] for line in lines] == [
+        'between "Alfa" and "Bravo", 20% of the way',
+        'between "Alfa" and "Bravo", 80% of the way',
+        "not on the map",
+        'between "Charlie" and "Delta", 50% of the way',
+    ]
+    said = [line.split("> ", 1)[1] for line in out.splitlines() if line.startswith("Say ")]
+    assert said == [
+        "Alfa to Bravo",
+        "20 percent",
+        "80 percent",
+        "Not on the map",
+        "Charlie to Delta",
+        "50 percent",
+    ]
+    assert "Stopped." not in out
+
+
+def test_locate_watch_keeps_the_run_through_a_blocked_radio(monkeypatch, tmp_path, capsys):
+    # The second cycle finds the switch off. It costs that cycle and nothing
+    # else: "Radio blocked" once, "Scanning again" when it comes back, and the
+    # third scan is placed as the second scan of the run, not the first.
+    mapa = two_streets(tmp_path)
+    watching(monkeypatch, [heard("Casa", "Kiosco"), heard("Casa", "Kiosco")], [None, "soft", None])
+    assert cli.main([*WATCH, "--map", str(mapa), "--cycles", "3"]) == 0
+    out = capsys.readouterr().out
+    assert "Cannot scan: wlan0: radio soft blocked (rfkill)" in out
+    assert out.count("Say (Silent: False) > Radio blocked") == 1
+    assert out.count("Say (Silent: False) > Scanning again") == 1
+    assert out.count('between "Alfa" and "Bravo", 20% of the way') == 2
+    assert out.count("Say (Silent: False) > Alfa to Bravo") == 1  # the same place is not repeated
+
+
+def test_locate_watch_stops_on_ctrl_c_and_keeps_the_cadence(monkeypatch, tmp_path, capsys):
+    from enodia import fingerprint
+
+    mapa = two_streets(tmp_path)
+    naps = []
+    monkeypatch.setattr(cli.time, "sleep", lambda seconds: naps.append(seconds))
+    answers = iter([heard("Bar")])
+
+    def scan(interface=None, fresh=False):
+        try:
+            return next(answers)
+        except StopIteration:
+            raise KeyboardInterrupt from None
+
+    watching(monkeypatch, [])
+    monkeypatch.setattr(fingerprint.ifpeek, "scan_access_points", scan)
+    flags = ["--locate", "--watch", "--voice", "none", "-i", "wlan0", "-t", "5"]
+    assert cli.main([*flags, "--map", str(mapa)]) == 0
+    out = capsys.readouterr().out
+    assert 'between "Charlie" and "Delta", 50% of the way' in out and "Stopped." in out
+    # Slept once, what was left of the five seconds after the first cycle's work.
+    assert len(naps) == 1 and 0 < naps[0] <= 5
+
+
+def test_locate_watch_says_when_the_map_cannot_be_read(tmp_path, capsys):
+    folder = tmp_path / "mapa"
+    folder.mkdir()
+    assert cli.main([*WATCH, "--map", str(folder)]) == 1
+    assert "error:" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("flags", [["--watch"], ["--locate", "walk.jsonl", "--watch"]])
+def test_watch_needs_a_live_locate(flags, capsys):
+    with pytest.raises(SystemExit) as stopped:
+        cli.main(["--voice", "none", "--button", "off", *flags])
+    assert stopped.value.code == 2
+    err = capsys.readouterr().err
+    assert (
+        "--watch: only meaningful together with --locate and a live scan, not --locate LOG" in err
+    )
+
+
 def test_locate_says_when_the_radio_is_switched_off(monkeypatch, tmp_path, capsys):
     from enodia import fingerprint
 
@@ -709,6 +863,35 @@ def test_locate_from_a_log_can_take_the_path_the_scans_before_it_make_likeliest(
     assert cli.build_parser().parse_args([]).sequence == "tie"
 
 
+def test_weighing_every_network_alike_reaches_the_check_and_the_lookup(
+    tmp_path, capsys, monkeypatch
+):
+    from enodia import fingerprint
+
+    log, nb, mapa = mapped(tmp_path)
+    cli.main(["--map-add", str(log), str(nb), "--map", str(mapa)])
+    checked = []
+
+    def counted(fingerprints, **kwargs):
+        checked.append(kwargs.get("by_rarity"))
+        return fingerprint.check_map(fingerprints, **kwargs)
+
+    monkeypatch.setattr(cli, "check_map", counted)
+    assert cli.main(["--check-map", "--map", str(mapa), "--weigh", "alike"]) == 0
+    assert checked == [False] * 4 and "by networks" in capsys.readouterr().out
+    located = []
+
+    def placed(fingerprints, scans, **kwargs):
+        located.append(kwargs.get("by_rarity"))
+        return fingerprint.locate_sequence(fingerprints, scans, **kwargs)
+
+    monkeypatch.setattr(cli, "locate_sequence", placed)
+    flags = ["--locate", str(log), "--map", str(mapa), "--weigh", "alike", "--voice", "none"]
+    assert cli.main(flags) == 0
+    assert located == [False] and "You are " in capsys.readouterr().out
+    assert cli.build_parser().parse_args([]).weigh == "rarity"
+
+
 def test_the_map_defaults_to_its_own_directory_under_the_data_directory(tmp_path, capsys):
     from enodia.system import map_path
 
@@ -722,6 +905,7 @@ def test_the_map_defaults_to_its_own_directory_under_the_data_directory(tmp_path
     [
         ["--map", "m.jsonl"],
         ["--match", "signal"],
+        ["--weigh", "alike"],
         ["--sequence", "path"],
         ["--map", "m.jsonl", "--match", "signal"],
     ],
@@ -847,6 +1031,25 @@ def test_geocode_takes_its_times_from_a_marks_log(monkeypatch, capsys, tmp_path)
     assert "1 stretch checked against the pace" in capsys.readouterr().out
 
 
+def test_geocode_takes_a_faster_pace_for_an_outing_on_a_bicycle(monkeypatch, capsys, tmp_path):
+    # Two corners 140 m apart and twenty seconds between them: 7 m/s, which no
+    # walk does, so the default ceiling drops both. On a bicycle it is a pace,
+    # and --max-speed says so.
+    from enodia import geocode
+
+    nb, answer = geocodable(tmp_path)
+    nb.write_text("17:00:00 Agraciada y Freire\n17:00:20 Agraciada y Solari\n", encoding="utf-8")
+    monkeypatch.setattr(geocode, "post_overpass", answer)
+    assert cli.main(["--geocode", str(nb), "--area", "Montevideo"]) == 1  # nothing resolved
+    out = capsys.readouterr().out
+    assert "walking at 7." in out and "neither is written" in out
+    assert not (tmp_path / "libreta.geo.txt").exists()
+    flags = ["--geocode", str(nb), "--area", "Montevideo", "--max-speed", "8"]
+    assert cli.main(flags) == 0
+    out = capsys.readouterr().out
+    assert "2 lines gained coordinates" in out and "neither is written" not in out
+
+
 def test_geocode_sends_the_request_through_the_proxy_it_was_given(monkeypatch, tmp_path):
     from enodia import geocode
 
@@ -899,6 +1102,7 @@ def test_geocode_without_an_area_is_an_error(capsys, tmp_path):
         ["--marks", "p.jsonl"],
         ["--proxy", "socks5://127.0.0.1:9050"],
         ["--overpass-url", "https://elsewhere.example/"],
+        ["--max-speed", "6"],
         ["--area", "Montevideo", "--proxy", "socks5://127.0.0.1:9050"],
     ],
 )

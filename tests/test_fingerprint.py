@@ -1,10 +1,12 @@
 """Tests for the fingerprint map: building it, looking yourself up in it, measuring it."""
 
+import itertools
 import json
 import os
 import stat
 import threading
 from datetime import datetime, timedelta, timezone
+from math import log
 
 import ifpeek
 import pytest
@@ -12,18 +14,24 @@ from ifpeek import AccessPoint
 
 from enodia import fingerprint, netlog
 from enodia.fingerprint import (
+    LOOK_BACK,
+    Candidate,
     Fingerprint,
     HeldOutScan,
     MapSummary,
     Place,
     RadioBlocked,
+    _shares,
+    _tied,
     add_to_map,
     canonical,
     check_map,
     fingerprints_from,
     folded,
+    follow,
     format_location,
     format_map_check,
+    key_weights,
     locate_scan,
     locate_sequence,
     map_summary,
@@ -63,8 +71,18 @@ def ap(ssid, bssid="aa:bb:cc:dd:ee:01", dbm=-60):
     )
 
 
-def mark(fraction, *networks, walk="one#0", street=("Alfa", "Bravo"), when=None, length=100.0):
-    """A fingerprint at a fraction of one stretch, built without a reconciliation."""
+_marked = itertools.count()
+
+
+def mark(fraction, *networks, walk=None, street=("Alfa", "Bravo"), when=None, length=100.0):
+    """A fingerprint at a fraction of one stretch, built without a reconciliation.
+
+    Each one is its own walk unless told otherwise, and so its own look: a
+    walk speaks once, with its best look, so two marks on one walk with no
+    time between them would be one witness and the poorer one would vanish.
+    """
+    if walk is None:
+        walk = f"one#{next(_marked)}"
     return Fingerprint(
         Place(street[0], street[1], fraction, None, None, length),
         tuple(networks),
@@ -264,6 +282,11 @@ def test_a_fingerprint_with_no_levels_ranks_below_one_whose_levels_match():
     assert similarity(query, silent) == 1.0  # sin el término de señal son iguales
 
 
+def test_nothing_against_nothing_is_nothing_in_common():
+    # An empty union is not a perfect match, it is nothing to compare.
+    assert similarity({}, Fingerprint(Place("Alfa", "Bravo", 0.5), ())) == 0.0
+
+
 def test_the_signal_term_does_not_bother_with_a_fingerprint_that_shares_nothing():
     assert similarity({"aa:bb:cc:dd:ee:5a": -60.0}, mark(0.5, net("A")), by_signal=True) == 0.0
 
@@ -362,7 +385,7 @@ def test_the_report_says_where_you_are_and_how_sure_it_is():
     report = format_location(locate_scan(here, [net("A")]), "mapa.jsonl")
     assert 'You are between "Alfa" and "Bravo", 30% of the way' in report
     assert "around [-34.90000, -56.19891]" in report
-    assert "2 fingerprints agree, best similarity 100%, spread 10% of the stretch (20 m)" in report
+    assert "2 walks agree, best similarity 100%, spread 10% of the stretch (20 m)" in report
     assert "from evidence last gathered 2026-09-05 17:05" in report
     assert "Uncertain" not in report
 
@@ -494,7 +517,7 @@ def test_the_check_holds_out_a_whole_walk_not_a_single_scan():
 
 
 def test_a_map_with_one_walk_has_nothing_to_check():
-    assert check_map([mark(0.2, net("A")), mark(0.4, net("A"))]) == []
+    assert check_map([mark(0.2, net("A"), walk="one#0"), mark(0.4, net("A"), walk="one#0")]) == []
 
 
 def test_landing_on_the_wrong_stretch_counts_apart_from_the_distance_error():
@@ -811,9 +834,11 @@ def lookalike_map():
     ]
 
 
-WALKED = [net("A"), net("B"), net("C"), net("E")]  # unmistakably Alfa-Bravo
+WALKED = [net("A"), net("B"), net("C"), net("E")]  # Alfa-Bravo beyond doubt
 CORNER = [net("A"), net("B")]  # either corner
-SURE_WRONG = [net("A"), net("B"), net("D")]  # heard on Alfa-Bravo, sounds like Charlie-Delta
+# Heard on Alfa-Bravo, where C is, but D makes it sound more like Charlie-Delta: 6 to 1.
+LEANS_WRONG = [net("A"), net("B"), net("C"), net("D")]
+LEANS_RIGHT = [net("A"), net("B"), net("C")]  # Alfa-Bravo, 8 to 1 and no surer
 BOTH = pytest.mark.parametrize("sequence", ["tie", "path"])
 
 
@@ -867,17 +892,34 @@ def test_the_scans_before_never_put_a_scan_on_a_map_that_does_not_know_it(sequen
     assert locate_sequence(lookalike_map(), [WALKED], sequence) == alone
 
 
+def test_following_a_run_places_each_scan_with_the_ones_before_it():
+    # A live run: each scan is placed with the scans before it, so the corner
+    # a scan alone cannot tell apart is settled by the walk as it happens.
+    placed = list(follow(lookalike_map(), [WALKED, WALKED, CORNER]))
+    assert [one.place.stretch for one in placed if one is not None] == [("Alfa", "Bravo")] * 3
+    assert [one.settled for one in placed if one is not None] == [0, 0, 2]
+    # Only the last LOOK_BACK have a say. A torn scan before names both corners
+    # and counts for both, so the one sure scan still tips it while it is in
+    # reach, and once it has dropped out of the run the run is torn again.
+    torn = list(follow(lookalike_map(), [WALKED, *[CORNER] * (LOOK_BACK + 1)]))
+    assert torn[-2] is not None and not torn[-2].uncertain and torn[-2].settled == 3
+    assert torn[-1] is not None and torn[-1].uncertain
+    assert list(follow(lookalike_map(), [])) == []
+
+
 def test_a_sequence_that_is_neither_tie_nor_path_is_refused():
     with pytest.raises(ValueError, match="'tie' or 'path'"):
         locate_sequence(lookalike_map(), [CORNER], "vote")
 
 
 def test_the_path_overrules_a_scan_that_was_sure_and_wrong():
-    # {A, B, D} alone prefers Charlie-Delta at 61% and does not tie, so settling
-    # ties leaves it there. Three scans before it, unmistakably on Alfa-Bravo,
-    # make the likeliest path stay on Alfa-Bravo with a share of 0.75. With two
-    # of them the share is 0.64, a hair over DOMINANCE, so the test uses three.
-    run = [WALKED, WALKED, WALKED, SURE_WRONG]
+    # {A, B, C, D} alone prefers Charlie-Delta 6 to 1 and does not tie, so
+    # settling ties leaves it there. Scans before it, unmistakably on
+    # Alfa-Bravo, make the likeliest path stay there with a share of 0.76: the
+    # jump to Charlie-Delta costs more than the last scan's lean is worth. One
+    # such scan gives the same share as three, since what they settle is where
+    # the path was, and once is enough for that.
+    run = [WALKED, WALKED, WALKED, LEANS_WRONG]
     tie = locate_sequence(lookalike_map(), run, "tie")
     assert tie is not None and tie.place.stretch == ("Charlie", "Delta") and not tie.uncertain
     path = locate_sequence(lookalike_map(), run, "path")
@@ -887,44 +929,56 @@ def test_the_path_overrules_a_scan_that_was_sure_and_wrong():
     report = format_location(path, "mapa.jsonl")
     assert 'The scan alone would have said between "Charlie" and "Delta"' in report
     assert "The 3 scans before it put it here." in report
+    one = locate_sequence(lookalike_map(), [WALKED, LEANS_WRONG], "path")
+    assert one is not None and one.place.stretch == ("Alfa", "Bravo") and one.settled == 1
 
 
 def test_earlier_scans_weigh_by_their_evidence():
-    # A scan torn between the two corners adds its candidates and no lean, so
-    # after one of them the answer is the scan's own, Charlie-Delta at its own
-    # 0.61, which does not depend on the price of a jump. One scan that was sure
-    # of Alfa-Bravo turns that into a tie, 0.52, and two of them settle it.
-    torn = locate_sequence(lookalike_map(), [CORNER, SURE_WRONG], "path")
+    # {A, B, C, D} leans 6 to 1 towards Charlie-Delta. A scan before it torn
+    # between the two corners adds its candidates and no lean, and the answer
+    # is the scan's own, 0.86 for Charlie-Delta, which does not depend on the
+    # price of a jump. One before it leaning 8 to 1 the other way turns that
+    # into a tie, 0.55; two of them settle it, 0.76; and one that was
+    # unmistakably on Alfa-Bravo settles it by itself, 0.76 as well, since a
+    # jump costs what it costs whoever asks for it.
+    torn = locate_sequence(lookalike_map(), [CORNER, LEANS_WRONG], "path")
     assert torn is not None and torn.place.stretch == ("Charlie", "Delta")
     assert not torn.uncertain and torn.settled == 0 and torn.alone is None
-    one = locate_sequence(lookalike_map(), [WALKED, SURE_WRONG], "path")
+    one = locate_sequence(lookalike_map(), [LEANS_RIGHT, LEANS_WRONG], "path")
     assert one is not None and one.uncertain and one.place.stretch == ("Alfa", "Bravo")
-    two = locate_sequence(lookalike_map(), [WALKED, WALKED, SURE_WRONG], "path")
+    two = locate_sequence(lookalike_map(), [LEANS_RIGHT, LEANS_RIGHT, LEANS_WRONG], "path")
     assert two is not None and not two.uncertain and two.settled == 2
     assert two.place.stretch == ("Alfa", "Bravo")
+    sure = locate_sequence(lookalike_map(), [WALKED, LEANS_WRONG], "path")
+    assert sure is not None and not sure.uncertain and sure.settled == 1
+    assert sure.place.stretch == ("Alfa", "Bravo")
 
 
 def test_standing_at_a_lookalike_corner_stays_uncertain_however_long():
     # Four torn scans in a row, which is what scans_from_log hands over after
     # twenty seconds at the corner. Each adds its two candidates and no lean, so
-    # the path is as torn as any one of them, where four small leans the same
-    # way used to add up to a verdict: 0.60 after four, 0.58 after three.
+    # the path is as torn as any one of them, 0.50, where four small leans the
+    # same way would have added up to a verdict.
     found = locate_sequence(lookalike_map(), [CORNER] * 4, "path")
     assert found is not None and found.uncertain and found.settled == 0
 
 
 def test_the_path_can_overrule_a_scan_that_was_right():
-    # The cost of the flag, on the record. Three scans leaning 61/39 towards
-    # the lookalike corner and then one that was sure of Alfa-Bravo: the
-    # likeliest path stays on Charlie-Delta with a share of 0.70, and says the
-    # last scan alone would have said Alfa-Bravo. Settling ties keeps that scan.
-    run = [SURE_WRONG, SURE_WRONG, SURE_WRONG, WALKED]
+    # The cost of the flag, on the record. Three scans leaning 6 to 1 towards
+    # the lookalike corner and then one leaning 8 to 1 towards Alfa-Bravo: the
+    # likeliest path stays on Charlie-Delta with a share of 0.72, and says the
+    # last scan alone would have said Alfa-Bravo. Settling ties keeps that
+    # scan. A last scan that was beyond doubt is kept by the path too, 0.99:
+    # overruling it would cost a jump, and its lean is worth more than one.
+    run = [LEANS_WRONG, LEANS_WRONG, LEANS_WRONG, LEANS_RIGHT]
     tie = locate_sequence(lookalike_map(), run, "tie")
     assert tie is not None and tie.place.stretch == ("Alfa", "Bravo") and not tie.uncertain
     path = locate_sequence(lookalike_map(), run, "path")
     assert path is not None and path.place.stretch == ("Charlie", "Delta")
     assert path.settled == 3 and path.alone is not None
     assert path.alone.stretch == ("Alfa", "Bravo")
+    sure = locate_sequence(lookalike_map(), [LEANS_WRONG, LEANS_WRONG, LEANS_WRONG, WALKED], "path")
+    assert sure is not None and sure.place.stretch == ("Alfa", "Bravo") and sure.alone is None
 
 
 @BOTH
@@ -951,8 +1005,8 @@ def test_the_check_in_sequence_settles_what_a_scan_alone_could_not(sequence):
     assert alone.wrong_stretch and alone.found is not None and alone.found.uncertain
     run = last(check_map(fingerprints, sequence=sequence))
     assert not run.wrong_stretch and run.found is not None and run.found.settled == 2
-    # A little back from the corner: the fingerprint at 0.5 of the same street has a say.
-    assert run.error_fraction == pytest.approx(0.13, abs=0.01)
+    # At the corner itself: the walk left in the map saw it from the same mark.
+    assert run.error_fraction == pytest.approx(0.0, abs=0.01)
     report = format_map_check(
         fingerprints,
         check_map(fingerprints),
@@ -1045,19 +1099,178 @@ def test_one_outing_alone_can_only_recognise_itself(tmp_path, monkeypatch):
 
 
 def test_the_score_belongs_to_the_street_that_won():
-    # One fingerprint of a street that lost can match better than any of the
-    # winner's while the winner carries more evidence. Reporting the global best
-    # beside the winner's name claims a match that street never made.
-    here = [
-        mark(0.5, net("A"), net("B"), net("C"), street=("Bravo", "Charlie")),
-        mark(0.2, net("A"), net("B"), street=("Alfa", "Bravo")),
-        mark(0.3, net("A"), net("B"), street=("Alfa", "Bravo")),
-        mark(0.4, net("A"), net("B"), street=("Alfa", "Bravo")),
+    # One scan of a street that lost can match better than any of the winner's
+    # while the winner's look, the scans beside each other, is the better one:
+    # a lucky reading is not a look until the scans beside it agree. Reporting
+    # the global best beside the winner's name claims a match that street
+    # never made.
+    when = datetime(2026, 9, 5, 17, 5, tzinfo=TZ)
+
+    def timed(fraction, *networks, walk, street, seconds):
+        return mark(
+            fraction, *networks, walk=walk, street=street, when=when + timedelta(seconds=seconds)
+        )
+
+    steady = [
+        timed(
+            0.2 + 0.1 * step,
+            net("A"),
+            net("B"),
+            net("C"),
+            net("W"),
+            walk="steady#0",
+            street=("Alfa", "Bravo"),
+            seconds=5 * step,
+        )
+        for step in range(3)
     ]
-    found = locate_scan(here, [net("A"), net("B"), net("C")])
-    assert found is not None
-    assert found.place.stretch == ("Alfa", "Bravo")  # tres a favor le ganan a una perfecta
-    assert found.score == pytest.approx(2 / 3)  # lo que esa calle midió, no el 1.0 de la otra
+    lucky = [
+        timed(
+            0.5,
+            net("A"),
+            net("B"),
+            net("C"),
+            walk="lucky#0",
+            street=("Bravo", "Charlie"),
+            seconds=0,
+        ),
+        timed(0.55, net("A"), net("X"), walk="lucky#0", street=("Bravo", "Charlie"), seconds=5),
+        timed(0.6, net("A"), net("Y"), walk="lucky#0", street=("Bravo", "Charlie"), seconds=10),
+    ]
+    here = [*steady, *lucky]
+    query = [net("A"), net("B"), net("C")]
+    found = locate_scan(here, query)
+    assert found is not None and not found.uncertain
+    assert found.place.stretch == ("Alfa", "Bravo")  # la mirada pareja le gana al golpe de suerte
+    steady_match = similarity({n.key: None for n in query}, steady[0], weights=key_weights(here))
+    assert found.score == pytest.approx(steady_match) and found.score < 1.0  # no el 1.0 de la otra
+    assert found.place.fraction == pytest.approx(0.3)  # the middle of the look, not of the map
+
+
+# --- one look per walk --------------------------------------------------------
+
+
+def test_the_weights_say_how_rare_each_network_is_in_the_map():
+    everywhere = [mark(f, net("A"), net("B")) for f in (0.2, 0.4, 0.6)]
+    weights = key_weights([*everywhere, mark(0.8, net("A"), net("Z"))])
+    assert weights(net("A").key) == pytest.approx(log(2))  # heard in all four, never nothing
+    assert weights(net("B").key) == pytest.approx(log(1 + 4 / 3))
+    assert weights(net("Z").key) == pytest.approx(log(5))  # heard in one
+    assert weights("never heard") == pytest.approx(log(5))  # as one heard once
+
+
+def test_sharing_a_rare_network_is_worth_more_than_sharing_a_common_one():
+    # A is heard in every fingerprint of the map, B and C in one each. Two
+    # scans that each share one network with the first fingerprint are alike
+    # without the weights, a third each. With them, the one sharing the rare
+    # network is the better match, and sharing only the common one is worse.
+    here = [mark(0.2, net("A"), net("B")), mark(0.8, net("A"), net("C")), mark(0.5, net("A"))]
+    weights = key_weights(here)
+    common = {net("A").key: None, net("C").key: None}
+    rare = {net("B").key: None, net("C").key: None}
+    assert similarity(common, here[0]) == similarity(rare, here[0]) == pytest.approx(1 / 3)
+    assert similarity(common, here[0], weights=weights) == pytest.approx(0.2)
+    assert similarity(rare, here[0], weights=weights) == pytest.approx(0.4)
+    # And with every weight the same, the map of one fingerprint, it is the plain Jaccard.
+    alone = mark(0.5, net("A"), net("B"), net("C"))
+    query = {net("A").key: None, net("Z").key: None}
+    assert similarity(query, alone, weights=key_weights([alone])) == similarity(query, alone)
+
+
+def test_weighing_every_network_alike_is_the_matching_before_the_weights():
+    # A scan hearing A and C shares the commoner network with Alfa-Bravo and
+    # the rare one with Charlie-Delta. Weighed by rarity that is Charlie-Delta
+    # and no tie; counted alike it is a third each and a tie, the answer the
+    # plain Jaccard gave, kept so that a real map can measure the weights.
+    here = [
+        mark(0.2, net("A"), net("B"), walk="one#0", street=("Alfa", "Bravo")),
+        mark(0.5, net("B"), net("C"), walk="two#0", street=("Charlie", "Delta")),
+        mark(0.5, net("A"), net("D"), net("E"), walk="three#0", street=("Echo", "Foxtrot")),
+    ]
+    scan = [net("A"), net("C")]
+    weighed = locate_scan(here, scan)
+    assert weighed is not None and not weighed.uncertain
+    assert weighed.place.stretch == ("Charlie", "Delta")
+    alike = locate_scan(here, scan, by_rarity=False)
+    assert alike is not None and alike.uncertain and alike.alternative is not None
+    assert alike.score == pytest.approx(1 / 3)
+    assert {alike.place.stretch, alike.alternative.stretch} == {
+        ("Alfa", "Bravo"),
+        ("Charlie", "Delta"),
+    }
+    # And the same either way the run is asked, and through the check.
+    for sequence in ("tie", "path"):
+        run = locate_sequence(here, [scan, scan], sequence, by_rarity=False)
+        assert run is not None and run.uncertain
+        (followed,) = follow(here, [scan], sequence, by_rarity=False)
+        assert followed is not None and followed.uncertain
+    assert len(check_map(here, by_rarity=False)) == 3
+
+
+def test_a_walk_speaks_once_however_often_it_scanned():
+    # Five scans of one slow pass down Charlie-Delta, each a fair match, against
+    # one scan of another outing on Alfa-Bravo that matches outright. Counted
+    # one by one the five filled every seat and outvoted the one. A walk is one
+    # look, whoever walked slowest.
+    when = datetime(2026, 9, 5, 17, 5, tzinfo=TZ)
+    slow = [
+        mark(
+            0.1 * step,
+            net("A"),
+            net("B"),
+            net("D"),
+            walk="slow#0",
+            street=("Charlie", "Delta"),
+            when=when + timedelta(seconds=5 * step),
+        )
+        for step in range(5)
+    ]
+    quick = mark(0.5, net("A"), net("B"), net("C"), walk="quick#0")
+    found = locate_scan([*slow, quick], [net("A"), net("B"), net("C")])
+    assert found is not None and not found.uncertain and found.matches == 1
+    assert found.place.stretch == ("Alfa", "Bravo")
+
+
+def test_a_stretch_walked_twice_is_not_counted_twice():
+    # At a mark the two stretches match about alike, and the one walked twice
+    # won there on its walks added up, whichever side of the mark the scan was
+    # taken on. A stretch is judged by its best look.
+    twice = [
+        mark(0.05, net("A"), net("B"), net("C"), walk="lunes#1", street=("Bravo", "Charlie")),
+        mark(0.05, net("A"), net("B"), net("C"), walk="martes#1", street=("Bravo", "Charlie")),
+    ]
+    once = mark(0.95, net("A"), net("B"), net("C"), net("E"), walk="lunes#0")
+    found = locate_scan([*twice, once], [net("A"), net("B"), net("C"), net("E")])
+    assert found is not None and not found.uncertain and found.matches == 1
+    assert found.place.stretch == ("Alfa", "Bravo")
+
+
+def test_a_walk_that_scanned_rarely_gets_a_look_of_one_scan():
+    # Half a minute between scans: none is within reach of another, each is a
+    # look by itself, and the best of them stands with no penalty for the pace.
+    when = datetime(2026, 9, 5, 17, 5, tzinfo=TZ)
+    rare = [
+        mark(0.2, net("A"), net("Z"), walk="rare#0", when=when),
+        mark(0.5, net("A"), net("B"), walk="rare#0", when=when + timedelta(seconds=30)),
+        mark(0.8, net("A"), net("Y"), walk="rare#0", when=when + timedelta(seconds=60)),
+    ]
+    found = locate_scan(rare, [net("A"), net("B")])
+    assert found is not None and found.score == 1.0 and found.matches == 1
+    assert found.place.fraction == pytest.approx(0.5)
+
+
+def test_a_similarity_is_not_a_share_of_the_evidence():
+    # Two stretches matching 86% and 69% are not a 56/44 split. A tenth of
+    # similarity is three to one, so that is better than 6 to 1 and no tie,
+    # while 86% against 83% is one.
+    def candidate(weight):
+        return Candidate(Place("Alfa", "Bravo", 0.5), 0.0, weight, weight, 1, None, (), None)
+
+    clear = [candidate(0.86), candidate(0.69)]
+    assert _shares(clear)[0] == pytest.approx(3**1.7 / (3**1.7 + 1))
+    assert not _tied(clear)
+    assert _tied([candidate(0.86), candidate(0.83)])
+    assert not _tied([candidate(0.86)])
 
 
 def test_a_map_that_cannot_be_read_is_not_an_empty_map(tmp_path):

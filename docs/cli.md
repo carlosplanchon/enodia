@@ -75,6 +75,7 @@ enodia --reconcile LOG notebook.geo.txt --check-pace            # which pace met
 enodia --reconcile LOG notebook.txt --check-passes              # how far apart two passes put the same networks
 enodia --check-map                                             # hold out a pass and locate it from the rest
 enodia --check-map --match signal                              # the same, scored on signal as well
+enodia --check-map --weigh alike                               # the same, every network counted alike
 ```
 
 `--check-pace` needs coordinates on the crossings, since it measures in metres. `--check-passes`
@@ -94,20 +95,35 @@ enodia --map-add LOG notebook.txt --streets streets.jsonl        # along the str
 enodia --locate                                                # scan now: where am I?
 enodia --locate LOG                                            # or a log's last scan, with the ones before it
 enodia --locate LOG --sequence path                            # let the scans before it choose the path
+enodia --locate --watch                                        # keep scanning: where am I, as it changes
 enodia --locate --match signal                                 # score on signal strength too
+enodia --locate --weigh alike                                  # count every network the same
 enodia --map other.jsonl --locate                               # a map somewhere else
 ```
 
-`--match networks` is the default and matches on which networks are in view. `--match signal`
-also weighs how strongly each came in, which is more precise and less portable between radios,
-since two cards report different numbers for the same room. An outing already in the map is not
-added twice.
+`--match networks` is the default and matches on which networks are in view, each weighed by
+how rare it is in the map: a router heard everywhere says less than one heard on one block.
+`--match signal` also weighs how strongly each came in, which is more precise and less
+portable between radios, since two cards report different numbers for the same room. `--weigh
+rarity` is that weighing, and the default. `--weigh alike` counts every network the same, which
+is what the matching did before the weights, and is there so that a real map can measure them
+the way the sample did: run `--check-map` with each and compare the two tables. An outing
+already in the map is not added twice.
 
 A fresh scan stands alone. `--locate LOG` has the scans before the last one, and when two
 stretches match that scan about as well, the stretch the scans before it were on, or one next to
 it, settles which: a walk does not jump a block in five seconds. They choose between two answers
 and never make one up, so a scan the map does not know stays unknown however sure the scans
 before it were.
+
+`--locate --watch` keeps the fresh scans coming, one every `--interval` seconds, and places each
+with the ones before it the way a log's last scan is placed, so a tie is settled by the walk as
+it happens. It prints one line per scan and speaks what changes: a new stretch, or the map
+losing you or finding you again, is said in full, and another tenth of the way along the same
+stretch is said only when the voice is free, since a percentage said late is another place. A
+fresh scan takes about five seconds per card, so an interval shorter than that is not kept. It
+writes no log: recording is the walk's job. `--cycles N` stops it after N scans, and Ctrl+C
+whenever.
 
 `--sequence tie` is that, and the default. `--sequence path` asks the scans before it every
 time, not only on a tie: it chooses the likeliest path through all of them, staying on a
@@ -126,6 +142,7 @@ enodia --geocode notebook.txt --area Montevideo --proxy socks5://127.0.0.1:9050
 enodia --geocode notebook.txt --area Montevideo --streets streets.jsonl          # keep the street shapes
 enodia --geocode notebook.txt --area Montevideo --streets streets.jsonl --buildings
 enodia --geocode notebook.txt --area Montevideo --overpass-url https://overpass.kumi.systems/api/interpreter
+enodia --geocode notebook.txt --area Montevideo --marks LOG --max-speed 6         # an outing by bicycle
 ```
 
 This is the one command in Enodia that goes online, and only when you type it. `--area` is not
@@ -137,6 +154,11 @@ before the suffix. `--proxy` sends the one request through SOCKS5 and the proxy 
 hostname, never this machine. `ALL_PROXY` and the rest of the environment are deliberately never
 read, and if the proxy cannot be reached nothing is sent. It needs the `socks` extra:
 `uv tool install "enodia[socks]"`, or `uv sync --extra socks` in a clone.
+
+The notebook's own times check the answers: a stretch the coordinates say was covered faster
+than anyone walks, 2.5 metres a second, is taken for a wrong lookup and neither of its corners
+is written. `--max-speed` moves that ceiling, in metres a second, for an outing ridden rather
+than walked. [The methodology notes](methodology.md) say what the check can and cannot catch.
 
 ## What is spoken
 
@@ -240,7 +262,7 @@ ENODIA                       the machine, the suggested step, and eight ways on
   2  Carry on            ->  the same, resuming the outing under way
   3  Reconcile           ->  WHICH OUTING -> NOTEBOOK FOR ... -> RECONCILE
   4  Add to the map      ->  WHICH OUTING -> NOTEBOOK FOR ... -> runs it
-  5  Locate              ->  LOCATE: scan now, or from a log's last scan
+  5  Locate              ->  LOCATE: scan now, from a log's last scan, or follow along
   6  Measure the map     ->  --check-map, or why there is nothing to measure yet
   7  Look at the outings ->  OUTINGS
   8  Preflight           ->  all eight checks
@@ -262,15 +284,16 @@ says which flag is the odd one.
 
 | flag | needs |
 |---|---|
-| `--area`, `--marks`, `--proxy`, `--overpass-url` | `--geocode` |
+| `--area`, `--marks`, `--proxy`, `--overpass-url`, `--max-speed` | `--geocode` |
 | `--out` | `--geocode` or `--export-public` |
 | `--ssid`, `--mac-shaped`, `--key-file` | `--export-public` |
 | `--streets` | `--geocode`, `--reconcile` or `--map-add` |
 | `--buildings` | `--geocode` and `--streets` |
 | `--svg`, `--check-pace`, `--check-passes`, `--csv`, `--geojson`, `--scans` | `--reconcile` |
 | `--pace` | `--reconcile` or `--map-add` |
-| `--map`, `--match`, `--sequence` | `--map-add`, `--locate`, `--check-map` or `--assistant` |
+| `--map`, `--match`, `--weigh`, `--sequence` | `--map-add`, `--locate`, `--check-map` or `--assistant` |
 | `--outing` | `--reconcile`, `--map-add`, `--export-public`, `--locate LOG` or `--geocode --marks` |
+| `--watch` | `--locate` scanning live, not `--locate LOG` |
 
 Each of those exits with status 2, the way a bad command line does.
 

@@ -72,12 +72,12 @@ def test_rivera_sample_rebuilds_the_readme_location(tmp_path, capsys):
     assert cli.main(["--locate", query, "--map", str(mapa), "--voice", "none"]) == 0
     out = capsys.readouterr().out
     assert (
-        'You are between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 59% of the way'
+        'You are between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 53% of the way'
         in out
     )
-    assert "around [-34.90311, -56.15844]" in out
-    assert "5 fingerprints agree, best similarity 90%, spread 11% of the stretch (14 m)" in out
-    assert "from evidence last gathered 2026-09-14 17:03" in out
+    assert "around [-34.90311, -56.15836]" in out
+    assert "2 walks agree, best similarity 89%, spread 0% of the stretch (1 m)" in out
+    assert "from evidence last gathered 2026-09-17 17:02" in out
 
 
 def reconcile(outing, *extra):

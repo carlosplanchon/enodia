@@ -730,8 +730,13 @@ def geocode_notebook(
     marks: Sequence[tuple[int, datetime]] = (),
     buildings: bool = False,
     fetch: Callable[..., dict[str, Any]] | None = None,
+    max_speed_ms: float = MAX_WALKING_SPEED_MS,
 ) -> Geocoding:
     """Look every crossing in a notebook up, and work out which answers to trust.
+
+    `max_speed_ms` is the pace above which a stretch is taken for a wrong
+    lookup rather than a fast walk: a brisk walk is under two metres a second,
+    a bicycle is not, and an outing ridden rather than walked raises it.
 
     `fetch` defaults to None and resolves to `post_overpass` here rather than in
     the signature, because a default argument is bound when the function is
@@ -791,7 +796,7 @@ def geocode_notebook(
             else:
                 result.found[line] = junction
 
-    _check_the_walk(result, times)
+    _check_the_walk(result, times, max_speed_ms)
     if buildings and result.found:
         # A second request, and only when asked for. The box cannot be known
         # until the crossings are, so this does not fold into the first one.
@@ -804,7 +809,9 @@ def geocode_notebook(
     return result
 
 
-def _check_the_walk(result: Geocoding, times: Sequence[datetime]) -> None:
+def _check_the_walk(
+    result: Geocoding, times: Sequence[datetime], max_speed_ms: float = MAX_WALKING_SPEED_MS
+) -> None:
     """Drop whatever the notebook's own times say could not have been walked."""
     result.walk_known = bool(times)
     if not times:
@@ -813,7 +820,7 @@ def _check_the_walk(result: Geocoding, times: Sequence[datetime]) -> None:
         one.line: where for one in result.crossings if (where := one.coordinates) is not None
     }
     placed.update((line, (junction.lat, junction.lon)) for line, junction in result.found.items())
-    wrong = implausible_stretches(result.crossings, placed, times)
+    wrong = implausible_stretches(result.crossings, placed, times, max_speed_ms)
     both = sum(
         1
         for index in range(len(result.crossings) - 1)

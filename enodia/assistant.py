@@ -617,7 +617,12 @@ def locate_menu(session: Session) -> Screen | None:
         session,
         "LOCATE",
         lines,
-        [("", "Scan now"), ("1", "From an outing's last scan"), ("m", "Main menu")],
+        [
+            ("", "Scan now"),
+            ("1", "From an outing's last scan"),
+            ("2", "Follow along: scan every few seconds, say where you are as it changes"),
+            ("m", "Main menu"),
+        ],
         default="",
         back=False,
     )
@@ -629,7 +634,14 @@ def locate_menu(session: Session) -> Screen | None:
         # quietly mean the last walk in it rather than the one you meant.
         return pick_outing(locate_from_outing, locate_menu)
     run_map(
-        with_flags(session.args, locate="", outing=None, map_add=None, check_map=False),
+        with_flags(
+            session.args,
+            locate="",
+            watch=chosen == "2",
+            outing=None,
+            map_add=None,
+            check_map=False,
+        ),
         session.map_file,
     )
     return locate_menu

@@ -391,8 +391,9 @@ def test_locating_scans_now_or_reads_a_walk_and_never_adds_to_the_map(
 ):
     logs = walked(tmp_path)
     seen = taken(monkeypatch, "run_map")
-    started(tmp_path, "5", "", "1", "1", "m", "q", monkeypatch=monkeypatch)
-    assert [one.locate for one in seen] == ["", str(next(logs.glob("*.jsonl")))]
+    started(tmp_path, "5", "", "1", "1", "2", "m", "q", monkeypatch=monkeypatch)
+    assert [one.locate for one in seen] == ["", str(next(logs.glob("*.jsonl"))), ""]
+    assert [one.watch for one in seen] == [False, False, True]  # "2" follows along
     assert all(one.map_add is None and one.check_map is False for one in seen)
 
 

@@ -5,7 +5,8 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from collections.abc import Sequence
+import time
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 
 from enodia import __version__
@@ -13,10 +14,12 @@ from enodia.anonymize import ExportError, export_outing, format_export, key_path
 from enodia.button import ButtonMarker, find_button_devices, list_input_devices
 from enodia.draw import svg_map
 from enodia.fingerprint import (
+    Fingerprint,
     Location,
     RadioBlocked,
     add_to_map,
     check_map,
+    follow,
     format_location,
     format_map_check,
     locate_sequence,
@@ -25,6 +28,7 @@ from enodia.fingerprint import (
     scans_from_log,
 )
 from enodia.geocode import (
+    MAX_WALKING_SPEED_MS,
     OVERPASS_URL,
     GeocodeError,
     format_geocoding,
@@ -35,7 +39,7 @@ from enodia.geocode import (
     write_geocoded,
 )
 from enodia.monitor import WifiMonitor
-from enodia.netlog import NetworkLog, find_open_networks, outings, read_log
+from enodia.netlog import NetworkLog, SeenNetwork, find_open_networks, outings, read_log
 from enodia.preflight import format_preflight, run_preflight
 from enodia.reconcile import (
     NotebookError,
@@ -340,6 +344,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="with --geocode: the Overpass endpoint to ask (default: %(default)s)",
     )
     parser.add_argument(
+        "--max-speed",
+        type=float,
+        default=MAX_WALKING_SPEED_MS,
+        metavar="M_PER_S",
+        help="with --geocode: the pace above which a stretch is taken for a wrong lookup "
+        "rather than a fast walk, in metres per second; raise it for an outing on a "
+        "bicycle (default: %(default)s)",
+    )
+    parser.add_argument(
         "--map",
         metavar="FILE",
         default=None,
@@ -363,6 +376,12 @@ def build_parser() -> argparse.ArgumentParser:
         "scan; says so instead of guessing when nothing in view matches the map",
     )
     parser.add_argument(
+        "--watch",
+        action="store_true",
+        help="with --locate and no log: keep scanning every --interval seconds and say where "
+        "you are as it changes; --cycles bounds it, Ctrl+C stops it",
+    )
+    parser.add_argument(
         "--check-map",
         action="store_true",
         help="hold out each walk in the map in turn, locate its scans from the rest, and "
@@ -375,6 +394,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="what a fingerprint is matched on: which networks are in view, or also how "
         "strong they came in, which is more precise and less portable between radios "
         "(default: networks)",
+    )
+    parser.add_argument(
+        "--weigh",
+        choices=["rarity", "alike"],
+        default="rarity",
+        help="what a network in view counts for when matched: 'rarity' weighs each by how "
+        "rare it is in the map, so a router heard everywhere says less than one heard on "
+        "one block; 'alike' counts them all the same (default: rarity)",
     )
     parser.add_argument(
         "--sequence",
@@ -446,6 +473,82 @@ def say_location(voice: BackgroundVoice, found: Location | None, lang: str, name
         voice.say("Uncertain", lang=lang)
 
 
+def run_watch(
+    args: argparse.Namespace, map_file: Path, known: Sequence[Fingerprint], voice: BackgroundVoice
+) -> int:
+    """`--locate --watch`: a fresh scan every interval, and where each one puts you.
+
+    Each scan is placed with the ones before it, the way a log's last scan is,
+    so a tie is settled by the walk as it happens. One line is printed per
+    scan. Speech is for what changes: a new stretch, or the map losing you or
+    finding you again, is said in full through `say_location`, and another
+    tenth of the way along the same stretch is a status line, said only when
+    the voice is free, since a percentage said late is another place. The loop
+    keeps the walk's own cadence, sleeping only what is left of `--interval`
+    after the scan and the lookup, and a fresh scan takes about five seconds
+    per card, so a shorter interval is not kept. A blocked radio costs the
+    cycle and nothing else, as on the walk: the run keeps what it knew, "Radio
+    blocked" is said once and "Scanning again" when it comes back. No log is
+    written, since recording is the walk's job.
+    """
+    by_signal = args.match == "signal"
+    by_rarity = args.weigh == "rarity"
+    blocked = False
+
+    def fresh() -> Iterator[list[SeenNetwork]]:
+        nonlocal blocked
+        done = 0
+        while args.cycles <= 0 or done < args.cycles:
+            started = time.monotonic()
+            done += 1
+            try:
+                seen = scan_now(args.interface)
+            except RadioBlocked as exc:
+                print(f"Cannot scan: {exc}")
+                if not blocked:
+                    voice.say("Radio blocked", lang=args.lang)
+                blocked = True
+            else:
+                if blocked:
+                    voice.say("Scanning again", lang=args.lang)
+                blocked = False
+                yield seen
+            if args.cycles <= 0 or done < args.cycles:
+                remaining = args.interval - (time.monotonic() - started)
+                if remaining > 0:
+                    time.sleep(remaining)
+
+    previous: Location | None = None
+    first = True
+    try:
+        for found in follow(known, fresh(), args.sequence, by_signal, by_rarity):
+            stamp = time.strftime("%H:%M:%S")
+            if found is None:
+                print(f"{stamp}  not on the map")
+            else:
+                print(f"{stamp}  {found.describe()}" + (", uncertain" if found.uncertain else ""))
+            moved = (
+                first
+                or (found is None) != (previous is None)
+                or (
+                    found is not None
+                    and previous is not None
+                    and found.place.key != previous.place.key
+                )
+            )
+            if moved:
+                say_location(voice, found, args.lang, args.ssid_lang)
+            elif found is not None and previous is not None:
+                if int(found.place.fraction * 10) != int(previous.place.fraction * 10):
+                    voice.say(
+                        f"{round(found.place.fraction * 100)} percent", lang=args.lang, status=True
+                    )
+            previous, first = found, False
+    except KeyboardInterrupt:
+        print("\nStopped.")
+    return 0
+
+
 def say_which_walk(log_path: str | None, wanted: str | None) -> str | None:
     """Which walk of a log is about to be read, said out loud when there is a choice.
 
@@ -508,6 +611,7 @@ def run_geocode(args: argparse.Namespace) -> int:
             url=args.overpass_url,
             marks=notebook_marks(args.marks, say_which_walk(args.marks, args.outing)),
             buildings=args.buildings,
+            max_speed_ms=args.max_speed,
         )
         # Nothing resolved means nothing to write: a copy of the notebook with no
         # coordinates in it would only be a second file to keep in step.
@@ -532,6 +636,7 @@ def run_geocode(args: argparse.Namespace) -> int:
 def run_map(args: argparse.Namespace, map_file: Path) -> int:
     """The map commands: add an outing to it, look yourself up in it, or measure it."""
     by_signal = args.match == "signal"
+    by_rarity = args.weigh == "rarity"
     if args.map_add:
         log, notebook = args.map_add
         try:
@@ -563,10 +668,10 @@ def run_map(args: argparse.Namespace, map_file: Path) -> int:
         print(
             format_map_check(
                 fingerprints,
-                check_map(fingerprints),
-                check_map(fingerprints, by_signal=True),
-                check_map(fingerprints, sequence="tie"),
-                check_map(fingerprints, sequence="path"),
+                check_map(fingerprints, by_rarity=by_rarity),
+                check_map(fingerprints, by_signal=True, by_rarity=by_rarity),
+                check_map(fingerprints, sequence="tie", by_rarity=by_rarity),
+                check_map(fingerprints, sequence="path", by_rarity=by_rarity),
             )
         )
         return 0
@@ -574,8 +679,16 @@ def run_map(args: argparse.Namespace, map_file: Path) -> int:
     voice = make_voice(args.voice)
     try:
         try:
-            # A fresh scan stands alone. A log has the scans before its last
-            # one, and they are what settles a tie between two stretches.
+            known = read_map(map_file)
+        except OSError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        if args.watch:
+            return run_watch(args, map_file, known, voice)
+        try:
+            # A fresh scan stands alone, unless `--watch` keeps the run. A log
+            # has the scans before its last one, and they are what settles a
+            # tie between two stretches.
             scans = (
                 scans_from_log(args.locate, say_which_walk(args.locate, args.outing))
                 if args.locate
@@ -588,12 +701,9 @@ def run_map(args: argparse.Namespace, map_file: Path) -> int:
         except (NotebookError, OSError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
-        try:
-            known = read_map(map_file)
-        except OSError as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 1
-        found = locate_sequence(known, scans, sequence=args.sequence, by_signal=by_signal)
+        found = locate_sequence(
+            known, scans, sequence=args.sequence, by_signal=by_signal, by_rarity=by_rarity
+        )
         print(format_location(found, map_file))
         say_location(voice, found, args.lang, args.ssid_lang)
         return 0
@@ -795,6 +905,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             ("--marks", args.marks is not None),
             ("--proxy", args.proxy is not None),
             ("--overpass-url", args.overpass_url != OVERPASS_URL),
+            ("--max-speed", args.max_speed != MAX_WALKING_SPEED_MS),
         )
         if given
     ]
@@ -828,6 +939,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     if args.svg is not None and not args.reconcile:
         parser.error("--svg: only meaningful together with --reconcile")
+    if args.watch and args.locate != "":
+        parser.error(
+            "--watch: only meaningful together with --locate and a live scan, not --locate LOG"
+        )
     if args.geocode and args.area is None:
         parser.error("--geocode: --area is needed, to say which city the notebook walks")
     mapping = bool(args.map_add) or args.locate is not None or args.check_map
@@ -840,6 +955,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         for flag, given in (
             ("--map", args.map is not None),
             ("--match", args.match != "networks"),
+            ("--weigh", args.weigh != "rarity"),
             ("--sequence", args.sequence != "tie"),
         )
         if given
