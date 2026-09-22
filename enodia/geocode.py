@@ -45,13 +45,13 @@ from typing import Any
 from enodia import __version__
 from enodia.netlog import read_log, records_for_outing
 from enodia.reconcile import (
-    CORNER_SPLIT,
     DATE_DIRECTIVE,
     MARKED_LINE,
     NOTEBOOK_LINE,
     UntimedNotebook,
     button_marks,
     confusable_crossings,
+    corner_streets,
     distance_metres,
     folded,
     read_notebook,
@@ -89,11 +89,6 @@ SKIP_HIGHWAYS = (
     "raceway",
 )
 
-# `_corner_halves` in reconcile.py folds before it splits, which lowercases the
-# " Y " joining two streets. Overpass needs the name with its accents and capitals
-# intact, so the split happens on the raw text and the case-insensitivity that
-# folding was providing has to be put back by hand.
-CORNER_SPLIT_RAW = re.compile(CORNER_SPLIT.pattern, re.IGNORECASE)
 MARK_HEAD = re.compile(r"^\s*#\d+\s")
 BBOX = re.compile(r"^\s*-?\d+(?:\.\d+)?(?:\s*,\s*-?\d+(?:\.\d+)?){3}\s*$")
 CONTROL = re.compile(r"[\x00-\x1f\x7f]")
@@ -223,14 +218,6 @@ def notebook_marks(
     if log_path is None:
         return []
     return button_marks(records_for_outing(read_log(log_path), outing))
-
-
-def corner_streets(name: str) -> tuple[str, str] | None:
-    """The two streets a corner is named after, as written, or None if it is not one."""
-    halves = [half.strip() for half in CORNER_SPLIT_RAW.split(name)]
-    if len(halves) != 2 or not all(halves) or folded(halves[0]) == folded(halves[1]):
-        return None
-    return (halves[0], halves[1])
 
 
 # --- Asking Overpass, once ---------------------------------------------------

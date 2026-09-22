@@ -64,7 +64,7 @@ MARKED_LINE = re.compile(
 )
 
 
-CORNER_SPLIT = re.compile(r"\s+(?:y|e|esq\.?|esquina|&)\s+|\s*/\s*")
+CORNER_SPLIT = re.compile(r"\s+(?:y|e|esq\.?|esquina|&)\s+|\s*/\s*", re.IGNORECASE)
 
 
 def folded(name: str) -> str:
@@ -80,12 +80,34 @@ def folded(name: str) -> str:
     return "".join(letter for letter in plain if not unicodedata.combining(letter))
 
 
-def _corner_halves(name: str) -> tuple[str, ...] | None:
-    """The two streets a corner is named after, sorted, or None if it is not one."""
-    halves = [half.strip() for half in CORNER_SPLIT.split(folded(name))]
-    if len(halves) != 2 or not all(halves):
+def corner_streets(name: str) -> tuple[str, str] | None:
+    """The two streets a corner is named after, as written, or None if it is not one.
+
+    A comma decides. "Treinta y Tres, Zorrilla" is the corner of Treinta y Tres
+    and Zorrilla, which nothing could have read off "Treinta y Tres y Zorrilla"
+    on its own, since the same words also spell the corner of Treinta and Tres
+    y Zorrilla. So the writer says so with a comma, and the " y " inside a half
+    is then left alone. Without one, " y ", " e ", " esq. ", " esquina ", " & "
+    and " / " join the two streets as they always did, and a name that comes
+    apart into one piece or three is a place, not a corner. The halves keep
+    their accents and capitals, since `--geocode` asks OpenStreetMap for them
+    as written, and folding is left to whoever compares them.
+    """
+    if "," in name:
+        halves = [half.strip() for half in name.split(",")]
+    else:
+        halves = [half.strip() for half in CORNER_SPLIT.split(name)]
+    if len(halves) != 2 or not all(halves) or folded(halves[0]) == folded(halves[1]):
         return None
-    return tuple(sorted(halves))
+    return (halves[0], halves[1])
+
+
+def _corner_halves(name: str) -> tuple[str, ...] | None:
+    """The two streets a corner is named after, folded and sorted, or None if it is not one."""
+    halves = corner_streets(name)
+    if halves is None:
+        return None
+    return tuple(sorted(folded(half) for half in halves))
 
 
 def confusable_crossings(names: Iterable[str]) -> list[tuple[str, ...]]:

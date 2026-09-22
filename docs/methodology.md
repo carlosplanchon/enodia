@@ -110,7 +110,7 @@ Each outing held out in turn, and its scans located from the other outings:
 
 A corner placed on the wrong street moves every scan of that block, and the reconciliation then comes out confidently wrong, which is worse than coming out short. So each of these is reported by line number and left alone:
 
-- a name that is not two streets ("Plaza Independencia", and "Treinta y Tres" is one street, not a corner of Treinta and Tres)
+- a name that is not two streets ("Plaza Independencia", and "Treinta y Tres" is one street, not a corner of Treinta and Tres: its corners are written with a comma, "Treinta y Tres, Rivera", the one separator that leaves the " y " inside a name alone)
 - a street the area does not have under the name you wrote
 - two streets that cross in two places, with both places and the distance between them named
 - an answer the server admits is incomplete

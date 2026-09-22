@@ -129,6 +129,26 @@ def test_a_name_that_is_not_two_streets_is_not_a_corner():
     assert corner_streets("Agraciada y agraciada") is None  # una calle consigo misma
 
 
+def test_a_comma_splits_a_corner_and_nothing_else_does():
+    # "Treinta y Tres" is one street. Written with a comma, the " y " inside it
+    # is left alone; written with " y " it comes apart into three, as before.
+    assert corner_streets("Treinta y Tres, Zorrilla") == ("Treinta y Tres", "Zorrilla")
+    assert corner_streets("Zorrilla ,Treinta y Tres") == ("Zorrilla", "Treinta y Tres")
+    assert corner_streets("Treinta y Tres y Zorrilla") is None
+    assert corner_streets("Treinta y Tres,") is None  # una mitad vacía
+    assert corner_streets("A, B, C") is None  # dos comas
+    assert corner_streets("Zorrilla, zorrilla") is None
+
+
+def test_a_corner_written_with_a_comma_is_looked_up_as_two_whole_streets(tmp_path):
+    seen = {}
+    path = notebook(tmp_path, "17:00 Treinta y Tres, Agraciada\n17:05 Treinta y Tres, Freire\n")
+    geocode_notebook(path, "Montevideo", fetch=answering(seen=seen))
+    assert '["name"="Treinta y Tres"]' in seen["query"]
+    assert '["name"="Agraciada"]' in seen["query"]
+    assert '["name"="Treinta"]' not in seen["query"] and '["name"="Tres"]' not in seen["query"]
+
+
 # --- the query ----------------------------------------------------------------
 
 

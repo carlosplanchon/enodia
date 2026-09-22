@@ -1221,6 +1221,11 @@ def test_a_corner_written_both_ways_round_is_reported_and_not_merged():
     ]
     assert confusable_crossings(["Agraciada / Freire", "Freire y Agraciada"]) != []
     assert confusable_crossings(["A y B y C", "C y B y A"]) == []  # tres mitades, no es esquina
+    # With a comma the street with a "y" in its name is one half, and both ways round is caught.
+    assert confusable_crossings(["Treinta y Tres, Zorrilla", "Zorrilla, Treinta y Tres"]) == [
+        ("Treinta y Tres, Zorrilla", "Zorrilla, Treinta y Tres")
+    ]
+    assert confusable_crossings(["Treinta y Tres, Zorrilla", "Zorrilla y Treinta y Tres"]) == []
 
 
 def test_the_report_names_the_crossings_to_settle_on(tmp_path, monkeypatch):

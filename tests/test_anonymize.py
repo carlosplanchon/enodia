@@ -328,6 +328,11 @@ def test_a_crossing_that_is_not_two_streets_becomes_one_place():
     assert crossing_name(names, "Plaza Independencia").startswith("place-")
     both = crossing_name(names, "Agraciada y Freire").split(" y ")
     assert len(both) == 2 and all(one.startswith("street-") for one in both)
+    # A corner written with a comma keeps it, and its halves are the same
+    # streets they are at any other corner.
+    renamed = crossing_name(names, "Treinta y Tres, Agraciada")
+    assert " y " not in renamed and renamed.split(", ")[1] == both[0]
+    assert renamed.split(", ")[0] == crossing_name(names, "Rivera, Treinta y Tres").split(", ")[1]
 
 
 def test_a_comment_in_the_notebook_does_not_survive_the_export(tmp_path):

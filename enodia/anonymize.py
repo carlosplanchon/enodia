@@ -433,11 +433,14 @@ def crossing_name(names: Names, name: str) -> str:
     the same street, which is what the canonical frame and the confusable-name
     check both live on. `corner_streets` is the same reader `--geocode` uses, so
     a name it will not split here is one Enodia would not have split either.
+    A corner the notebook wrote with a comma keeps it, so that the exported
+    notebook reads back the way the original did.
     """
     halves = corner_streets(name)
     if halves is None:
         return names.of("place", name)
-    return f"{names.of('street', halves[0])} y {names.of('street', halves[1])}"
+    joined = ", " if "," in name else " y "
+    return f"{names.of('street', halves[0])}{joined}{names.of('street', halves[1])}"
 
 
 def public_network(names: Names, seen: SeenNetwork, ssid: str) -> dict[str, Any]:
