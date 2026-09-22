@@ -1,0 +1,7 @@
+Crossings held out, and how far each method put the nearest scan from them:
+  crossing                            by movement   by clock
+  Rivera y Brito del Pino                    27 m       17 m
+  Rivera y Simón Bolívar                      7 m       13 m  <-
+
+  mean error: 17 m by movement, 15 m by clock
+  The clock wins by 2 m: keep --pace clock on this route.

@@ -1,0 +1,11 @@
+Stretches walked more than once, and how far apart the passes put the networks:
+
+  "Rivera y Brito del Pino" to "Rivera y Avenida Doctor Francisco Soca", 142 m
+    17:03:05 to 17:04:40, walked there
+    17:04:45 to 17:06:20, walked back
+    11 networks heard on more than one pass
+    the passes disagree by 9% of the stretch (13 m) on average
+    shift in the direction of travel: 5% (6 m), which is what a scan's lag looks like
+
+  Mean disagreement over 1 stretch: 9% of a stretch.
+  That is the error bar on placing an access point along a route, measured against nothing but the walk itself.

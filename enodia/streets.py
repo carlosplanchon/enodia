@@ -189,7 +189,7 @@ class StreetMap:
         """The block from one mark to the next, as drawn, or None to use the chord.
 
         Matched on the geometry and never on the marks' names. A notebook
-        writes "Agraciada y Freire" and the street is called "Avenida Agraciada",
+        writes "Rivera y Obligado" and the street is called "Avenida General Rivera",
         the same corner turns up spelled two ways, and a mark may have been
         typed in by hand rather than looked up. Two coordinates and a drawing
         need none of that: the block is the run of the way between the point

@@ -307,7 +307,7 @@ class WifiMonitor:
         """A press of the headset button: a crossing, passed now.
 
         Says the number so that the operator writes it next to the crossing's
-        name: "Mark 7" on the headphones, "7 Agraciada y Freire" on the paper,
+        name: "Mark 7" on the headphones, "7 Rivera y Obligado" on the paper,
         and the reconciliation joins the two by the number.
         """
         self.marks += 1

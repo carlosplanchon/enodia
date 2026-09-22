@@ -67,8 +67,8 @@ MAX_WALKING_SPEED_MS = 2.5
 JUNCTION_CLUSTER_M = 60.0
 NEARBY_JUNCTION_M = 30.0
 
-# The names OSM may carry a street under. A notebook writes "Agraciada" where the
-# map says "Avenida Agraciada", and "Propios" where it says "Avenida Luis Alberto
+# The names OSM may carry a street under. A notebook writes "Rivera" where the
+# map says "Avenida General Rivera", and "Propios" where it says "Avenida Luis Alberto
 # de Herrera" with `alt_name=Propios`. Asking for all of them and matching folded
 # afterwards costs one longer query and saves most of the misses.
 NAME_TAGS = ("name", "alt_name", "short_name", "official_name", "name:es", "loc_name")
@@ -762,7 +762,7 @@ def geocode_notebook(
         corners[one.line] = pair
 
     # One street however many ways the notebook spells it: asking Overpass for
-    # both "Agraciada" and "agraciada" costs a clause and finds the same ways.
+    # both "Rivera" and "rivera" costs a clause and finds the same ways.
     wanted: dict[str, str] = {}
     for pair in corners.values():
         for name in pair:

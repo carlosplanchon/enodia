@@ -1,0 +1,4 @@
+17:00:00 Rivera y Avenida Doctor Francisco Soca @ -34.903126, -56.156023
+17:01:49 Rivera y Brito del Pino @ -34.903131, -56.157581
+17:04:02 Rivera y Simón Bolívar @ -34.903101, -56.159047
+17:05:35 Rivera y Obligado @ -34.903011, -56.160359

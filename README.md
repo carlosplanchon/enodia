@@ -49,15 +49,15 @@ Before walking, follow [machine setup](docs/setup.md) to keep the laptop awake w
 Try the bundled example, from a clone of the repository, without scanning any radios:
 
 ```bash
-enodia --locate samples/agraciada-query.jsonl \
-  --map samples/agraciada-map.jsonl --voice none
+enodia --locate samples/rivera-query.jsonl \
+  --map samples/rivera-map.jsonl --voice none
 ```
 
 ```text
-You are between "Avenida Agraciada y Doctor Salvador García Pintos" and "Avenida Agraciada y San Fructuoso", 63% of the way
-  around [-34.88028, -56.19569]
-  5 fingerprints agree, best similarity 100%, spread 11% of the stretch (17 m)
-  from evidence last gathered 2026-09-17 17:03
+You are between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 59% of the way
+  around [-34.90311, -56.15844]
+  5 fingerprints agree, best similarity 90%, spread 11% of the stretch (14 m)
+  from evidence last gathered 2026-09-14 17:03
 ```
 
 The street names, coordinates and geometry are real OpenStreetMap data. The radio observations are synthetic. This demonstrates the workflow, not measured accuracy on a real walk. [Inputs and reproduction commands](samples/README.md).
@@ -80,8 +80,8 @@ Mark the first crossing, each crossing along the way, and the last one. Write ea
 **3. Transcribe the notebook into `notebook.txt`.**
 
 ```text
-#1 Avenida Agraciada y Doctor Salvador García Pintos
-#2 Avenida Agraciada y San Fructuoso
+#1 Rivera y Avenida Doctor Francisco Soca
+#2 Rivera y Brito del Pino
 ```
 
 `#1` means button mark 1. For timed notes, replace it with a time such as `17:45:00`. Keep crossing names consistent between outings.

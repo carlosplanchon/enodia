@@ -194,7 +194,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--reconcile",
         nargs=2,
         metavar=("LOG", "NOTEBOOK"),
-        help="join a log with a notebook of timed street crossings ('17:52:10 Agraciada y Freire' "
+        help="join a log with a notebook of timed street crossings ('17:52:10 Rivera y Obligado' "
         "per line) and print where every network was strongest and, with coordinates "
         "on the crossings, where each access point probably stands; offline",
     )

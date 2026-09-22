@@ -181,8 +181,8 @@ so rather than being waited on.
 is written by hand, one outing at a time, weeks apart, so `Yaguaron` one week and `Yaguaron`
 with its accent the next are one street: `folded` takes case, accents and runs of spaces out,
 and the canonical frame and the confusable-name check both compare by it. The export hashed the
-spelling instead. Three corners of one avenue, written `Agraciada`, `agraciada` and
-`AGRACIADA`, came out as three avenues, which is not a cosmetic difference in a file whose
+spelling instead. Three corners of one avenue, written `Rivera`, `rivera` and
+`RIVERA`, came out as three avenues, which is not a cosmetic difference in a file whose
 whole point is being reconciled again: it changes the shape of the walk that gets published.
 Street and place names are folded before they are hashed. A BSSID is folded for case only, the
 way `address` and `SeenNetwork.key` fold it, and an SSID is left exactly as written.

@@ -552,7 +552,8 @@ the way and threw every scan out as evidence of pace.
 
 That is the only claim in Enodia so far that a real walk has settled either way, and it settled
 it against the code. Everything else in the README that carries a measured result comes from
-synthetic observations built to have a known answer. The bundled Agraciada example uses real
-OpenStreetMap coordinates and geometry, but its radios and passes are synthetic. That is why
+synthetic observations built to have a known answer. The bundled Rivera example uses real
+OpenStreetMap corners and geometry, but its radios and outings are synthetic, and the script
+beside them says exactly how. That is why
 `--check-pace`, `--check-passes` and `--check-map` exist: they let a real outing settle the rest
 the same way.

@@ -12,9 +12,9 @@ along the route itself when it has not. No GPS, nothing online.
 
 Notebook format, one crossing per line::
 
-    17:52:10 Agraciada y Freire
-    17:58 Agraciada y San Fructuoso          # seconds are optional
-    18:05:30 Plaza Vidiella @ -34.8612, -56.2072   # coordinates, if you add them later
+    17:52:10 Rivera y Avenida Doctor Francisco Soca
+    17:58 Rivera y Brito del Pino               # seconds are optional
+    18:05:30 Rivera y Simón Bolívar @ -34.903101, -56.159047   # coordinates, if you add them later
     date 2026-09-06                          # switch the day for the lines below
     03:25:00 McDonald's Paso Molino
 
@@ -91,7 +91,7 @@ def _corner_halves(name: str) -> tuple[str, ...] | None:
 def confusable_crossings(names: Iterable[str]) -> list[tuple[str, ...]]:
     """Crossings written both ways round, which Enodia is otherwise taking for two.
 
-    "Agraciada y Freire" and "Freire y Agraciada" are one corner, and a notebook
+    "Rivera y Obligado" and "Obligado y Rivera" are one corner, and a notebook
     written by hand weeks apart writes it both ways sooner or later. To Enodia
     they are two corners, so the block between one of them and the next splits
     into two stretches that never match each other, the map holds each half

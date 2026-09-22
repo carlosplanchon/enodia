@@ -20,18 +20,19 @@ Two biases are worth knowing before you draw anything on a map. A walk down one 
 
 ## Does reading the pace actually help?
 
-The notebook is the only ground truth there is, so it is also the test. `--check-pace` holds out each crossing in turn, reconciles without it, and measures how far each method puts the scan nearest that crossing's time from where the crossing actually was. On a **synthetic** two-block route built with a known six-minute stop in the first block (not a real outing, see *Limits* in [the README](../README.md)) it reports:
+The notebook is the only ground truth there is, so it is also the test. `--check-pace` holds out each crossing in turn, reconciles without it, and measures how far each method puts the scan nearest that crossing's time from where the crossing actually was. On the bundled sample, three blocks of Avenida Rivera with a **synthetic** half-minute stop forty percent of the way down the middle one (not a real outing, see *Limits* in [the README](../README.md)), it reports:
 
 ```
 Crossings held out, and how far each method put the nearest scan from them:
   crossing                            by movement   by clock
-  Avenida Uno y Calle B                       8 m       50 m  <-
+  Rivera y Brito del Pino                    27 m       17 m
+  Rivera y Simón Bolívar                      7 m       13 m  <-
 
-  mean error: 8 m by movement, 50 m by clock
-  Reading the pace wins by 41 m on average.
+  mean error: 17 m by movement, 15 m by clock
+  The clock wins by 2 m: keep --pace clock on this route.
 ```
 
-It needs coordinates on at least three crossings in a row, since without them there is no distance to measure. If the clock wins on your route the report says so, and `--pace clock` is one flag away. That the question is answerable with the walk you already did matters more than which way it comes out: neither method has been checked against a real outing yet.
+Two metres between the methods is nothing: the stop helps the pace at the crossing after it, and the flicker of far routers at the edge of hearing, which reads as movement, costs it at the crossing before. It needs coordinates on at least three crossings in a row, since without them there is no distance to measure. If the clock wins on your route the report says so, and `--pace clock` is one flag away. That the question is answerable with the walk you already did matters more than which way it comes out: neither method has been checked against a real outing yet.
 
 ## The same block, walked twice
 
@@ -40,17 +41,17 @@ Walk a block, turn round at the corner and walk it back, and you have left a sma
 ```
 Stretches walked more than once, and how far apart the passes put the networks:
 
-  "Treinta y Tres" to "Solari", 180 m
-    17:00:05 to 17:01:55, walked there
-    17:02:05 to 17:03:55, walked back
-    4 networks heard on more than one pass
-    the passes disagree by 4% of the stretch (7 m) on average
-    shift in the direction of travel: 2% (3 m), which is what a scan's lag looks like
+  "Rivera y Brito del Pino" to "Rivera y Avenida Doctor Francisco Soca", 142 m
+    17:03:05 to 17:04:40, walked there
+    17:04:45 to 17:06:20, walked back
+    11 networks heard on more than one pass
+    the passes disagree by 9% of the stretch (13 m) on average
+    shift in the direction of travel: 5% (6 m), which is what a scan's lag looks like
 
-  Mean disagreement over 1 stretch: 4% of a stretch.
+  Mean disagreement over 1 stretch: 9% of a stretch.
 ```
 
-(A **synthetic** out and back built with three seconds of scan lag in it, not a real outing. See *Limits* in [the README](../README.md).)
+(The bundled sample's second outing, which turns round at Soca and walks the block back, with the three seconds of scan lag its generator puts into every scan. **Synthetic** radios, not a real outing. See *Limits* in [the README](../README.md).)
 
 Two numbers come out, and they mean different things. The **disagreement** is how far apart the two passes put the same access point. It is a measure of consistency and not of accuracy: it is taken against nothing but the walk itself, so two passes can agree closely and both be displaced from where the access point really stands. Anything that biases both passes the same way is invisible to it, and the straight-street case below is exactly that. The **shift** is systematic rather than random, and it is the more interesting one. A scan sweeps its channels over seconds and is stamped when it finishes, so an access point was always heard a little before it was recorded, which places it a little further along than it really is, in whichever direction you happened to be walking. Walk back and that error reverses. The two estimates therefore straddle the truth, half the gap between them is the lag, and their midpoint cancels it. It is the same reasoning as a reciprocal levelling in surveying.
 
@@ -61,10 +62,10 @@ Read the shift as an upper bound rather than a measurement: it also absorbs what
 One JSON object per line, like everything else Enodia writes.
 
 ```json
-{"time": "2026-09-14T17:03:24-03:00", "outing": "2026-09-14T17:00:30-03:00/sample-a14", "walk": "2026-09-14T17:00:30-03:00/sample-a14#0",
- "from": "Avenida Agraciada y Doctor Salvador García Pintos", "to": "Avenida Agraciada y San Fructuoso", "fraction": 0.68,
- "lat": -34.880341, "lon": -56.195664, "length_m": 148.0,
- "networks": [{"ssid": "sample-ap-04", "bssid": "02:00:00:00:00:04", "signal_dbm": -41}]}
+{"time": "2026-09-14T17:00:15-03:00", "outing": "2026-09-14T17:00:00-03:00/sample-r14", "walk": "2026-09-14T17:00:00-03:00/sample-r14#0",
+ "from": "Rivera y Avenida Doctor Francisco Soca", "to": "Rivera y Brito del Pino", "fraction": 0.1354,
+ "lat": -34.903126, "lon": -56.156233, "length_m": 142.1,
+ "networks": [{"ssid": "sample-ap-01", "bssid": "02:00:00:00:00:01", "signal_dbm": -70}]}
 ```
 
 That is an abbreviated object copied from the checked-in sample map: the place and time are
@@ -83,23 +84,23 @@ Every number in the map is checked on the way back in rather than trusted, since
 `--check-map` holds out one outing at a time and locates every scan of it from the other outings. A map with a single outing holds out one pass down one stretch instead, which is what a `walk` is in the map, so an outing that doubled back is tested on the pass it did not train on, over the same street: the thing worth knowing, from data an ordinary walk already produced, and the report says that such a result is the map recognising a walk rather than a place. Holding out one scan at a time would be worthless: its neighbour was taken five seconds and six metres later and sees almost exactly the same networks, so the map would be scoring itself on a copy of the question.
 
 ```
-Map: 12 fingerprints, 2 walks over 1 stretches, 2 outings.
+Map: 144 fingerprints, 7 walks over 3 stretches, 2 outings.
 
 Each outing held out in turn, and its scans located from the other outings:
 
                                 by networks  and by signal  settling ties choosing the path
-  scans held out                         12             12             12                12
-  placed on the right stretch            12             12             12                12
-  placed across a mark                    0              0              0                 0
+  scans held out                        144            144            144               144
+  placed on the right stretch           136            137            136               136
+  placed across a mark                    8              7              8                 8
   landed on the wrong stretch             0              0              0                 0
   not on the map                          0              0              0                 0
-  mean error, of a stretch               7%             2%             7%                7%
-  median error, of a stretch             5%             2%             5%                5%
-  mean error in metres                 10 m            3 m           10 m              10 m
-  median error in metres                7 m            3 m            7 m               7 m
+  mean error, of a stretch              17%            18%            17%               18%
+  median error, of a stretch            16%            17%            16%               17%
+  mean error in metres                 23 m           24 m           23 m              23 m
+  median error in metres               22 m           22 m           22 m              22 m
 ```
 
-(Two **synthetic** passes over the real 148 m Agraciada geometry in [`samples/`](../samples/README.md), not real outings. See *Limits* in [the README](../README.md).) The error is given twice on purpose. A fraction of a block is comparable between any two stretches, and metres are only known for the stretches whose crossings carry coordinates, so a map that mixes notebooks with and without them says how many of the answers the distances actually cover instead of averaging the measurable half and calling it the whole. Signal wins here because the synthetic levels were made to vary smoothly along the block. Only a real outing can say whether that survives different radios, bodies and days. The important structural point is that each pass is held out against the other outing, so none of these answers is the map recognising the walk it trained on. A scan answered on the stretch next door, a few metres past the mark, is placed across a mark and measured through it. Only a stretch with no mark in common is a different street. The last two columns place each scan with the scans before it in the same outing, the way `--locate LOG` does, one for each `--sequence`. Settling ties takes the stretch the scans before it were on, or one sharing a mark with it, and only when two stretches match a scan about as well. Choosing the path takes the likeliest path through all of them, which can overrule the scan itself. Two scans in a row there can be several cycles apart where scans fell outside the notebook, and the path prices that as one step. A scan the map does not know stays unknown in every column.
+(Two **synthetic** outings over the real 396 m of Avenida Rivera in [`samples/`](../samples/README.md), one each way and the second turning back for a block, not real outings. See *Limits* in [the README](../README.md).) The error is given twice on purpose. A fraction of a block is comparable between any two stretches, and metres are only known for the stretches whose crossings carry coordinates, so a map that mixes notebooks with and without them says how many of the answers the distances actually cover instead of averaging the measurable half and calling it the whole. Signal adds nothing here: the synthetic radios carry a decibel of noise on every sighting and drift a little between the two days, which is roughly what two walks do to each other, and only a real outing can say what real radios, bodies and days do. The important structural point is that each pass is held out against the other outing, so none of these answers is the map recognising the walk it trained on. A scan answered on the stretch next door, a few metres past the mark, is placed across a mark and measured through it. Only a stretch with no mark in common is a different street. The last two columns place each scan with the scans before it in the same outing, the way `--locate LOG` does, one for each `--sequence`. Settling ties takes the stretch the scans before it were on, or one sharing a mark with it, and only when two stretches match a scan about as well. Choosing the path takes the likeliest path through all of them, which can overrule the scan itself. Two scans in a row there can be several cycles apart where scans fell outside the notebook, and the path prices that as one step. A scan the map does not know stays unknown in every column.
 
 ## What comes out
 

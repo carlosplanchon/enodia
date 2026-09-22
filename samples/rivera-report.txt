@@ -1,0 +1,99 @@
+Crossings: 4, from 17:00:00 Rivera y Avenida Doctor Francisco Soca to 17:05:35 Rivera y Obligado
+Scans: 67 placed, 0 before the first crossing, 0 after the last
+Networks placed: 20 (2 open)
+Blocks: 3 of 3 follow the street as drawn, 0 on the straight line between their marks
+
+Scans along the route:
+  17:00:00    3 networks  at "Rivera y Avenida Doctor Francisco Soca"
+  17:00:05    4 networks  between "Rivera y Avenida Doctor Francisco Soca" and "Rivera y Brito del Pino", 8% of the way
+  17:00:10    5 networks  between "Rivera y Avenida Doctor Francisco Soca" and "Rivera y Brito del Pino", 14% of the way
+  17:00:15    5 networks  between "Rivera y Avenida Doctor Francisco Soca" and "Rivera y Brito del Pino", 14% of the way
+  17:00:20    5 networks  between "Rivera y Avenida Doctor Francisco Soca" and "Rivera y Brito del Pino", 24% of the way
+  17:00:25    6 networks  between "Rivera y Avenida Doctor Francisco Soca" and "Rivera y Brito del Pino", 29% of the way
+  17:00:30    5 networks  between "Rivera y Avenida Doctor Francisco Soca" and "Rivera y Brito del Pino", 34% of the way
+  17:00:35    5 networks  between "Rivera y Avenida Doctor Francisco Soca" and "Rivera y Brito del Pino", 34% of the way
+  17:00:40    5 networks  between "Rivera y Avenida Doctor Francisco Soca" and "Rivera y Brito del Pino", 34% of the way
+  17:00:45    6 networks  between "Rivera y Avenida Doctor Francisco Soca" and "Rivera y Brito del Pino", 39% of the way
+  17:00:50    7 networks  between "Rivera y Avenida Doctor Francisco Soca" and "Rivera y Brito del Pino", 43% of the way
+  17:00:55    7 networks  between "Rivera y Avenida Doctor Francisco Soca" and "Rivera y Brito del Pino", 43% of the way
+  17:01:00    7 networks  between "Rivera y Avenida Doctor Francisco Soca" and "Rivera y Brito del Pino", 43% of the way
+  17:01:05    7 networks  between "Rivera y Avenida Doctor Francisco Soca" and "Rivera y Brito del Pino", 43% of the way
+  17:01:10    8 networks  between "Rivera y Avenida Doctor Francisco Soca" and "Rivera y Brito del Pino", 47% of the way
+  17:01:15    7 networks  between "Rivera y Avenida Doctor Francisco Soca" and "Rivera y Brito del Pino", 50% of the way
+  17:01:20    8 networks  between "Rivera y Avenida Doctor Francisco Soca" and "Rivera y Brito del Pino", 54% of the way
+  17:01:25    7 networks  between "Rivera y Avenida Doctor Francisco Soca" and "Rivera y Brito del Pino", 64% of the way
+  17:01:30    9 networks  between "Rivera y Avenida Doctor Francisco Soca" and "Rivera y Brito del Pino", 71% of the way
+  17:01:35    8 networks  between "Rivera y Avenida Doctor Francisco Soca" and "Rivera y Brito del Pino", 80% of the way
+  17:01:40   11 networks  between "Rivera y Avenida Doctor Francisco Soca" and "Rivera y Brito del Pino", 88% of the way
+  17:01:45    8 networks  between "Rivera y Avenida Doctor Francisco Soca" and "Rivera y Brito del Pino", 96% of the way
+  17:01:50    9 networks  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 1% of the way
+  17:01:55   10 networks  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 13% of the way
+  17:02:00   11 networks  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 17% of the way
+  17:02:05   10 networks  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 21% of the way
+  17:02:10   10 networks  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 21% of the way
+  17:02:15   11 networks  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 25% of the way
+  17:02:20   10 networks  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 30% of the way
+  17:02:25   10 networks  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 38% of the way
+  17:02:30    9 networks  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 42% of the way
+  17:02:35    8 networks  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 47% of the way
+  17:02:40    8 networks  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 47% of the way
+  17:02:45    9 networks  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 52% of the way
+  17:02:50    9 networks  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 52% of the way
+  17:02:55    8 networks  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 57% of the way
+  17:03:00    8 networks  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 57% of the way
+  17:03:05    8 networks  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 57% of the way
+  17:03:10    9 networks  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 62% of the way
+  17:03:15    9 networks  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 71% of the way
+  17:03:20    9 networks  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 80% of the way
+  17:03:25   10 networks  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 85% of the way
+  17:03:30    9 networks  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 89% of the way
+  17:03:35    9 networks  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 89% of the way
+  17:03:40    9 networks  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 98% of the way
+  17:03:45    9 networks  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 98% of the way
+  17:03:50    9 networks  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 98% of the way
+  17:03:55    9 networks  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 98% of the way
+  17:04:00    9 networks  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 98% of the way
+  17:04:05   10 networks  between "Rivera y Simón Bolívar" and "Rivera y Obligado", 3% of the way
+  17:04:10    9 networks  between "Rivera y Simón Bolívar" and "Rivera y Obligado", 9% of the way
+  17:04:15   11 networks  between "Rivera y Simón Bolívar" and "Rivera y Obligado", 20% of the way
+  17:04:20   11 networks  between "Rivera y Simón Bolívar" and "Rivera y Obligado", 20% of the way
+  17:04:25    9 networks  between "Rivera y Simón Bolívar" and "Rivera y Obligado", 30% of the way
+  17:04:30   10 networks  between "Rivera y Simón Bolívar" and "Rivera y Obligado", 36% of the way
+  17:04:35    9 networks  between "Rivera y Simón Bolívar" and "Rivera y Obligado", 42% of the way
+  17:04:40   10 networks  between "Rivera y Simón Bolívar" and "Rivera y Obligado", 48% of the way
+  17:04:45    9 networks  between "Rivera y Simón Bolívar" and "Rivera y Obligado", 53% of the way
+  17:04:50    9 networks  between "Rivera y Simón Bolívar" and "Rivera y Obligado", 53% of the way
+  17:04:55    9 networks  between "Rivera y Simón Bolívar" and "Rivera y Obligado", 53% of the way
+  17:05:00    8 networks  between "Rivera y Simón Bolívar" and "Rivera y Obligado", 60% of the way
+  17:05:05    8 networks  between "Rivera y Simón Bolívar" and "Rivera y Obligado", 60% of the way
+  17:05:10    8 networks  between "Rivera y Simón Bolívar" and "Rivera y Obligado", 60% of the way
+  17:05:15    7 networks  between "Rivera y Simón Bolívar" and "Rivera y Obligado", 67% of the way
+  17:05:20    8 networks  between "Rivera y Simón Bolívar" and "Rivera y Obligado", 74% of the way
+  17:05:25    8 networks  between "Rivera y Simón Bolívar" and "Rivera y Obligado", 87% of the way
+  17:05:30    7 networks  between "Rivera y Simón Bolívar" and "Rivera y Obligado", 95% of the way
+
+Access points placed on the map from every sighting: 20 of 20
+12 of those 20 were barely pinned down: the signal hardly moved the estimate
+from the middle of where you walked, so read them as heard from around there, not found.
+
+Networks along the route (time and place of the strongest sighting):
+  17:00:15  sample-ap-18 02:00:00:00:00:12  -89 dBm, seen 2x  between "Rivera y Avenida Doctor Francisco Soca" and "Rivera y Brito del Pino", 14% of the way  AP near [-34.90313, -56.15623] +/-0 m (barely pinned down, few sightings)
+  17:00:20  sample-ap-01 02:00:00:00:00:01  -69 dBm, seen 17x  between "Rivera y Avenida Doctor Francisco Soca" and "Rivera y Brito del Pino", 24% of the way  AP near [-34.90313, -56.15644] +/-17 m (barely pinned down)
+  17:00:45  sample-ap-02 02:00:00:00:00:02  -68 dBm, seen 26x  between "Rivera y Avenida Doctor Francisco Soca" and "Rivera y Brito del Pino", 39% of the way  AP near [-34.90313, -56.15674] +/-28 m
+  17:00:55  sample-ap-15 02:00:00:00:00:0f  -88 dBm, seen 9x  between "Rivera y Avenida Doctor Francisco Soca" and "Rivera y Brito del Pino", 43% of the way  AP near [-34.90313, -56.15673] +/-11 m (barely pinned down)
+  17:01:15  sample-ap-03 02:00:00:00:00:03  -62 dBm, seen 32x  between "Rivera y Avenida Doctor Francisco Soca" and "Rivera y Brito del Pino", 50% of the way  AP near [-34.90313, -56.15697] +/-38 m
+  17:01:30  sample-ap-04 02:00:00:00:00:04  -73 dBm, seen 40x  between "Rivera y Avenida Doctor Francisco Soca" and "Rivera y Brito del Pino", 71% of the way  AP near [-34.90312, -56.15754] +/-56 m (barely pinned down)
+  17:01:45  sample-ap-13 02:00:00:00:00:0d  -83 dBm, seen 15x  between "Rivera y Avenida Doctor Francisco Soca" and "Rivera y Brito del Pino", 96% of the way  AP near [-34.90313, -56.15748] +/-32 m (barely pinned down)
+  17:02:00  sample-ap-05 02:00:00:00:00:05  -61 dBm, seen 52x  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 17% of the way  AP near [-34.90312, -56.15780] +/-54 m
+  17:02:20  sample-ap-06 02:00:00:00:00:06  -68 dBm, seen 45x  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 30% of the way  AP near [-34.90312, -56.15820] +/-46 m  OPEN
+  17:02:25  sample-ap-16 02:00:00:00:00:10  -88 dBm, seen 3x  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 38% of the way  AP near [-34.90312, -56.15832] +/-18 m (barely pinned down)
+  17:03:15  sample-ap-07 02:00:00:00:00:07  -63 dBm, seen 43x  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 71% of the way  AP near [-34.90311, -56.15856] +/-39 m
+  17:03:25  sample-ap-20 02:00:00:00:00:14  -80 dBm, seen 44x  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 85% of the way  AP near [-34.90310, -56.15877] +/-52 m (barely pinned down)
+  17:03:50  sample-ap-14 02:00:00:00:00:0e  -72 dBm, seen 46x  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 98% of the way  AP near [-34.90309, -56.15898] +/-47 m (barely pinned down)
+  17:03:45  sample-ap-08 02:00:00:00:00:08  -68 dBm, seen 46x  between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 98% of the way  AP near [-34.90310, -56.15890] +/-42 m
+  17:04:05  sample-ap-09 02:00:00:00:00:09  -65 dBm, seen 45x  between "Rivera y Simón Bolívar" and "Rivera y Obligado", 3% of the way  AP near [-34.90309, -56.15909] +/-41 m  OPEN
+  17:04:40  sample-ap-17 02:00:00:00:00:11  -81 dBm, seen 28x  between "Rivera y Simón Bolívar" and "Rivera y Obligado", 48% of the way  AP near [-34.90307, -56.15947] +/-35 m (barely pinned down)
+  17:04:40  sample-ap-10 02:00:00:00:00:0a  -66 dBm, seen 24x  between "Rivera y Simón Bolívar" and "Rivera y Obligado", 48% of the way  AP near [-34.90307, -56.15957] +/-24 m
+  17:05:05  sample-ap-11 02:00:00:00:00:0b  -78 dBm, seen 16x  between "Rivera y Simón Bolívar" and "Rivera y Obligado", 60% of the way  AP near [-34.90305, -56.15978] +/-16 m (barely pinned down)
+  17:05:20  sample-ap-19 02:00:00:00:00:13  -89 dBm, seen 1x  between "Rivera y Simón Bolívar" and "Rivera y Obligado", 74% of the way  AP near [-34.90304, -56.16002] +/-0 m (barely pinned down, few sightings)
+  17:05:25  sample-ap-12 02:00:00:00:00:0c  -65 dBm, seen 17x  between "Rivera y Simón Bolívar" and "Rivera y Obligado", 87% of the way  AP near [-34.90305, -56.15988] +/-21 m (barely pinned down)
