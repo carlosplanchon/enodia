@@ -20,10 +20,10 @@ Two biases are worth knowing before you draw anything on a map. A walk down one 
 
 ## Does reading the pace actually help?
 
-The notebook is the only ground truth there is, so it is also the test. `--check-pace` holds out each crossing in turn, reconciles without it, and measures how far each method puts the scan nearest that crossing's time from where the crossing actually was. On the bundled sample, three blocks of Avenida Rivera with a **synthetic** half-minute stop forty percent of the way down the middle one (not a real outing, see *Limits* in [the README](../README.md)), it reports:
+The notebook is the only ground truth there is, so it is also the test. `--check-pace` holds out each crossing in turn, reconciles without it, and measures how far along the walk each method puts the scan nearest that crossing's time from where the crossing actually is. Along the walk and not in a straight line: without the crossing, the two legs that met there reconcile as one stretch, and where the route turns at that crossing the one stretch is a chord the corner is nowhere near. On the first real outing, a grid of hundred-metre blocks, that put a scan placed at exactly the right moment seventy metres from the corner for both methods alike, at each of the twelve corners the route turned at, and said nothing about the pace. What the methods differ on is how far along the way the scan is, so that is what is measured: the fraction each gave, against the fraction of the two legs the crossing sits at, in metres of the two legs. On the bundled sample, three blocks of Avenida Rivera with a **synthetic** half-minute stop forty percent of the way down the middle one (not a real outing, see *Limits* in [the README](../README.md)), it reports:
 
 ```
-Crossings held out, and how far each method put the nearest scan from them:
+Crossings held out, and how far along the walk each method put the nearest scan from them:
   crossing                            by movement   by clock
   Rivera y Brito del Pino                    27 m       17 m
   Rivera y Simón Bolívar                      7 m       13 m  <-

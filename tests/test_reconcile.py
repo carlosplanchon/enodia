@@ -595,6 +595,46 @@ def test_check_pace_holds_out_a_crossing_and_measures_both_methods(tmp_path, mon
     assert "Reading the pace wins by" in report
 
 
+def test_check_pace_measures_along_the_walk_where_the_route_turns(tmp_path, monkeypatch):
+    # An L: east for a block, then south for a block, at a steady pace, with
+    # a scan taken at the corner at the moment the notebook says. Both methods
+    # put that scan halfway, which is where the corner is along the walk, so
+    # both are right. Measured in a straight line they were sixty metres off,
+    # because without the corner the two legs reconcile as one chord.
+    log = write_log(
+        tmp_path / "networks.jsonl",
+        monkeypatch,
+        [
+            ("2026-09-05T17:02:30-03:00", seen("A", "B")),
+            ("2026-09-05T17:05:00-03:00", seen("B", "C")),
+            ("2026-09-05T17:07:30-03:00", seen("C", "D")),
+        ],
+    )
+    nb = tmp_path / "libreta.txt"
+    nb.write_text(
+        "17:00 Start @ -34.90000, -56.1900\n"
+        "17:05 Corner @ -34.90000, -56.1890\n"  # 91 m east
+        "17:10 End @ -34.90082, -56.1890\n"  # 91 m south
+    )
+    (held,) = check_pace(log, nb)
+    assert held.waypoint.name == "Corner"
+    assert held.by_movement == pytest.approx(0, abs=1) and held.by_time == pytest.approx(0, abs=1)
+    chord_middle = (-34.90041, -56.1895)
+    assert distance_metres(*chord_middle, -34.90000, -56.1890) > 60  # what a straight line said
+    assert "how far along the walk" in format_pace_check([held])
+
+
+def test_check_pace_has_nothing_to_measure_when_the_crossings_share_a_point(tmp_path, monkeypatch):
+    log = write_log(
+        tmp_path / "networks.jsonl",
+        monkeypatch,
+        [("2026-09-05T17:05:00-03:00", seen("A"))],
+    )
+    nb = tmp_path / "libreta.txt"
+    nb.write_text("17:00 A @ -34.90, -56.19\n17:05 B @ -34.90, -56.19\n17:10 C @ -34.90, -56.19\n")
+    assert check_pace(log, nb) == []
+
+
 def test_check_pace_needs_coordinates(tmp_path, monkeypatch):
     log = write_log(
         tmp_path / "networks.jsonl",

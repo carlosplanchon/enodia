@@ -1363,7 +1363,11 @@ def format_report(result: Reconciliation, with_scans: bool = False) -> str:
 
 @dataclass(frozen=True)
 class HeldOut:
-    """One crossing taken out of the notebook and predicted back from the scans."""
+    """One crossing taken out of the notebook and predicted back from the scans.
+
+    The two errors are metres along the walk: how far from the crossing, along
+    the route, each method put the scan taken nearest to it.
+    """
 
     waypoint: Waypoint
     by_movement: float
@@ -1383,10 +1387,20 @@ def check_pace(
     """Hold out each middle crossing in turn and see which method finds it again.
 
     The notebook is the only ground truth there is, so it is also the test: drop
-    a crossing, reconcile without it, and measure how far each method puts the
-    scan nearest that crossing's time from where the crossing actually was. It
-    needs coordinates on the crossings -- without them there is nothing to
-    measure a distance against -- and at least three in a row that have them.
+    a crossing, reconcile without it, and measure how far along the walk each
+    method puts the scan nearest that crossing's time from where the crossing
+    actually is. It needs coordinates on the crossings, since the legs are
+    measured in metres, and at least three in a row that have them.
+
+    Along the walk and not in a straight line. Without the crossing, the two
+    legs that met there are reconciled as one stretch, and where the route
+    turns at that crossing the one stretch is a chord the crossing is nowhere
+    near: on a grid of hundred-metre blocks a scan placed at exactly the right
+    moment sat seventy metres from the corner in a straight line, for both
+    methods alike, and twelve rows of a real outing said so and nothing else.
+    What the methods actually differ on is how far along the way the scan is,
+    so that is the measure: the fraction each method gave, against the fraction
+    of the two legs the crossing sits at, in metres of the two legs.
     """
     records = records_for_outing(read_log(log_path), outing)
     scans = merged_scans([r for r in records if r.is_scan and r.time is not None])
@@ -1397,11 +1411,19 @@ def check_pace(
 
     results = []
     for index in range(1, len(waypoints) - 1):
-        held = waypoints[index]
-        neighbours = (waypoints[index - 1], held, waypoints[index + 1])
-        target = held.coordinates
-        if target is None or not all(point.has_coordinates for point in neighbours):
+        before, held, after = waypoints[index - 1 : index + 2]
+        if not all(point.has_coordinates for point in (before, held, after)):
             continue
+        # The two legs that meet at the crossing, along the street when it is
+        # drawn and straight when it is not, and how far along them it sits.
+        legs = [
+            Position(here, there, 0.0, block_line(here, there, streets)).length_m or 0.0
+            for here, there in ((before, held), (held, after))
+        ]
+        walked = legs[0] + legs[1]
+        if walked <= 0.0:
+            continue
+        truth = legs[0] / walked
         without = [*waypoints[:index], *waypoints[index + 1 :]]
         nearest = min(scans, key=lambda scan: abs((_when(scan) - held.time).total_seconds()))
         errors = []
@@ -1410,10 +1432,9 @@ def check_pace(
             [locate(_when(scan), without, streets) for scan in scans],
         ):
             position = positions[scans.index(nearest)]
-            place = None if position is None else position.coordinates
-            if place is None:
+            if position is None or position.start != before or position.end != after:
                 break
-            errors.append(distance_metres(place[0], place[1], target[0], target[1]))
+            errors.append(abs(position.fraction - truth) * walked)
         if len(errors) == 2:
             results.append(HeldOut(held, errors[0], errors[1]))
     return results
@@ -1427,7 +1448,10 @@ def format_pace_check(results: Sequence[HeldOut]) -> str:
             "row, so that a held-out one has something to be measured against."
         )
     lines = [
-        "Crossings held out, and how far each method put the nearest scan from them:",
+        (
+            "Crossings held out, and how far along the walk each method put the nearest scan "
+            "from them:"
+        ),
         f"  {'crossing':<34} {'by movement':>12} {'by clock':>10}",
     ]
     for held in results:
@@ -1440,14 +1464,15 @@ def format_pace_check(results: Sequence[HeldOut]) -> str:
     clock = sum(r.by_time for r in results) / len(results)
     lines.append("")
     lines.append(f"  mean error: {movement:.0f} m by movement, {clock:.0f} m by clock")
-    if movement < clock:
-        lines.append(f"  Reading the pace wins by {clock - movement:.0f} m on average.")
-    elif movement > clock:
-        lines.append(
-            f"  The clock wins by {movement - clock:.0f} m: keep --pace clock on this route."
-        )
-    else:
+    # Judged at the resolution it is printed at: a method that wins by a hair
+    # of a metre is not a method that wins, and "wins by 0 m" says so badly.
+    gap = clock - movement
+    if abs(gap) < 0.5:
         lines.append("  Nothing to choose between them here.")
+    elif gap > 0:
+        lines.append(f"  Reading the pace wins by {gap:.0f} m on average.")
+    else:
+        lines.append(f"  The clock wins by {-gap:.0f} m: keep --pace clock on this route.")
     return "\n".join(lines)
 
 

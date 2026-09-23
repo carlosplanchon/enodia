@@ -78,13 +78,13 @@ enodia --check-map --match signal                              # the same, score
 enodia --check-map --weigh alike                               # the same, every network counted alike
 ```
 
-`--check-pace` needs coordinates on the crossings, since it measures in metres. `--check-passes`
-needs none: it compares two passes over one stretch against each other. `--check-map` needs a
-map with at least two passes in it, and holds out one outing at a time, or one pass down one
-stretch when the map holds a single outing, never a single scan, since a scan's neighbour was
-taken five seconds later and sees almost the same networks. Its table has four columns: each
-scan alone by networks, by signal as well, and with the scans before it settling a tie or
-choosing the path, the two ways `--sequence` names.
+`--check-pace` needs coordinates on the crossings, since it measures in metres along the walk.
+`--check-passes` needs none: it compares two passes over one stretch against each other.
+`--check-map` needs a map with at least two passes in it, and holds out one outing at a time,
+or one pass down one stretch when the map holds a single outing, never a single scan, since a
+scan's neighbour was taken five seconds later and sees almost the same networks. Its table has
+four columns: each scan alone by networks, by signal as well, and with the scans before it
+settling a tie or choosing the path, the two ways `--sequence` names.
 [The methodology notes](methodology.md) say what each of the three can and cannot tell you.
 
 ## The map, and finding yourself again

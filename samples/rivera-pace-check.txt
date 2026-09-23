@@ -1,4 +1,4 @@
-Crossings held out, and how far each method put the nearest scan from them:
+Crossings held out, and how far along the walk each method put the nearest scan from them:
   crossing                            by movement   by clock
   Rivera y Brito del Pino                    27 m       17 m
   Rivera y Simón Bolívar                      7 m       13 m  <-
