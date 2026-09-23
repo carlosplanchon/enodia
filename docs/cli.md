@@ -42,11 +42,13 @@ enodia --preflight                        # check everything an outing needs and
 ```bash
 enodia --reconcile LOG notebook.txt                            # the report
 enodia --reconcile LOG notebook.txt --pace clock               # share out each stretch on time
+enodia --reconcile LOG notebook.txt --path-loss 2               # weigh the strongest sightings more
 enodia --reconcile LOG notebook.txt --outing 3f9a2b10           # one walk of a file that holds several
 enodia --reconcile LOG notebook.txt --scans                     # also list where every scan landed
 enodia --reconcile LOG notebook.txt --csv networks.csv --geojson walk.geojson
 enodia --reconcile LOG notebook.geo.txt --streets streets.jsonl                 # along the streets
 enodia --reconcile LOG notebook.geo.txt --streets streets.jsonl --svg plan.svg
+enodia --reconcile LOG notebook.geo.txt --streets streets.jsonl --svg plan.svg --svg-names   # and the names
 enodia --open-networks LOG                                     # the unencrypted ones, strongest first
 ```
 
@@ -56,6 +58,14 @@ answered, is no evidence either way and is filled at the pace of the rest of the
 `--pace clock` interpolates on time instead, assuming a steady walk. Which one is better for
 your route is not a matter of opinion: `--check-pace` below measures it.
 
+`--path-loss N` is the exponent the sightings are weighed with when an access point is placed,
+`10 ** (RSSI / 10n)`. The default is 3, a street with buildings on both sides. Lower makes the
+strongest sighting count for more, and at 1 it is weighing by received power. It moves the
+access points and what `--check-passes` compares, and nothing about where the scans are, and
+the report says which exponent was used whenever it is not the default. On the first real
+outing, six access points of one house at known coordinates came out 28 m off on average at
+3 and 22 m at 1. One house, which is why it is a flag and the default has not moved.
+
 `--outing TOKEN` picks one walk out of a file that holds several, which is what `--log
 walk.jsonl` reused every week produces. Without it the last walk in the file is read, and which
 one that was is printed whenever there is a choice.
@@ -63,7 +73,11 @@ one that was is printed whenever there is a choice.
 `--streets FILE` places each scan along the street's real shape instead of on the straight line
 between two crossings, which is what happens without it, and the report says how many blocks
 followed the drawing. `--svg FILE` draws the walk as a plan from that same geometry, with no
-tiles fetched, and needs coordinates on the crossings.
+tiles fetched, and needs coordinates on the crossings. `--svg-names` writes each pinned
+network's name beside its dot, in small type: a plan of a few hundred networks is dense and
+the names overlap, but the file is vector and zooms, and a hidden network has no name to
+write. The plan then carries your neighbours' network names, as the CSV and the GeoJSON
+already do.
 
 `--csv`, `--geojson` and `--svg` each add a line to the report saying where they wrote. The
 report itself goes to standard output, so capturing it wants a run without them.
@@ -289,7 +303,8 @@ says which flag is the odd one.
 | `--ssid`, `--mac-shaped`, `--key-file` | `--export-public` |
 | `--streets` | `--geocode`, `--reconcile` or `--map-add` |
 | `--buildings` | `--geocode` and `--streets` |
-| `--svg`, `--check-pace`, `--check-passes`, `--csv`, `--geojson`, `--scans` | `--reconcile` |
+| `--svg`, `--check-pace`, `--check-passes`, `--path-loss`, `--csv`, `--geojson`, `--scans` | `--reconcile` |
+| `--svg-names` | `--svg` |
 | `--pace` | `--reconcile` or `--map-add` |
 | `--map`, `--match`, `--weigh`, `--sequence` | `--map-add`, `--locate`, `--check-map` or `--assistant` |
 | `--outing` | `--reconcile`, `--map-add`, `--export-public`, `--locate LOG` or `--geocode --marks` |

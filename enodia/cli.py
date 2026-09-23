@@ -42,6 +42,7 @@ from enodia.monitor import WifiMonitor
 from enodia.netlog import NetworkLog, SeenNetwork, find_open_networks, outings, read_log
 from enodia.preflight import format_preflight, run_preflight
 from enodia.reconcile import (
+    PATH_LOSS_EXPONENT,
     NotebookError,
     check_pace,
     check_passes,
@@ -211,6 +212,16 @@ def build_parser() -> argparse.ArgumentParser:
         "pace (default: movement)",
     )
     parser.add_argument(
+        "--path-loss",
+        type=float,
+        default=PATH_LOSS_EXPONENT,
+        metavar="N",
+        help="with --reconcile: the path loss exponent the sightings are weighed with when "
+        "an access point is placed, 10 ** (RSSI / 10n). Lower makes the strongest sighting "
+        "count for more: 2 is free space, 3 a street with buildings on both sides, 1 is "
+        "weighing by received power (default: %(default)s)",
+    )
+    parser.add_argument(
         "--check-pace",
         action="store_true",
         help="with --reconcile: hold out each crossing in turn and report which method "
@@ -336,6 +347,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="with --reconcile: draw the walk as a plan, from the OpenStreetMap geometry in "
         "--streets. No tiles: it is written once and opens with nothing fetched. Needs "
         "coordinates on the crossings",
+    )
+    parser.add_argument(
+        "--svg-names",
+        action="store_true",
+        help="with --svg: write each pinned network's name beside its dot, in small type",
     )
     parser.add_argument(
         "--overpass-url",
@@ -757,12 +773,20 @@ def run_reconcile(args: argparse.Namespace) -> int:
                             by_movement=by_movement,
                             streets=drawn,
                             outing=walk,
+                            path_loss=args.path_loss,
                         )
                     )
                 )
             print("\n\n".join(reports))
             return 0
-        result = reconcile(log, notebook, by_movement=by_movement, streets=drawn, outing=walk)
+        result = reconcile(
+            log,
+            notebook,
+            by_movement=by_movement,
+            streets=drawn,
+            outing=walk,
+            path_loss=args.path_loss,
+        )
     except (NotebookError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -778,7 +802,7 @@ def run_reconcile(args: argparse.Namespace) -> int:
             result.write_geojson(args.geojson)
             print(f"\nGeoJSON written to {args.geojson}")
         if args.svg:
-            picture = svg_map(result, drawn)
+            picture = svg_map(result, drawn, names=args.svg_names)
             if picture is None:
                 print(
                     "\nNothing to draw: a plan needs coordinates on the crossings. See --geocode."
@@ -890,6 +914,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         for flag, given in (
             ("--check-pace", args.check_pace),
             ("--check-passes", args.check_passes),
+            ("--path-loss", args.path_loss != PATH_LOSS_EXPONENT),
             ("--csv", args.csv is not None),
             ("--geojson", args.geojson is not None),
             ("--scans", args.scans),
@@ -939,6 +964,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     if args.svg is not None and not args.reconcile:
         parser.error("--svg: only meaningful together with --reconcile")
+    if args.svg_names and args.svg is None:
+        parser.error("--svg-names: only meaningful together with --svg")
     if args.watch and args.locate != "":
         parser.error(
             "--watch: only meaningful together with --locate and a live scan, not --locate LOG"

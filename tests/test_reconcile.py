@@ -561,6 +561,38 @@ def test_distance_between_two_points():
     assert distance_metres(-34.90, -56.19, -34.90, -56.19) == 0.0
 
 
+def test_a_lower_path_loss_exponent_pulls_the_estimate_to_the_strongest_sighting(
+    tmp_path, monkeypatch
+):
+    # One network heard loud near the start and faint near the end. At the
+    # default exponent the estimate sits well along the block; at 1, weighing
+    # by received power, it all but collapses onto the loud sighting, which is
+    # the trade the flag exists to measure. The report says which was used
+    # only when it is not the default.
+    log = write_log(
+        tmp_path / "networks.jsonl",
+        monkeypatch,
+        [
+            ("2026-09-05T17:02:00-03:00", [ap("A", dbm=-40)]),
+            ("2026-09-05T17:08:00-03:00", [ap("A", dbm=-80)]),
+        ],
+    )
+    nb = tmp_path / "libreta.txt"
+    nb.write_text("17:00 Start @ -34.90, -56.190\n17:10 End @ -34.90, -56.170\n")
+    default = reconcile(log, nb)
+    sharp = reconcile(log, nb, path_loss=1.0)
+    loud_lon = default.placed[0].position.lon
+    assert abs(sharp.networks[0].estimate.lon - loud_lon) < abs(
+        default.networks[0].estimate.lon - loud_lon
+    )
+    assert default.path_loss == 3.0 and sharp.path_loss == 1.0
+    assert "path loss exponent" not in format_report(default)
+    assert "Signal weighed with a path loss exponent of 1, not the default 3" in format_report(
+        sharp
+    )
+    assert check_passes(log, nb, path_loss=1.0) == []  # nothing walked twice, but it runs
+
+
 def test_check_pace_holds_out_a_crossing_and_measures_both_methods(tmp_path, monkeypatch):
     # The operator stood near the first crossing for six minutes, then walked
     # fast. The middle crossing is a fifth of the way along, not halfway, so

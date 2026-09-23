@@ -949,6 +949,7 @@ class Reconciliation:
     after: int
     networks: list[PlacedNetwork]
     streets: StreetMap | None = None
+    path_loss: float = PATH_LOSS_EXPONENT  # what the sightings were weighed with
 
     def route_order(self, position: Position) -> tuple[int, float]:
         return (self.waypoints.index(position.start), position.fraction)
@@ -1100,6 +1101,7 @@ def reconcile(
     by_movement: bool = True,
     streets: StreetMap | None = None,
     outing: str | None = None,
+    path_loss: float = PATH_LOSS_EXPONENT,
 ) -> Reconciliation:
     """Join a log with a notebook: positions for every scan and every network.
 
@@ -1114,6 +1116,10 @@ def reconcile(
         be one walk's too: read against the whole file, the day came from the
         first scan in it and the button marks of every walk counted from one on
         top of each other.
+    :param path_loss: the exponent the sightings are weighed with when an
+        access point is placed, see `signal_weight`. Lower makes the strongest
+        sighting count for more. It changes where the access points come out
+        and nothing about where the scans are.
     """
     records = records_for_outing(read_log(log_path), outing)
     if outing is not None and not records:
@@ -1172,7 +1178,7 @@ def reconcile(
             again = network.key in counted
             counted.add(network.key)
             if not again and network.has_signal:
-                weight = signal_weight(network.strength)
+                weight = signal_weight(network.strength, path_loss)
                 seen_along.setdefault(network.key, {}).setdefault(stretch, []).append(
                     (along, weight)
                 )
@@ -1208,7 +1214,7 @@ def reconcile(
         )
         for key, item in best.items()
     }
-    result = Reconciliation(waypoints, scans, placed, before, after, [], streets)
+    result = Reconciliation(waypoints, scans, placed, before, after, [], streets, path_loss)
     result.networks = sorted(located.values(), key=lambda item: result.route_order(item.position))
     return result
 
@@ -1293,6 +1299,14 @@ def format_report(result: Reconciliation, with_scans: bool = False) -> str:
             3,
             f"Blocks: {drawn} of {len(blocks)} follow the street as drawn, "
             f"{len(blocks) - drawn} on the straight line between their marks",
+        )
+    if result.path_loss != PATH_LOSS_EXPONENT:
+        # Said in the report and not only on the command line, so that a
+        # report kept in a file says what produced its estimates.
+        lines.insert(
+            lines.index(""),
+            f"Signal weighed with a path loss exponent of {result.path_loss:g}, "
+            f"not the default {PATH_LOSS_EXPONENT:g}",
         )
     if with_scans:
         lines.append("Scans along the route:")
@@ -1572,6 +1586,7 @@ def _one_pass(
     forwards: bool,
     placed_scans: Sequence[PlacedScan],
     waypoints: Sequence[Waypoint],
+    path_loss: float = PATH_LOSS_EXPONENT,
 ) -> Pass:
     """Where one walk along one stretch put each of the networks it heard."""
     weighted: dict[str, float] = {}
@@ -1583,7 +1598,7 @@ def _one_pass(
         for network in placed_scan.scan.networks:
             if not network.has_signal or not network.identified:
                 continue
-            weight = signal_weight(network.strength)
+            weight = signal_weight(network.strength, path_loss)
             totals[network.key] = totals.get(network.key, 0.0) + weight
             weighted[network.key] = weighted.get(network.key, 0.0) + weight * fraction
     places = {key: weighted[key] / total for key, total in totals.items() if total > 0}
@@ -1616,7 +1631,7 @@ def repeated_stretches(result: Reconciliation) -> list[RepeatedStretch]:
         if len(walked) < 2:
             continue
         passes = [
-            _one_pass(segment, forwards, scans_of[segment], result.waypoints)
+            _one_pass(segment, forwards, scans_of[segment], result.waypoints, result.path_loss)
             for segment, forwards in walked
         ]
         heard: dict[str, int] = {}
@@ -1635,10 +1650,18 @@ def check_passes(
     by_movement: bool = True,
     streets: StreetMap | None = None,
     outing: str | None = None,
+    path_loss: float = PATH_LOSS_EXPONENT,
 ) -> list[RepeatedStretch]:
     """Reconcile, then compare the passes over any stretch walked more than once."""
     return repeated_stretches(
-        reconcile(log_path, notebook_path, by_movement=by_movement, streets=streets, outing=outing)
+        reconcile(
+            log_path,
+            notebook_path,
+            by_movement=by_movement,
+            streets=streets,
+            outing=outing,
+            path_loss=path_loss,
+        )
     )
 
 

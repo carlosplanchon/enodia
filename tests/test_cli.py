@@ -235,6 +235,19 @@ def test_pace_defaults_to_movement_and_can_be_switched(tmp_path, capsys):
     assert "Networks placed" in capsys.readouterr().out
 
 
+def test_the_path_loss_exponent_is_a_flag_and_the_report_says_when_it_is_not_the_default(
+    tmp_path, capsys
+):
+    log, nb = reconcilable(tmp_path)
+    assert cli.main(["--reconcile", str(log), str(nb)]) == 0
+    assert "path loss exponent" not in capsys.readouterr().out
+    assert cli.main(["--reconcile", str(log), str(nb), "--path-loss", "2"]) == 0
+    out = capsys.readouterr().out
+    assert "Signal weighed with a path loss exponent of 2, not the default 3" in out
+    assert cli.main(["--reconcile", str(log), str(nb), "--check-passes", "--path-loss", "2"]) == 0
+    assert cli.build_parser().parse_args([]).path_loss == 3.0
+
+
 def test_check_pace_from_the_command_line(tmp_path, capsys):
     log, nb = reconcilable(tmp_path)
     assert cli.main(["--reconcile", str(log), str(nb), "--check-pace"]) == 0
@@ -278,6 +291,7 @@ def test_check_pace_reports_errors_like_reconcile(tmp_path, capsys):
         ["--pace", "clock"],
         ["--check-pace"],
         ["--check-passes"],
+        ["--path-loss", "2"],
         ["--csv", "out.csv"],
         ["--scans"],
         ["--scans", "--csv", "out.csv"],
@@ -1172,7 +1186,7 @@ def test_streets_without_a_command_that_uses_them_is_an_error(capsys):
     assert "--streets: only meaningful together with --geocode, --reconcile or --map-add" in err
 
 
-def test_reconcile_draws_the_walk_as_a_plan(capsys, tmp_path):
+def test_reconcile_draws_the_walk_as_a_plan(capsys, tmp_path, monkeypatch):
     from enodia.streets import Street, write_streets
 
     log, nb = reconcilable(tmp_path)
@@ -1190,6 +1204,21 @@ def test_reconcile_draws_the_walk_as_a_plan(capsys, tmp_path):
     drawn = plan.read_text(encoding="utf-8")
     assert drawn.startswith("<svg xmlns=") and ">Middle<" in drawn
     assert "#e7e1d8" in drawn  # la manzana
+    assert 'font-size="6"' not in drawn
+    # The names are asked for through the flag. This walk pins no network
+    # down, so there is none to write; that the drawing writes them when there
+    # is one is the drawing's own test.
+    asked = {}
+    real = cli.svg_map
+
+    def recording(result, streets=None, **kwargs):
+        asked.update(kwargs)
+        return real(result, streets, **kwargs)
+
+    monkeypatch.setattr(cli, "svg_map", recording)
+    named = tmp_path / "con-nombres.svg"
+    code = cli.main(["--reconcile", str(log), str(nb), "--svg", str(named), "--svg-names"])
+    assert code == 0 and asked == {"names": True} and named.exists()
 
 
 def test_a_notebook_of_bare_names_has_no_plan_to_draw(capsys, tmp_path):
@@ -1207,6 +1236,11 @@ def test_a_notebook_of_bare_names_has_no_plan_to_draw(capsys, tmp_path):
     [
         (["--buildings"], "--buildings: only meaningful together with --geocode and --streets"),
         (["--svg", "p.svg"], "--svg: only meaningful together with --reconcile"),
+        (["--svg-names"], "--svg-names: only meaningful together with --svg"),
+        (
+            ["--reconcile", "a.jsonl", "b.txt", "--svg-names"],
+            "--svg-names: only meaningful together with --svg",
+        ),
     ],
 )
 def test_drawing_flags_without_what_they_need_are_an_error(flags, says, capsys):

@@ -124,6 +124,29 @@ def test_a_pinned_network_is_a_dot_and_a_loose_one_is_a_ring():
     assert "only heard from around there" in loose
 
 
+def test_the_names_of_the_pinned_networks_are_written_only_when_asked():
+    # Small type beside the dot, in the dot's colour. A ring gets no name,
+    # since it marks where a network was heard from and not where it is, and
+    # a hidden network has none to write. Markup in a name cannot break the
+    # file, and neither can a control character, which XML refuses outright.
+    middle = (-34.9060, -56.1894)
+    drawn = [
+        network("Casa", middle),
+        network("<b>&", (-34.9060, -56.1896)),
+        network("", (-34.9060, -56.1892)),
+        network("Lejos", (-34.9060, -56.1890), spread=35.0, plain=40.0),
+        network("Libre\x01Bar", (-34.9060, -56.1898), security="open"),
+    ]
+    quiet = svg_map(walked(drawn))
+    assert quiet is not None and 'font-size="6"' not in quiet
+    named = svg_map(walked(drawn), names=True)
+    assert named is not None and named.count('font-size="6"') == 3
+    assert '#b8442a">Casa</text>' in named
+    assert "&lt;b&gt;&amp;</text>" in named
+    assert '#1f7a4d">Libre Bar</text>' in named
+    assert "Lejos" not in named
+
+
 def test_an_open_network_is_drawn_apart_from_the_rest():
     middle = (-34.9060, -56.1894)
     picture = svg_map(walked([network("Libre", middle, security="open")]))

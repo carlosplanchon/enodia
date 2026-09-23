@@ -104,7 +104,10 @@ def _within(frame: Frame, line: Line) -> bool:
 
 
 def _escape(text: str) -> str:
-    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    """Text as SVG can carry it: markup escaped, and control characters, which XML
+    refuses outright and an SSID may well hold, replaced by a space."""
+    plain = "".join(ch if ch >= " " or ch in "\t\n" else " " for ch in text)
+    return plain.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def _scale_bar(frame: Frame) -> list[str]:
@@ -150,13 +153,22 @@ def _legend(frame: Frame, loose: int) -> list[str]:
 
 
 def svg_map(
-    result: Reconciliation, streets: StreetMap | None = None, width: float = WIDTH
+    result: Reconciliation,
+    streets: StreetMap | None = None,
+    width: float = WIDTH,
+    names: bool = False,
 ) -> str | None:
     """The whole walk as one SVG, or None when there is nothing placed to draw.
 
     Needs coordinates. A reconciliation of a notebook of bare crossing names
     knows the order of the blocks and not where any of them is, which is a
     perfectly good answer and not a picture.
+
+    `names` writes each pinned network's name beside its dot, in small type.
+    Only the pinned ones: a ring is where a network was heard from, not where
+    it is, and a name on it would say otherwise. A plan of a few hundred
+    networks is dense and the names overlap, which the file being vector is
+    for. A hidden network has no name to write.
     """
     drawn = streets if streets is not None else result.streets
     places = [
@@ -224,6 +236,11 @@ def svg_map(
             continue
         colour = OPEN_NETWORK if item.network.open else NETWORK
         out.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="3.5" fill="{colour}"/>')
+        if names and item.network.ssid:
+            out.append(
+                f'<text x="{x + 5:.1f}" y="{y + 2.5:.1f}" font-size="6" fill="{colour}">'
+                f"{_escape(item.network.ssid)}</text>"
+            )
 
     for point in result.waypoints:
         place = point.coordinates
