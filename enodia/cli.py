@@ -18,6 +18,7 @@ from enodia.draw import live_map, mapped_places, svg_map
 from enodia.fingerprint import (
     Fingerprint,
     Location,
+    Pace,
     RadioBlocked,
     add_to_map,
     check_map,
@@ -372,9 +373,10 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=MAX_WALKING_SPEED_MS,
         metavar="M_PER_S",
-        help="with --geocode: the pace above which a stretch is taken for a wrong lookup "
-        "rather than a fast walk, in metres per second; raise it for an outing on a "
-        "bicycle (default: %(default)s)",
+        help="how fast you move, at most, in metres per second: with --geocode the pace above "
+        "which a stretch is taken for a wrong lookup rather than a fast walk, with --locate "
+        "--watch the speed the answers are kept to; raise it for an outing on a bicycle "
+        "(default: %(default)s)",
     )
     parser.add_argument(
         "--map",
@@ -404,6 +406,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="with --locate and no LOG: keep scanning every --interval seconds and say where "
         "you are as it changes; --cycles bounds it, Ctrl+C stops it, --log FILE records it",
+    )
+    parser.add_argument(
+        "--no-walking-pace",
+        dest="walking_pace",
+        action="store_false",
+        help="with --locate --watch: take each scan's place along the stretch as it comes, "
+        "instead of keeping the answers to the pace somebody walks at (default: kept)",
     )
     parser.add_argument(
         "--live-map",
@@ -529,6 +538,10 @@ def run_watch(
     other flags. Lines are flushed as they are printed, since a run piped into
     `tee` is a run somebody is watching.
 
+    Each answer's place along its stretch is kept to a walking pace by `Pace`,
+    so the dot moves the way somebody walks and not the way one scan after
+    another lands; `--no-walking-pace` takes each scan as it comes.
+
     `--live-map FILE` is the same run drawn: every cycle the page is written
     again, beside the target and renamed onto it, with the last `TRAIL`
     answers behind the current one. A map without coordinates has nothing to
@@ -537,6 +550,7 @@ def run_watch(
     by_signal = args.match == "signal"
     by_rarity = args.weigh == "rarity"
     blocked = False
+    pace = Pace.of(known, args.max_speed) if args.walking_pace else None
     live = None if args.live_map is None else Path(args.live_map)
     drawn = None
     trail: deque[tuple[float, float]] = deque(maxlen=TRAIL)
@@ -585,7 +599,8 @@ def run_watch(
     previous: Location | None = None
     first = True
     try:
-        for found in follow(known, fresh(), args.sequence, by_signal, by_rarity):
+        for answer in follow(known, fresh(), args.sequence, by_signal, by_rarity):
+            found = answer if pace is None else pace.keep(answer, time.monotonic())
             stamp = time.strftime("%H:%M:%S")
             if found is None:
                 said = "not on the map"
@@ -771,6 +786,7 @@ def run_map(args: argparse.Namespace, map_file: Path) -> int:
                 check_map(fingerprints, by_signal=True, by_rarity=by_rarity),
                 check_map(fingerprints, sequence="tie", by_rarity=by_rarity),
                 check_map(fingerprints, sequence="path", by_rarity=by_rarity),
+                check_map(fingerprints, keep_pace=True, by_rarity=by_rarity),
             )
         )
         return 0
@@ -1025,7 +1041,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             ("--marks", args.marks is not None),
             ("--proxy", args.proxy is not None),
             ("--overpass-url", args.overpass_url != OVERPASS_URL),
-            ("--max-speed", args.max_speed != MAX_WALKING_SPEED_MS),
         )
         if given
     ]
@@ -1052,6 +1067,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             "--streets: only meaningful together with --geocode, --reconcile, --map-add "
             "or --live-map"
         )
+    if args.max_speed != MAX_WALKING_SPEED_MS and not (args.geocode or args.watch):
+        parser.error("--max-speed: only meaningful together with --geocode or --locate --watch")
+    if args.max_speed != MAX_WALKING_SPEED_MS and args.watch and not args.walking_pace:
+        parser.error("--max-speed and --no-walking-pace contradict each other")
+    if not args.walking_pace and not args.watch:
+        parser.error("--no-walking-pace: only meaningful together with --locate --watch")
     if args.live_map is not None and not args.watch:
         parser.error("--live-map: only meaningful together with --locate --watch")
     if args.surroundings and not (args.geocode and args.streets):

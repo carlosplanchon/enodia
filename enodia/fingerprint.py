@@ -31,14 +31,16 @@ import tempfile
 from collections import deque
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
+from itertools import pairwise
 from math import exp, log
 from pathlib import Path
 from typing import Any
 
 import ifpeek
 
+from enodia.geocode import MAX_WALKING_SPEED_MS
 from enodia.netlog import (
     SeenNetwork,
     _refuse_constant,
@@ -972,6 +974,159 @@ def _along_the_path(
     return _location(best, None, settled=earlier, alone=ranked[0].place)
 
 
+# Keeping a live run to a walking pace (`Pace`). How much a walk's speed may
+# change from one scan to the next, how far off one scan's place along a
+# stretch is taken to be, and how long a gap starts the walk afresh. The
+# first was chosen by measuring 0.1, 0.3 and 1 on the sample and on the first
+# real outing: the smallest took the most of the jumps out and cost nothing in
+# error, since what a scan gets wrong along a stretch is mostly a bias the
+# scans beside it share, not noise they average away.
+PACE_ACCELERATION = 0.1
+PACE_SCAN_M = 15.0
+PACE_RESET_S = 30.0
+
+
+@dataclass(frozen=True)
+class _Walking:
+    """Where a run is along a stretch, how fast it is going, and how sure of both."""
+
+    place: Place
+    at: float  # metres from the stretch's first mark, which may be short of it or past it
+    speed: float  # metres a second towards its second mark
+    spread: tuple[float, float, float]  # the variance of `at`, of `speed`, and between them
+    when: float
+
+
+def _line(places: Sequence[Place]) -> tuple[float, float, float, float] | None:
+    """A straight line of latitude and longitude against the fraction, fitted to one stretch.
+
+    Least squares over every fingerprint of the stretch that has coordinates,
+    so the fraction a run is kept to has a place on the map: a block is a
+    straight line more often than not, and two passes a few metres apart
+    average into the middle of the street. None without two distinct fractions
+    to fit it to.
+    """
+    known = [(one.fraction, where) for one in places if (where := one.coordinates) is not None]
+    if len({fraction for fraction, _ in known}) < 2:
+        return None
+    mean_f = sum(fraction for fraction, _ in known) / len(known)
+    mean_lat = sum(where[0] for _, where in known) / len(known)
+    mean_lon = sum(where[1] for _, where in known) / len(known)
+    square = sum((fraction - mean_f) ** 2 for fraction, _ in known)
+    lat = sum((fraction - mean_f) * (where[0] - mean_lat) for fraction, where in known) / square
+    lon = sum((fraction - mean_f) * (where[1] - mean_lon) for fraction, where in known) / square
+    return mean_lat - lat * mean_f, lat, mean_lon - lon * mean_f, lon
+
+
+class Pace:
+    """A live run's answers, kept to the pace somebody walks at along the stretch.
+
+    A scan says which stretch you are on well and where along it less well:
+    two in a row, five seconds apart, can put you thirty metres apart on the
+    same block, which nobody walks. So the place along the stretch is followed
+    with a filter of constant speed, a Kalman filter in one dimension: each
+    scan moves the answer by how much it disagrees, weighed against how sure
+    the walk so far is, and the speed is never more than a walk's. One scan
+    that disagrees moves the dot a little and a run of them take it all the
+    way, which is the difference between noise and having turned round.
+
+    The stretch is never the filter's to choose: it is what `tie` or `path`
+    said, and a stretch that shares a mark with the last one takes the walk
+    over through that mark, while any other change of stretch, a stretch of no
+    known length, or a gap of `PACE_RESET_S` start again from the scan. An
+    answer of "not on the map" is passed through and forgets nothing, so a
+    walk found again a cycle later carries on from where it was.
+    """
+
+    def __init__(
+        self,
+        lines: Mapping[tuple[str, str], tuple[float, float, float, float]],
+        max_speed_ms: float = MAX_WALKING_SPEED_MS,
+    ) -> None:
+        self.lines = dict(lines)
+        self.max_speed_ms = max_speed_ms
+        self.walking: _Walking | None = None
+
+    @classmethod
+    def of(
+        cls, fingerprints: Sequence[Fingerprint], max_speed_ms: float = MAX_WALKING_SPEED_MS
+    ) -> Pace:
+        """A pace for a run against this map, with a line fitted to each of its stretches."""
+        by_stretch: dict[tuple[str, str], list[Place]] = {}
+        for one in fingerprints:
+            by_stretch.setdefault(one.place.key, []).append(one.place)
+        lines = {key: line for key, places in by_stretch.items() if (line := _line(places))}
+        return cls(lines, max_speed_ms)
+
+    def _carried(self, place: Place, when: float) -> _Walking | None:
+        """The walk so far, in this stretch's own measure, or None to start again."""
+        walking = self.walking
+        if walking is None or not 0.0 <= when - walking.when <= PACE_RESET_S:
+            return None
+        if walking.place.key == place.key:
+            return walking
+        shared = _shared_mark(walking.place, place)
+        before = walking.place.length_m
+        if shared is None or before is None or place.length_m is None:
+            return None
+        # Through the mark the two stretches share: how far short of it the
+        # walk was and how fast it was heading there, turned into the new
+        # stretch's measure, which may start at that mark or end at it.
+        # The place and the speed turn over together or not at all, so how
+        # sure the walk was of each, and of the two together, carries over.
+        old_end, new_end = shared
+        short = walking.at if old_end == 0.0 else before - walking.at
+        towards = -walking.speed if old_end == 0.0 else walking.speed
+        at = -short if new_end == 0.0 else place.length_m + short
+        speed = towards if new_end == 0.0 else -towards
+        return _Walking(place, at, speed, walking.spread, walking.when)
+
+    def keep(self, found: Location | None, when: float) -> Location | None:
+        """This answer with its place along the stretch kept to a walking pace."""
+        if found is None:
+            return None
+        place = found.place
+        length = place.length_m
+        if length is None or length <= 0:
+            self.walking = None
+            return found
+        seen = place.fraction * length
+        noise = max(PACE_SCAN_M, found.spread * length) ** 2
+        walking = self._carried(place, when)
+        if walking is None:
+            at, speed = seen, 0.0
+            spread = (noise, self.max_speed_ms**2, 0.0)
+        else:
+            gap = when - walking.when
+            q = PACE_ACCELERATION**2
+            p_at, p_speed, p_between = walking.spread
+            # Where the walk would be by now at the speed it was going, and
+            # how much less sure of that the time since has made it.
+            at = walking.at + walking.speed * gap
+            p_at = p_at + 2 * gap * p_between + gap * gap * p_speed + q * gap**4 / 4
+            p_between = p_between + gap * p_speed + q * gap**3 / 2
+            p_speed = p_speed + q * gap * gap
+            gain_at, gain_speed = p_at / (p_at + noise), p_between / (p_at + noise)
+            miss = seen - at
+            at += gain_at * miss
+            speed = walking.speed + gain_speed * miss
+            spread = (
+                (1 - gain_at) * p_at,
+                p_speed - gain_speed * p_between,
+                (1 - gain_at) * p_between,
+            )
+        speed = max(-self.max_speed_ms, min(self.max_speed_ms, speed))
+        self.walking = _Walking(place, at, speed, spread, when)
+        fraction = max(0.0, min(1.0, at / length))
+        line = self.lines.get(place.key)
+        lat, lon = place.lat, place.lon
+        if line is not None and place.coordinates is not None:
+            # Only where the answer had a place to begin with: coordinates
+            # withheld because two places share the stretch's names stay withheld.
+            lat, lon = line[0] + line[1] * fraction, line[2] + line[3] * fraction
+        return replace(found, place=replace(place, fraction=fraction, lat=lat, lon=lon))
+
+
 def follow(
     fingerprints: Sequence[Fingerprint],
     scans: Iterable[Iterable[SeenNetwork]],
@@ -1142,6 +1297,8 @@ class HeldOutScan:
     error_fraction: float | None
     outing: str = ""
     across_mark: bool = False
+    when: float | None = None  # seconds, for how fast the answers moved
+    group: str = ""  # what was held out with it, so a step is only ever inside one run
 
     @property
     def abstained(self) -> bool:
@@ -1181,7 +1338,13 @@ def _shared_mark(truth: Place, found: Place) -> tuple[float, float] | None:
     return None
 
 
-def _measure(one: Fingerprint, found: Location | None) -> HeldOutScan:
+def _measure(one: Fingerprint, found: Location | None, group: str = "") -> HeldOutScan:
+    measured = _measured(one, found)
+    when = None if one.time is None else one.time.timestamp()
+    return replace(measured, when=when, group=group)
+
+
+def _measured(one: Fingerprint, found: Location | None) -> HeldOutScan:
     truth = one.place
     if found is None:
         return HeldOutScan(truth, None, None, None, one.outing)
@@ -1251,6 +1414,7 @@ def check_map(
     by_signal: bool = False,
     sequence: str | None = None,
     by_rarity: bool = True,
+    keep_pace: bool = False,
 ) -> list[HeldOutScan]:
     """Hold out one outing at a time, or one walk when there is only one, and locate its scans.
 
@@ -1275,6 +1439,10 @@ def check_map(
     The run is the group in file order, which is the outing's order over the
     scans it placed: two in a row can be several cycles apart where scans fell
     outside the notebook, and the path prices that as one step.
+
+    `keep_pace` runs the group the way `--locate --watch` runs a walk: ties
+    settled by the scans before, and each answer kept to a walking pace by
+    `Pace`, on the clock of the scans themselves.
     """
     by_outing = _by_outing(fingerprints)
     groups: dict[str, list[Fingerprint]] = {}
@@ -1285,14 +1453,53 @@ def check_map(
     results = []
     for key, held in groups.items():
         rest = [one for one in fingerprints if (one.outing if by_outing else one.walk) != key]
+        pace = Pace.of(rest) if keep_pace else None
         for index, one in enumerate(held):
-            if sequence is None:
+            if sequence is None and pace is None:
                 found = locate_scan(rest, one.networks, by_signal, by_rarity=by_rarity)
             else:
                 run = [earlier.networks for earlier in held[max(0, index - LOOK_BACK) : index + 1]]
-                found = locate_sequence(rest, run, sequence, by_signal, by_rarity=by_rarity)
-            results.append(_measure(one, found))
+                how = sequence or "tie"
+                found = locate_sequence(rest, run, how, by_signal, by_rarity=by_rarity)
+            if pace is not None:
+                # A scan without a time is taken to be one cycle after the last.
+                found = pace.keep(found, one.time.timestamp() if one.time else index * 5.0)
+            results.append(_measure(one, found, key))
     return results
+
+
+# How far past a walking pace two answers in a row may move before the report
+# counts it as a jump: a few metres, for what the clock's second rounds away.
+JUMP_SLACK_M = 5.0
+
+
+def jumps(results: Sequence[HeldOutScan]) -> tuple[int, int]:
+    """How many steps between two answers in a row moved faster than anybody walks, of how many.
+
+    A step is two answers in a row of one held-out run, both on the stretch the
+    scans were taken on and on the same one, with a time on each: the move
+    along that stretch against `MAX_WALKING_SPEED_MS` for the seconds between.
+    """
+    faster = steps = 0
+    for before, after in pairwise(results):
+        if (
+            before.group != after.group
+            or before.when is None
+            or after.when is None
+            or before.found is None
+            or after.found is None
+            or before.found.place.key != after.found.place.key
+            or after.found.place.key != after.truth.key
+            or before.truth.key != before.found.place.key
+        ):
+            continue
+        there, here = after.found.place, before.found.place
+        moved = there.metres(abs(there.fraction - here.fraction))
+        if moved is None:
+            continue
+        steps += 1
+        faster += moved > MAX_WALKING_SPEED_MS * (after.when - before.when) + JUMP_SLACK_M
+    return faster, steps
 
 
 def _middle(values: Sequence[float]) -> tuple[float, float]:
@@ -1324,6 +1531,8 @@ def _column(results: Sequence[HeldOutScan]) -> tuple[list[str], int, int]:
     ]
     rows += ["-", "-"] if not fractions else [f"{one:.0%}" for one in _middle(fractions)]
     rows += ["-", "-"] if not metres else [f"{one:.0f} m" for one in _middle(metres)]
+    faster, steps = jumps(results)
+    rows.append(f"{faster} of {steps}" if steps else "-")
     return rows, len(fractions), len(metres)
 
 
@@ -1333,6 +1542,7 @@ def format_map_check(
     by_signal: Sequence[HeldOutScan],
     settling_ties: Sequence[HeldOutScan],
     choosing_path: Sequence[HeldOutScan],
+    keeping_pace: Sequence[HeldOutScan],
 ) -> str:
     """Human-readable verdict on how well the map locates a walk it has not seen."""
     if not by_networks:
@@ -1351,11 +1561,13 @@ def format_map_check(
         "median error, of a stretch",
         "mean error in metres",
         "median error in metres",
+        "moved faster than a walk",
     ]
     left, placed, measured = _column(by_networks)
     right, _, _ = _column(by_signal)
     ties, _, _ = _column(settling_ties)
     path, _, _ = _column(choosing_path)
+    pace, _, _ = _column(keeping_pace)
     counted = map_summary(fingerprints)
     held = (
         "Each outing held out in turn, and its scans located from the other outings:"
@@ -1369,12 +1581,14 @@ def format_map_check(
         "",
         (
             f"  {'':<28}{'by networks':>13}{'and by signal':>15}"
-            f"{'settling ties':>15}{'choosing the path':>18}"
+            f"{'settling ties':>15}{'choosing the path':>18}{'at a walking pace':>19}"
         ),
     ]
     lines += [
-        f"  {label:<28}{one:>13}{other:>15}{tie:>15}{run:>18}"
-        for label, one, other, tie, run in zip(labels, left, right, ties, path, strict=True)
+        f"  {label:<28}{one:>13}{other:>15}{tie:>15}{run:>18}{kept:>19}"
+        for label, one, other, tie, run, kept in zip(
+            labels, left, right, ties, path, pace, strict=True
+        )
     ]
     lines.append("")
     lines.append(
@@ -1383,7 +1597,11 @@ def format_map_check(
         "One placed across a mark\n  is on the stretch next door, a few metres past the mark the "
         "two share, and its error is\n  measured through that mark. Settling ties places each scan "
         "with the scans before it\n  breaking a tie between two stretches. Choosing the path takes "
-        "the likeliest path through\n  them, which can overrule the scan itself."
+        "the likeliest path through\n  them, which can overrule the scan itself. At a walking "
+        "pace settles ties and keeps\n  each answer's place along the stretch to a walk's "
+        "speed, as --locate --watch does.\n  Moved faster than a walk counts the steps between "
+        "two answers in a row on the right\n  stretch that nobody walks in the seconds between "
+        "them."
     )
     names = [name for one in fingerprints for name in one.place.stretch]
     confusable = format_confusable(confusable_crossings(names))

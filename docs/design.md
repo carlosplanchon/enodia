@@ -19,6 +19,7 @@ one feature with somebody else's privacy on the line and its decisions fill a pa
 | why five scans of one pass are one witness, and a router heard everywhere counts for little | *One walk, one look* |
 | why a scan after a hole in the log is not placed too early | *A hole in the scans is not a step* |
 | how a scan that could be at either of two corners is placed | *A tie is settled by the walk, not by the scan* |
+| why the live answer moves at a walk and not scan by scan | *A walk has a pace* |
 | what `--sequence path` does, and what it costs | *The path or the point, and why it is a flag* |
 | what `--check-map` holds out, and what a scan placed across a mark is | *A scan at a mark is on two stretches* |
 | why a block came out on the chord with the street drawn | *A street is more than one way* |
@@ -143,6 +144,25 @@ a tie and is reported as one. A fresh scan stands alone, having nothing before i
 `--locate --watch` is keeping the run, in which case each scan is placed with the ones taken
 before it as they happen. And `--check-map` reports each way of using the run beside the scan
 alone, in columns of their own, so that what the walk adds is measured rather than assumed.
+
+## A walk has a pace
+
+A scan says which stretch you are on well, and where along it less well. On the sample, 22 of
+129 steps between two answers in a row moved faster than anybody walks, and in a live run that
+is a dot that jumps thirty metres and back in ten seconds. So `--locate --watch` follows the
+place along the stretch with a filter of constant speed, a Kalman filter in one dimension: each
+scan moves the answer by how much it disagrees, weighed against how sure the walk so far is, and
+the speed is never more than a walk's. The jumps went from 22 to 6, and from 5 to 2 of 55 on the
+first real outing.
+
+What it did not do is make the answer better, and that is the measurement to keep in mind. The
+mean error stayed at 23 m on the sample and moved a metre on the real outing, because what a
+scan gets wrong along a stretch is mostly a bias that the scans beside it share, and a filter
+averages noise, not bias. It is a steadier answer, and the documentation says that and not more.
+The filter never chooses the stretch either: that stays with the scans (`tie`, `path`), and the
+filter only follows the place along it, taking the walk over through the mark two stretches
+share and starting again from the scan after any other change, a gap of half a minute, or a
+stretch of no known length.
 
 ## The path or the point, and why it is a flag
 

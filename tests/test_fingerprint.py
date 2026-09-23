@@ -5,6 +5,7 @@ import json
 import os
 import stat
 import threading
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from math import log
 
@@ -604,6 +605,7 @@ def test_with_two_outings_the_whole_outing_is_held_out_and_its_next_stretch_with
         check_map([*lunes, *martes], by_signal=True),
         check_map([*lunes, *martes], sequence="tie"),
         check_map([*lunes, *martes], sequence="path"),
+        check_map([*lunes, *martes], keep_pace=True),
     )
     assert "Each outing held out in turn, and its scans located from the other outings:" in report
     assert "placed across a mark                    0              0" in report
@@ -617,6 +619,7 @@ def test_the_check_reports_both_methods_side_by_side():
         check_map(walks, by_signal=True),
         check_map(walks, sequence="tie"),
         check_map(walks, sequence="path"),
+        check_map(walks, keep_pace=True),
     )
     assert "Map: 2 fingerprints, 2 walks over 1 stretches, 1 outings." in report
     assert "Each walk held out in turn" in report
@@ -642,6 +645,7 @@ def test_the_check_reports_fractions_when_no_stretch_has_a_length():
         check_map(walks, by_signal=True),
         check_map(walks, sequence="tie"),
         check_map(walks, sequence="path"),
+        check_map(walks, keep_pace=True),
     )
     assert "mean error, of a stretch              20%            20%" in report
     assert "mean error in metres                    -              -" in report
@@ -659,6 +663,7 @@ def test_the_check_reports_nothing_measurable_when_every_scan_missed():
         check_map(walks, by_signal=True),
         check_map(walks, sequence="tie"),
         check_map(walks, sequence="path"),
+        check_map(walks, keep_pace=True),
     )
     assert "mean error, of a stretch                -              -" in report
     assert "mean error in metres                    -              -" in report
@@ -679,12 +684,13 @@ def test_the_median_of_an_even_and_an_odd_number_of_errors():
         check_map(walks, by_signal=True),
         check_map(walks, sequence="tie"),
         check_map(walks, sequence="path"),
+        check_map(walks, keep_pace=True),
     )
     assert "median error" in report
 
 
 def test_nothing_to_check_is_said_rather_than_shown_as_an_empty_table():
-    report = format_map_check([], [], [], [], [])
+    report = format_map_check([], [], [], [], [], [])
     assert "Nothing to check" in report and "turn round at the corner" in report
 
 
@@ -743,6 +749,7 @@ def test_the_check_says_when_a_map_only_recognised_its_own_walk():
         check_map(walks, by_signal=True),
         check_map(walks, sequence="tie"),
         check_map(walks, sequence="path"),
+        check_map(walks, keep_pace=True),
     )
     assert "2 of 2 answers were backed only by the outing the scan came from" in report
     assert "recognising a walk, not a place" in report
@@ -759,6 +766,7 @@ def test_a_second_outing_over_the_same_street_is_not_flattered():
         check_map(walks, by_signal=True),
         check_map(walks, sequence="tie"),
         check_map(walks, sequence="path"),
+        check_map(walks, keep_pace=True),
     )
     assert "backed only by the outing" not in report
 
@@ -790,6 +798,7 @@ def test_a_map_of_mixed_notebooks_does_not_average_metres_over_a_subset():
         check_map(walks, by_signal=True),
         check_map(walks, sequence="tie"),
         check_map(walks, sequence="path"),
+        check_map(walks, keep_pace=True),
     )
     assert "placed on the right stretch             4              4" in report
     assert "mean error, of a stretch              30%            30%" in report  # las cuatro
@@ -810,6 +819,7 @@ def test_the_map_check_names_crossings_written_both_ways_round():
         check_map(walks, by_signal=True),
         check_map(walks, sequence="tie"),
         check_map(walks, sequence="path"),
+        check_map(walks, keep_pace=True),
     )
     assert "written both ways round" in report
     assert '"Agraciada y Freire" and "Freire y Agraciada"' in report
@@ -1013,6 +1023,7 @@ def test_the_check_in_sequence_settles_what_a_scan_alone_could_not(sequence):
         check_map(fingerprints, by_signal=True),
         check_map(fingerprints, sequence="tie"),
         check_map(fingerprints, sequence="path"),
+        check_map(fingerprints, keep_pace=True),
     )
     assert "settling ties" in report and "choosing the path" in report
 
@@ -1072,6 +1083,7 @@ def test_a_map_of_two_outings_finds_one_of_them_from_the_other(tmp_path, monkeyp
         results,
         check_map(fingerprints, sequence="tie"),
         check_map(fingerprints, sequence="path"),
+        check_map(fingerprints, keep_pace=True),
     )
     assert "Map: 8 fingerprints, 2 walks over 1 stretches, 2 outings." in report
     assert "backed only by the outing" not in report
@@ -1094,6 +1106,7 @@ def test_one_outing_alone_can_only_recognise_itself(tmp_path, monkeypatch):
         check_map(fingerprints, by_signal=True),
         check_map(fingerprints, sequence="tie"),
         check_map(fingerprints, sequence="path"),
+        check_map(fingerprints, keep_pace=True),
     )
     assert "1 outings." in report and "recognising a walk, not a place" in report
 
@@ -1651,6 +1664,7 @@ def test_a_map_can_be_counted_without_being_checked(tmp_path):
         check_map(walks, True),
         check_map(walks, sequence="tie"),
         check_map(walks, sequence="path"),
+        check_map(walks, keep_pace=True),
     )
 
     assert map_summary([]) == MapSummary(0, 0, 0, ())
@@ -1743,3 +1757,139 @@ def test_the_rename_is_on_disk_and_not_only_the_file_it_renamed(tmp_path, monkey
     write_map(tmp_path / "mapa.jsonl", [Fingerprint(Place("A", "B", 0.5), (net("A"),), "o", "w")])
     assert len(synced) == 2
     assert stat.S_ISREG(synced[0]) and stat.S_ISDIR(synced[1])
+
+
+# --- a walking pace -----------------------------------------------------------
+
+
+def at(fraction, street=("Alfa", "Bravo"), length=100.0, spread=0.0, lat=None, lon=None):
+    """An answer somewhere on a stretch, as locate_sequence would give it."""
+    return fingerprint.Location(
+        Place(street[0], street[1], fraction, lat, lon, length), 0.9, 1, spread
+    )
+
+
+def test_one_scan_that_jumps_moves_the_answer_only_part_of_the_way():
+    # Walking at 1.3 m/s, a scan every five seconds, and then one that lands
+    # thirty metres ahead: the answer moves a little, not thirty metres.
+    pace = fingerprint.Pace({})
+    walked = [pace.keep(at(0.1 + 0.065 * step), 5.0 * step) for step in range(4)]
+    assert all(one is not None for one in walked)
+    before = walked[-1].place.fraction
+    jumped = pace.keep(at(before + 0.065 + 0.30), 20.0)
+    assert jumped is not None
+    assert jumped.place.fraction - before < 0.30  # short of the jump
+    assert jumped.place.fraction > before  # but moved towards it
+
+
+def test_a_jump_the_scans_keep_saying_is_caught_up_with():
+    pace = fingerprint.Pace({})
+    for step in range(3):
+        pace.keep(at(0.2), 5.0 * step)
+    answers = [pace.keep(at(0.6), 15.0 + 5.0 * step) for step in range(20)]
+    assert all(one is not None for one in answers)
+    assert answers[0].place.fraction < 0.5
+    # Within a few scans it has caught up, a speed built up carries it a few
+    # metres past, and then it settles where the scans are.
+    assert answers[7].place.fraction > 0.55
+    assert answers[-1].place.fraction == pytest.approx(0.6, abs=0.02)
+
+
+def test_the_speed_is_never_more_than_a_walk():
+    pace = fingerprint.Pace({}, max_speed_ms=1.0)
+    pace.keep(at(0.0), 0.0)
+    for step in range(1, 30):
+        pace.keep(at(1.0), float(step))
+    assert pace.walking is not None and pace.walking.speed <= 1.0
+
+
+def test_the_walk_carries_over_through_the_mark_two_stretches_share():
+    # Alfa to Bravo, then Bravo to Charlie: the walk turns the corner at
+    # Bravo, and the next stretch starts from where it was going.
+    pace = fingerprint.Pace({})
+    for step in range(5):
+        pace.keep(at(0.6 + 0.08 * step), 5.0 * step)
+    assert pace.walking is not None and pace.walking.speed > 0
+    turned = pace.keep(at(0.1, street=("Bravo", "Charlie")), 25.0)
+    assert turned is not None and turned.place.key == ("bravo", "charlie")
+    assert pace.walking.speed > 0  # still going away from Bravo
+    # The stretch drawn the other way round, Charlie to Bravo, the same corner.
+    pace = fingerprint.Pace({})
+    for step in range(5):
+        pace.keep(at(0.6 + 0.08 * step), 5.0 * step)
+    backwards = pace.keep(at(0.9, street=("Charlie", "Bravo")), 25.0)
+    assert backwards is not None and pace.walking.speed < 0  # towards Charlie, down the measure
+    # Leaving Alfa-Bravo by Alfa, onto Alfa-Delta, drawn from Alfa.
+    pace = fingerprint.Pace({})
+    for step in range(5):
+        pace.keep(at(0.4 - 0.08 * step), 5.0 * step)
+    assert pace.keep(at(0.1, street=("Alfa", "Delta")), 25.0) is not None
+    assert pace.walking.speed > 0
+
+
+def test_a_jump_elsewhere_an_unknown_length_or_a_long_gap_start_again_from_the_scan():
+    pace = fingerprint.Pace({})
+    pace.keep(at(0.1), 0.0)
+    far = pace.keep(at(0.9, street=("Echo", "Foxtrot")), 5.0)
+    assert far is not None and far.place.fraction == pytest.approx(0.9)
+    later = pace.keep(at(0.1, street=("Echo", "Foxtrot")), 5.0 + fingerprint.PACE_RESET_S + 1)
+    assert later is not None and later.place.fraction == pytest.approx(0.1)
+    unmeasured = at(0.5, length=None)
+    assert pace.keep(unmeasured, 40.0) is unmeasured and pace.walking is None
+    # A stretch next door with no length of its own cannot take the walk over.
+    pace.keep(at(0.9), 50.0)
+    assert pace.walking is not None
+    beside = pace.keep(at(0.3, street=("Bravo", "Charlie"), length=None), 55.0)
+    assert beside is not None and beside.place.fraction == 0.3
+    pace.keep(at(0.9), 60.0)
+    pace.walking = fingerprint._Walking(
+        Place("Alfa", "Bravo", 0.9, None, None, None), 90.0, 1.0, (1.0, 1.0, 0.0), 60.0
+    )
+    through = pace.keep(at(0.2, street=("Bravo", "Charlie")), 65.0)
+    assert through is not None and through.place.fraction == pytest.approx(0.2)
+
+
+def test_not_on_the_map_passes_through_and_forgets_nothing():
+    pace = fingerprint.Pace({})
+    pace.keep(at(0.5), 0.0)
+    kept = pace.walking
+    assert pace.keep(None, 5.0) is None
+    assert pace.walking is kept
+
+
+def test_the_kept_place_is_put_on_the_line_the_map_draws_for_its_stretch():
+    street = ("Alfa", "Bravo")
+    fingerprints = [
+        Fingerprint(Place(*street, fraction, -34.9, -56.2 + 0.001 * fraction), ())
+        for fraction in (0.0, 0.5, 1.0)
+    ]
+    pace = fingerprint.Pace.of(fingerprints)
+    found = pace.keep(at(0.5, lat=-34.9, lon=-56.1995), 0.0)
+    assert found is not None and found.place.coordinates == pytest.approx((-34.9, -56.1995))
+    # Withheld coordinates stay withheld, and a stretch with nothing to fit
+    # a line to keeps the answer's own.
+    assert pace.keep(at(0.5), 5.0).place.coordinates is None
+    alone = fingerprint.Pace.of([Fingerprint(Place("C", "D", 0.5, -34.9, -56.2), ())])
+    assert alone.lines == {}
+    other = alone.keep(at(0.4, street=("C", "D"), lat=-34.8, lon=-56.3), 0.0)
+    assert other is not None and other.place.coordinates == (-34.8, -56.3)
+
+
+def test_the_check_counts_answers_that_moved_faster_than_a_walk():
+    def held(truth, found, when):
+        return fingerprint.HeldOutScan(
+            Place("Alfa", "Bravo", truth, None, None, 100.0), found, 0.0, 0.0, when=when
+        )
+
+    run = [
+        held(0.1, at(0.1), 0.0),
+        held(0.2, at(0.6), 5.0),  # fifty metres in five seconds
+        held(0.3, at(0.65), 10.0),  # five
+        held(0.4, None, 15.0),
+        held(0.5, at(0.5), None),
+    ]
+    assert fingerprint.jumps(run) == (1, 2)
+    other_run = [run[0], replace(run[1], group="another")]
+    assert fingerprint.jumps(other_run) == (0, 0)
+    unmeasured = [replace(one, found=at(one.truth.fraction, length=None)) for one in run[:2]]
+    assert fingerprint.jumps(unmeasured) == (0, 0)

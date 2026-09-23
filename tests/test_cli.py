@@ -777,7 +777,9 @@ def watching(monkeypatch, views, switches=None):
     )
 
 
-WATCH = ["--locate", "--watch", "--voice", "none", "-i", "wlan0", "-t", "0"]
+# Each scan's answer as it comes: what these tests say is what the run prints
+# and speaks, and keeping it to a walking pace has tests of its own.
+WATCH = ["--locate", "--watch", "--voice", "none", "-i", "wlan0", "-t", "0", "--no-walking-pace"]
 
 
 def test_locate_watch_prints_every_scan_and_speaks_what_changes(monkeypatch, tmp_path, capsys):
@@ -937,6 +939,75 @@ def test_a_live_map_stops_on_streets_it_cannot_read_or_a_page_it_cannot_write(
     assert "error:" in capsys.readouterr().err
 
 
+def test_locate_watch_keeps_the_answers_to_a_walking_pace(monkeypatch, tmp_path, capsys):
+    # Alfa-Bravo at 20% and then at 80%, five seconds apart on a block of 100 m:
+    # sixty metres nobody walks in five seconds. Kept to a pace, the second
+    # answer moves part of the way; taken as it comes, all of it.
+    mapa = two_streets(tmp_path)
+    clock = iter(range(0, 100, 5))
+    monkeypatch.setattr(cli.time, "monotonic", lambda: float(next(clock)))
+    views = [heard("Casa", "Kiosco"), heard("Casa", "Pan")]
+    flags = ["--locate", "--watch", "--voice", "none", "-i", "wlan0", "-t", "0", "--cycles", "2"]
+
+    def answers(*extra):
+        watching(monkeypatch, list(views))
+        assert cli.main([*flags, "--map", str(mapa), *extra]) == 0
+        out = capsys.readouterr().out
+        return [line[10:] for line in out.splitlines() if line[:2].isdigit() and line[2] == ":"]
+
+    kept = answers()
+    assert kept[0] == 'between "Alfa" and "Bravo", 20% of the way'
+    second = int(kept[1].split(", ")[1].removesuffix("% of the way"))
+    assert 20 < second < 80
+    assert answers("--no-walking-pace")[1] == 'between "Alfa" and "Bravo", 80% of the way'
+
+
+def test_the_speed_the_answers_are_kept_to_is_the_one_asked_for(monkeypatch, tmp_path, capsys):
+    # On a bicycle the answers are kept to a bicycle's speed, not a walk's.
+    mapa = two_streets(tmp_path)
+    paces = []
+    real = cli.Pace.of
+    monkeypatch.setattr(
+        cli.Pace, "of", lambda known, speed: paces.append(speed) or real(known, speed)
+    )
+    watching(monkeypatch, [heard("Bar")])
+    flags = ["--locate", "--watch", "--voice", "none", "-i", "wlan0", "-t", "0", "--cycles", "1"]
+    assert cli.main([*flags, "--map", str(mapa), "--max-speed", "7"]) == 0
+    watching(monkeypatch, [heard("Bar")])
+    assert cli.main([*flags, "--map", str(mapa)]) == 0
+    assert paces == [7.0, 2.5]
+
+
+@pytest.mark.parametrize(
+    ("flags", "says"),
+    [
+        (
+            ["--max-speed", "7"],
+            "--max-speed: only meaningful together with --geocode or --locate --watch",
+        ),
+        (["--locate", "--max-speed", "7"], "--max-speed: only meaningful together with --geocode"),
+        (
+            ["--locate", "--watch", "--max-speed", "7", "--no-walking-pace"],
+            "--max-speed and --no-walking-pace contradict each other",
+        ),
+    ],
+)
+def test_a_speed_needs_something_to_keep_to_it(flags, says, capsys):
+    with pytest.raises(SystemExit) as stopped:
+        cli.main(["--voice", "none", "--button", "off", *flags])
+    assert stopped.value.code == 2
+    assert says in capsys.readouterr().err
+
+
+def test_walking_pace_is_only_meaningful_with_watch(capsys):
+    with pytest.raises(SystemExit) as stopped:
+        cli.main(["--voice", "none", "--button", "off", "--locate", "--no-walking-pace"])
+    assert stopped.value.code == 2
+    assert "--no-walking-pace: only meaningful together with --locate --watch" in (
+        capsys.readouterr().err
+    )
+
+
 def test_locate_watch_stops_on_ctrl_c_and_keeps_the_cadence(monkeypatch, tmp_path, capsys):
     from enodia import fingerprint
 
@@ -1029,7 +1100,7 @@ def test_weighing_every_network_alike_reaches_the_check_and_the_lookup(
 
     monkeypatch.setattr(cli, "check_map", counted)
     assert cli.main(["--check-map", "--map", str(mapa), "--weigh", "alike"]) == 0
-    assert checked == [False] * 4 and "by networks" in capsys.readouterr().out
+    assert checked == [False] * 5 and "by networks" in capsys.readouterr().out
     located = []
 
     def placed(fingerprints, scans, **kwargs):

@@ -142,6 +142,16 @@ stretch is said only when the voice is free, since a percentage said late is ano
 fresh scan takes about five seconds per card, so an interval shorter than that is not kept.
 `--cycles N` stops it after N scans, and Ctrl+C whenever.
 
+Each answer's place along its stretch is kept to a walking pace: a scan that lands thirty metres
+from the last one, five seconds on, moves the answer part of the way, and a run of them take it
+all the way, which is the difference between one noisy scan and having turned round. The stretch
+is still the one the scans chose, and only the place along it is kept. It makes the answer
+steadier, not more exact: `--check-map` measures both, in its last column. `--no-walking-pace`
+takes each scan's place as it comes. The pace is 2.5 m/s at most, and `--max-speed` raises it:
+on a bicycle, `--max-speed 7`, or the dot trails behind you and reaches every corner late. A map
+built on foot and used from a bicycle matches a little worse whatever the pace, since a scan
+takes about five seconds and a bicycle covers a quarter of a block in that time.
+
 ```bash
 enodia --locate --watch --log watch.jsonl
 enodia --locate watch.jsonl --map other.jsonl
@@ -346,12 +356,13 @@ says which flag is the odd one.
 
 | flag | needs |
 |---|---|
-| `--area`, `--marks`, `--proxy`, `--overpass-url`, `--max-speed` | `--geocode` |
+| `--area`, `--marks`, `--proxy`, `--overpass-url` | `--geocode` |
+| `--max-speed` | `--geocode` or `--locate --watch`, and not with `--no-walking-pace` |
 | `--out` | `--geocode` or `--export-public` |
 | `--ssid`, `--mac-shaped`, `--key-file` | `--export-public` |
 | `--streets` | `--geocode`, `--reconcile`, `--map-add` or `--live-map` |
 | `--surroundings` | `--geocode` and `--streets` |
-| `--live-map` | `--locate --watch` |
+| `--live-map`, `--no-walking-pace` | `--locate --watch` |
 | `--svg`, `--check-pace`, `--check-passes`, `--path-loss`, `--csv`, `--geojson`, `--scans` | `--reconcile` |
 | `--svg-names` | `--svg` |
 | `--pace` | `--reconcile` or `--map-add` |
