@@ -650,6 +650,23 @@ def test_locate_from_a_log_prints_and_speaks_where_you_are(tmp_path, capsys):
     assert "Say (Silent: False) > Alfa to Bravo" in out or "Say (Silent: False) > Alfa" in out
 
 
+@pytest.mark.parametrize(
+    "how", [["--locate"], ["--locate", "--watch", "-t", "0", "--cycles", "1"], ["--locate", "LOG"]]
+)
+def test_locate_refuses_a_map_that_does_not_exist_before_touching_the_radio(how, tmp_path, capsys):
+    # "Not on the map" is a sentence about the street. A path with a typo in it
+    # used to get that answer, every cycle of a --watch, for ever. The radio is
+    # never asked: the conftest would refuse it, and the refusal would be a
+    # traceback rather than this error.
+    log, _, _ = mapped(tmp_path)
+    flags = [str(log) if flag == "LOG" else flag for flag in how]
+    code = cli.main([*flags, "--map", str(tmp_path / "dolores-mpa.jsonl"), "--voice", "none"])
+    assert code == 1
+    out, err = capsys.readouterr()
+    assert "no such map" in err and "--map-add" in err and "dolores-mpa.jsonl" in err
+    assert "Not on the map" not in out
+
+
 def test_locate_says_plainly_when_you_are_not_on_the_map(tmp_path, capsys):
     log, nb, mapa = mapped(tmp_path)
     cli.main(["--map-add", str(log), str(nb), "--map", str(mapa)])
@@ -665,9 +682,12 @@ def test_locate_says_plainly_when_you_are_not_on_the_map(tmp_path, capsys):
 
 
 def test_locate_reports_a_log_it_cannot_read(tmp_path, capsys):
-    _, _, mapa = mapped(tmp_path)
+    log, nb, mapa = mapped(tmp_path)
+    cli.main(["--map-add", str(log), str(nb), "--map", str(mapa)])  # the map has to exist first
+    capsys.readouterr()
     code = cli.main(["--locate", str(tmp_path / "no-existe.jsonl"), "--map", str(mapa)])
-    assert code == 1 and "error:" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert code == 1 and "error:" in err and "no-existe.jsonl" in err and "no such map" not in err
 
 
 def test_locate_scans_live_when_given_no_log(monkeypatch, tmp_path, capsys):
@@ -847,7 +867,9 @@ def test_watch_needs_a_live_locate(flags, capsys):
 def test_locate_says_when_the_radio_is_switched_off(monkeypatch, tmp_path, capsys):
     from enodia import fingerprint
 
-    _, _, mapa = mapped(tmp_path)
+    log, nb, mapa = mapped(tmp_path)
+    cli.main(["--map-add", str(log), str(nb), "--map", str(mapa)])  # the map has to exist first
+    capsys.readouterr()
     monkeypatch.setattr(fingerprint.ifpeek, "interface_rfkill", lambda interface: "hard")
     code = cli.main(["--locate", "--map", str(mapa), "--voice", "none", "-i", "wlan0"])
     out = capsys.readouterr().out

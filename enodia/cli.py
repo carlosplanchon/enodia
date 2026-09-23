@@ -692,6 +692,18 @@ def run_map(args: argparse.Namespace, map_file: Path) -> int:
         )
         return 0
 
+    # A map that is not there is an error here, and not an empty map. `read_map`
+    # calls a missing file empty because `--map-add` has to be able to create
+    # one, but "not on the map" is a sentence about the street, and a path with
+    # a typo in it answered that way every five seconds of a `--watch`, for as
+    # long as you cared to walk.
+    if not map_file.exists():
+        print(
+            f"error: {map_file}: no such map. --map-add builds one from an outing and its "
+            "notebook, and --map names one somewhere else.",
+            file=sys.stderr,
+        )
+        return 1
     voice = make_voice(args.voice)
     try:
         try:

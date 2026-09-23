@@ -130,6 +130,10 @@ it, settles which: a walk does not jump a block in five seconds. They choose bet
 and never make one up, so a scan the map does not know stays unknown however sure the scans
 before it were.
 
+A map that is not there is an error for `--locate`, not an empty map: "not on the map" is a
+sentence about the street, and a path with a typo in it used to get that answer every cycle
+of a `--watch`, for as long as you cared to walk. `--map-add` is what creates a map.
+
 `--locate --watch` keeps the fresh scans coming, one every `--interval` seconds, and places each
 with the ones before it the way a log's last scan is placed, so a tie is settled by the walk as
 it happens. It prints one line per scan and speaks what changes: a new stretch, or the map

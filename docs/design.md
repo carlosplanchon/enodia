@@ -233,7 +233,10 @@ it.
 
 And the map file has the strictest version. `read_map` treats only a missing file as an empty
 map, because everything else it could fail on is a map whose contents are unknown, and locating
-yourself against an unknown map is worse than saying so.
+yourself against an unknown map is worse than saying so. Even the missing file is empty only
+for the command that creates one: to `--locate` it is an error, since "not on the map" is a
+sentence about the street, and on the first real outing a path with a typo in it got that
+answer every cycle of a `--watch`.
 
 ## Refused at the door
 
