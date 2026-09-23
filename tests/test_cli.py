@@ -1163,8 +1163,35 @@ def test_geocode_that_resolves_nothing_writes_nothing_and_exits_one(monkeypatch,
     nb.write_text("17:00:00 Plaza Independencia\n17:02:00 Plaza Cagancha\n", encoding="utf-8")
     monkeypatch.setattr(geocode, "post_overpass", lambda *a, **k: {"elements": []})
     assert cli.main(["--geocode", str(nb), "--area", "Montevideo"]) == 1
-    assert "Nothing was resolved, so no notebook was written." in capsys.readouterr().out
+    assert "No line gained coordinates, so no notebook was written." in capsys.readouterr().out
     assert not (tmp_path / "libreta.geo.txt").exists()
+
+
+def test_geocode_never_empties_a_streets_file_it_had_nothing_to_ask_for(
+    monkeypatch, capsys, tmp_path
+):
+    # Every line placed, and none a corner of two streets: there is no street to
+    # ask about, no request goes out, and the file that held a whole
+    # neighbourhood used to be written again with nothing in it.
+    from enodia import geocode
+
+    nb = tmp_path / "libreta.geo.txt"
+    nb.write_text("#1 Plaza Independencia @ -34.906, -56.199\n", encoding="utf-8")
+    asked = []
+    monkeypatch.setattr(geocode, "post_overpass", lambda *a, **k: asked.append(a) or {})
+    calles = tmp_path / "calles.jsonl"
+    calles.write_text('{"street": "Rivera", "line": [[-34.9, -56.2], [-34.9, -56.19]]}\n')
+    before = calles.read_text()
+    flags = ["--geocode", str(nb), "--area", "Montevideo", "--streets", str(calles)]
+    assert cli.main([*flags, "--surroundings"]) == 0
+    out = capsys.readouterr().out
+    assert "1 crossings, nothing to ask OpenStreetMap." in out
+    assert "Every line already carries coordinates, so none was looked up again." in out
+    assert f"No street was asked for, so {calles} was left as it was." in out
+    assert calles.read_text() == before
+    assert len(asked) == 1  # the neighbourhood around the one place it knows, and only that
+    assert "way[building]" in asked[0][0]
+    assert not (tmp_path / "libreta.geo.geo.txt").exists()
 
 
 def test_geocode_takes_its_times_from_a_marks_log(monkeypatch, capsys, tmp_path):

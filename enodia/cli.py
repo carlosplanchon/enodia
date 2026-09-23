@@ -692,6 +692,7 @@ def run_geocode(args: argparse.Namespace) -> int:
             marks=notebook_marks(args.marks, say_which_walk(args.marks, args.outing)),
             surroundings=args.surroundings,
             max_speed_ms=args.max_speed,
+            drawing=args.streets is not None,
         )
         # Nothing resolved means nothing to write: a copy of the notebook with no
         # coordinates in it would only be a second file to keep in step.
@@ -700,7 +701,11 @@ def run_geocode(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(format_geocoding(result, target, written))
-    if args.streets:
+    if args.streets and not result.streets:
+        # Nothing was asked, so nothing came back, and writing that down would
+        # replace whatever the file held with an empty one.
+        print(f"No street was asked for, so {args.streets} was left as it was.")
+    elif args.streets:
         try:
             drawn = replace(result.surroundings, streets=tuple(result.drawn))
             shapes = write_streets(args.streets, drawn)
@@ -721,9 +726,10 @@ def run_geocode(args: argparse.Namespace) -> int:
         ]
         extra = "".join(f", {one}" for one in kinds)
         print(f"{shapes} shapes into {args.streets}: the streets it asked about{extra}")
-    if not written:
-        print("\nNothing was resolved, so no notebook was written.")
-    return 0 if written else 1
+    # Nothing to do is not a failure: a notebook placed whole has nothing left
+    # to look up, and asking it only for its streets is what that run was for.
+    done = bool(written) or all(one.placed for one in result.crossings)
+    return 0 if done else 1
 
 
 def run_map(args: argparse.Namespace, map_file: Path) -> int:

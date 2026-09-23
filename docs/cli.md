@@ -205,7 +205,11 @@ HTML. If it is still busy after that, try again later or name another instance w
 on every side: the buildings, the water, the parks and every named street, walked or not, all
 into the same file for `--svg` and `--live-map` to draw. The streets nobody walked are kept
 apart and never used to place a scan. The data is OpenStreetMap's, under the Open Database
-License, and every picture drawn from it credits it at the foot.
+License, and every picture drawn from it credits it at the foot. A line that already carries
+coordinates is never looked up again, but its streets are still asked for, so running
+`--geocode` on a notebook it has already been through, the `.geo.txt` itself, is how to fetch
+the shapes or the neighbourhood afterwards. When there is no street to ask about, the file is
+left as it was rather than written empty.
 
 The original notebook is never touched. Without `--out`, the result goes beside it with `.geo`
 before the suffix. `--proxy` sends the one request through SOCKS5 and the proxy resolves the

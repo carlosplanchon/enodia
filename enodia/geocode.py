@@ -872,8 +872,15 @@ def geocode_notebook(
     surroundings: bool = False,
     fetch: Callable[..., dict[str, Any]] | None = None,
     max_speed_ms: float = MAX_WALKING_SPEED_MS,
+    drawing: bool = False,
 ) -> Geocoding:
     """Look every crossing in a notebook up, and work out which answers to trust.
+
+    `drawing` asks for the streets of every corner, the ones that already carry
+    coordinates too, since the shapes are wanted whether or not the corners
+    are. A line already placed is never looked up again, only drawn, and with
+    `surroundings` the neighbourhood is asked for around every corner whose
+    place is known, found now or written before.
 
     `max_speed_ms` is the pace above which a stretch is taken for a wrong
     lookup rather than a fast walk: a brisk walk is under two metres a second,
@@ -896,8 +903,12 @@ def geocode_notebook(
     result.confusable = confusable_crossings(one.name for one in crossings)
 
     corners: dict[int, tuple[str, str]] = {}
+    wanted: dict[str, str] = {}
     for one in crossings:
         if one.placed:
+            if drawing and (pair := corner_streets(one.name)) is not None:
+                for name in pair:
+                    wanted.setdefault(folded(name), name)
             continue
         pair = corner_streets(one.name)
         if pair is None:
@@ -909,7 +920,6 @@ def geocode_notebook(
 
     # One street however many ways the notebook spells it: asking Overpass for
     # both "Rivera" and "rivera" costs a clause and finds the same ways.
-    wanted: dict[str, str] = {}
     for pair in corners.values():
         for name in pair:
             wanted.setdefault(folded(name), name)
@@ -938,17 +948,15 @@ def geocode_notebook(
                 result.found[line] = junction
 
     _check_the_walk(result, times, max_speed_ms)
-    if surroundings and result.found:
+    known = [(one.lat, one.lon) for one in result.found.values()] + [
+        where for one in crossings if (where := one.coordinates) is not None
+    ]
+    if surroundings and known:
         # A second request, and only when asked for. The box cannot be known
         # until the crossings are, so this does not fold into the first one.
         # A little wider than a picture shows, so nothing is cut at its edge.
         answer = ask(
-            surroundings_query(
-                around(
-                    [(one.lat, one.lon) for one in result.found.values()],
-                    margin_m=SURROUNDINGS_M + 100.0,
-                )
-            ),
+            surroundings_query(around(known, margin_m=SURROUNDINGS_M + 100.0)),
             url=url,
             proxy=proxy,
         )
@@ -1032,10 +1040,18 @@ def write_geocoded(source: str | Path, target: str | Path, result: Geocoding) ->
 
 def format_geocoding(result: Geocoding, target: Path, written: int) -> str:
     """What the lookup found, what it refused, and why."""
-    lines = [
-        f"{len(result.crossings)} crossings, {result.streets} streets asked for in one request.",
-        f"{written} lines gained coordinates, written to {target}.",
-    ]
+    asked = (
+        f"{result.streets} streets asked for in one request"
+        if result.streets
+        else "nothing to ask OpenStreetMap"
+    )
+    lines = [f"{len(result.crossings)} crossings, {asked}."]
+    if written:
+        lines.append(f"{written} lines gained coordinates, written to {target}.")
+    elif result.crossings and all(one.placed for one in result.crossings):
+        lines.append("Every line already carries coordinates, so none was looked up again.")
+    else:
+        lines.append("No line gained coordinates, so no notebook was written.")
     if result.approximate:
         lines.append(
             f"{result.approximate} of them are where the two streets came closest rather than "

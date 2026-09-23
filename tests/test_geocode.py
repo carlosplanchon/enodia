@@ -1005,3 +1005,26 @@ def test_marks_that_do_not_answer_the_notebook_never_reach_the_network(tmp_path)
     with pytest.raises(NotebookError, match="the log has no mark #7"):
         geocode_notebook(nb, "Montevideo", marks=marks, fetch=fetch)
     assert asked == []
+
+
+def test_a_placed_notebook_is_drawn_again_without_being_looked_up_again(tmp_path):
+    # Asked for its streets, a notebook already geocoded gets them: the names of
+    # its corners go into the request, and not one line is placed a second time.
+    placed = notebook(
+        tmp_path,
+        "17:00:00 Agraciada y Freire @ -34.9000, -56.2000\n"
+        "17:02:00 Agraciada y Solari @ -34.9010, -56.1980\n",
+    )
+    asked = []
+
+    def fetch(query, url=None, proxy=None):
+        asked.append(query)
+        return ANSWER if "way[building]" not in query else {"elements": []}
+
+    plain = geocode_notebook(placed, "Montevideo", fetch=fetch)
+    assert asked == [] and plain.streets == 0 and plain.found == {}
+
+    drawn = geocode_notebook(placed, "Montevideo", fetch=fetch, drawing=True, surroundings=True)
+    assert drawn.streets == 3 and drawn.found == {}
+    assert {street.name for street in drawn.drawn} >= {"Freire", "Solari"}
+    assert len(asked) == 2 and "[bbox:-34.903" in asked[1]  # around the corners it had
