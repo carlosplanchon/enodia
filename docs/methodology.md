@@ -128,7 +128,7 @@ enodia --geocode notebook.txt --area Montevideo --proxy socks5://127.0.0.1:9050
 
 The list of corners somebody is about to walk is not nothing, so the one request can go through a SOCKS5 proxy. `9050` is the Tor daemon, `9150` is Tor Browser. Needs the `socks` extra: `uv tool install "enodia[socks]"`, or `uv sync --extra socks` in a clone.
 
-Four things about it are worth stating rather than assuming. The proxy resolves the hostname, never this machine, so the DNS lookup does not announce what is about to be asked. **If the proxy cannot be reached the command fails and sends nothing**, because a quiet fall back to a direct connection would undo the only thing the flag was for. `ALL_PROXY`, `HTTPS_PROXY` and the rest of the environment are never read, so what the command says is where the request goes: this is structural rather than a rule somebody has to keep remembering, since the module uses `http.client`, which has no idea the environment exists. And `--overpass-url` picks the endpoint, which matters here because several public instances turn Tor exits away.
+Four things about it are worth stating rather than assuming. The proxy resolves the hostname, never this machine, so the DNS lookup does not announce what is about to be asked. **If the proxy cannot be reached the command fails and sends nothing**, because a quiet fall back to a direct connection would undo the only thing the flag was for. `ALL_PROXY`, `HTTPS_PROXY` and the rest of the environment are never read, so what the command says is where the request goes: this is structural rather than a rule somebody has to keep remembering, since the module uses `http.client`, which has no idea the environment exists. And `--overpass-url` picks the endpoint, which matters here because several public instances turn Tor exits away. A server that answers that it is busy (429, 502, 503, 504, or its own page saying so) is asked again three times with growing pauses, and nothing else is: a query refused once will be refused again, and one that timed out after three minutes is not worth three more unasked.
 
 Coordinates from OpenStreetMap are ODbL. In your own notebook for your own walk that is nothing to think about. Publishing a database derived from them comes with share-alike obligations.
 
@@ -157,11 +157,11 @@ It is entirely optional and it never guesses. Without a streets file, or for a b
 ## Drawing it
 
 ```bash
-enodia --geocode notebook.txt --area Montevideo --streets streets.jsonl --buildings
+enodia --geocode notebook.txt --area Montevideo --streets streets.jsonl --surroundings
 enodia --reconcile walk.jsonl notebook.geo.txt --streets streets.jsonl --svg plan.svg
 ```
 
-An SVG, written once, that opens in any browser with nothing fetched. The lines are the ones OpenStreetMap draws, rendered here rather than there. `--buildings` is a second request, asked for separately because the box to ask about is not known until the crossings are, and it turns the picture from lines into blocks.
+An SVG, written once, that opens in any browser with nothing fetched. The lines are the ones OpenStreetMap draws, rendered here rather than there. `--surroundings` is a second request, asked for separately because the box to ask about is not known until the crossings are: the buildings, the water, the parks and every named street within 300 m of them, which turns the picture from lines into a neighbourhood. The picture leaves 200 m around the walk, or a tenth of the walk's size when that is more, so the river a few blocks off that says where the walk was is in it. The names of the streets are set beside the street and never upside down, one every 250 m at most, and the data is credited at the foot, as the Open Database License asks. `--locate --watch --live-map` draws on the same data, a page per cycle with where the map puts you.
 
 No tiles, and that is deliberate rather than lazy. The OSM wiki says of the standard tile layer that it is *"not designed and suited for heavily used applications"* and asks that bulk downloading be respected, so a distributed tool that fetches tiles is the case the policy is about. Drawing the vector data offline sidesteps all of it, keeps the reconciliation offline, and keeps the geometry measurable instead of only visible.
 

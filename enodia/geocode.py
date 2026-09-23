@@ -34,6 +34,7 @@ import json
 import re
 import socket
 import ssl
+import time
 import urllib.parse
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -57,12 +58,19 @@ from enodia.reconcile import (
     read_notebook,
     strip_comment,
 )
-from enodia.streets import Street
+from enodia.streets import SURROUNDINGS_M, Area, Line, Street, StreetMap, joined
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 USER_AGENT = f"enodia/{__version__}"
 QUERY_TIMEOUT_S = 60
 READ_TIMEOUT_S = 180
+# What an Overpass instance answers when it is too busy to take the query, as
+# opposed to refusing it: too many requests from here, or a gateway that gave
+# up waiting. Asked again after a pause, it usually answers. The pauses grow,
+# and a server that says how long to wait is believed, up to a limit.
+BUSY = {429: "too many requests", 502: "bad gateway", 503: "unavailable", 504: "gateway timeout"}
+BUSY_WAITS_S = (15.0, 30.0, 60.0)
+LONGEST_WAIT_S = 120.0
 MAX_WALKING_SPEED_MS = 2.5
 JUNCTION_CLUSTER_M = 60.0
 NEARBY_JUNCTION_M = 30.0
@@ -272,14 +280,30 @@ class Proxy:
     password: str | None = None
 
 
-def buildings_query(bbox: str, timeout: int = QUERY_TIMEOUT_S) -> str:
-    """Every building in a box, drawn.
+def surroundings_query(bbox: str, timeout: int = QUERY_TIMEOUT_S) -> str:
+    """Everything in a box that makes a plan of it readable, drawn.
 
-    `out geom` and not the node dance the streets need: nothing here has to know
-    which building shares a corner with which, only what shape each one is, so
-    the coordinates come back inline.
+    The buildings, the water, the parks and every named street, walked or not,
+    for their names. `out geom` and not the node dance the streets need:
+    nothing here has to know which shape shares a corner with which, only what
+    shape each one is, so the coordinates come back inline, and a river's
+    relation comes back with every one of its members.
     """
-    return f"[out:json][timeout:{timeout}][bbox:{bbox}];\nway[building];\nout geom;\n"
+    skip = '[highway!~"^(' + "|".join(SKIP_HIGHWAYS) + ')$"]'
+    return (
+        f"[out:json][timeout:{timeout}][bbox:{bbox}];\n"
+        "(\n"
+        "  way[building];\n"
+        "  way[natural=water];\n"
+        "  relation[natural=water];\n"
+        '  way[waterway~"^(river|stream|canal)$"];\n'
+        "  way[leisure=park];\n"
+        "  relation[leisure=park];\n"
+        "  way[landuse=grass];\n"
+        f"  way[highway][name]{skip};\n"
+        ");\n"
+        "out geom;\n"
+    )
 
 
 def around(places: Sequence[tuple[float, float]], margin_m: float = 150.0) -> str:
@@ -294,23 +318,80 @@ def around(places: Sequence[tuple[float, float]], margin_m: float = 150.0) -> st
     )
 
 
-def drawn_buildings(elements: Iterable[Any]) -> list[tuple[tuple[float, float], ...]]:
-    """The building outlines in an answer that asked for geometry."""
-    shapes = []
-    for element in elements:
-        if not isinstance(element, dict) or element.get("type") != "way":
-            continue
-        geometry = element.get("geometry")
-        if not isinstance(geometry, list):
-            continue
-        outline = tuple(
-            (float(point["lat"]), float(point["lon"]))
-            for point in geometry
-            if isinstance(point, dict) and "lat" in point and "lon" in point
+def _outline(geometry: Any) -> Line:
+    """The points of one way's geometry, as `out geom` writes them."""
+    if not isinstance(geometry, list):
+        return ()
+    return tuple(
+        (float(point["lat"]), float(point["lon"]))
+        for point in geometry
+        if isinstance(point, dict) and "lat" in point and "lon" in point
+    )
+
+
+def _area(element: dict[str, Any]) -> Area:
+    """The rings of a closed way, or of a multipolygon put back together.
+
+    A relation's outline comes as the ways it is made of, each a stretch of
+    one ring, and the ring is those stretches joined end to end. Outer and
+    inner alike, since the drawing is even-odd and an island needs no telling
+    from a shore. A ring that could not be closed because a member is missing
+    is kept all the same: a river with a gap in its bank is still the river.
+    """
+    if element.get("type") == "way":
+        rings = [_outline(element.get("geometry"))]
+    else:
+        members = element.get("members")
+        rings = joined(
+            _outline(member.get("geometry"))
+            for member in (members if isinstance(members, list) else [])
+            if isinstance(member, dict)
+            and member.get("type") == "way"
+            and member.get("role") in ("outer", "inner")
         )
-        if len(outline) >= 3:
-            shapes.append(outline)
-    return shapes
+    return tuple(ring for ring in rings if len(ring) >= 3)
+
+
+def drawn_surroundings(elements: Iterable[Any]) -> StreetMap:
+    """The neighbourhood in an answer that asked for geometry, sorted into kinds.
+
+    One shape is one kind, the first that fits: a park mapped as grass as well
+    is a park, and a building is never a road.
+    """
+    buildings: list[Line] = []
+    water: list[Area] = []
+    rivers: list[Line] = []
+    parks: list[Area] = []
+    roads: list[Street] = []
+    for element in elements:
+        if not isinstance(element, dict) or element.get("type") not in ("way", "relation"):
+            continue
+        tags = element.get("tags")
+        tags = tags if isinstance(tags, dict) else {}
+        if tags.get("natural") == "water":
+            if area := _area(element):
+                water.append(area)
+        elif tags.get("leisure") == "park" or tags.get("landuse") == "grass":
+            if area := _area(element):
+                parks.append(area)
+        elif element.get("type") != "way":
+            continue
+        elif "building" in tags:
+            if len(outline := _outline(element.get("geometry"))) >= 3:
+                buildings.append(outline)
+        elif "waterway" in tags:
+            if len(line := _outline(element.get("geometry"))) >= 2:
+                rivers.append(line)
+        elif "highway" in tags and isinstance(tags.get("name"), str) and tags["name"]:
+            if len(line := _outline(element.get("geometry"))) >= 2:
+                roads.append(Street(tags["name"], line))
+    return StreetMap(
+        buildings=tuple(buildings),
+        water=tuple(water),
+        rivers=tuple(rivers),
+        parks=tuple(parks),
+        roads=tuple(roads),
+    )
 
 
 def parse_proxy(url: str) -> Proxy:
@@ -429,12 +510,30 @@ class OverpassConnection(http.client.HTTPConnection):
         self.sock = self.context.wrap_socket(plain, server_hostname=self.host)
 
 
+def _said(raw: bytes) -> str:
+    """What an error page says, as a line of text: the markup taken out, and short.
+
+    Overpass explains itself in HTML, `<p><strong>Error</strong>: runtime
+    error: ...`, and printed as bytes that is a doctype and half a head before
+    a word of it.
+    """
+    words = " ".join(re.sub(r"<[^>]*>", " ", raw.decode("utf-8", errors="replace")).split())
+    words = re.sub(r" ([:,.])", r"\1", words)  # `<strong>Error</strong>: ...` is one sentence
+    # Past the licence line every Overpass page opens with, to what went wrong.
+    if "Error:" in words:
+        words = words[words.index("Error:") :]
+    return words if len(words) <= 200 else words[:199] + "\u2026"
+
+
 def post_overpass(
     query: str,
     url: str = OVERPASS_URL,
     proxy: Proxy | None = None,
     timeout: float = READ_TIMEOUT_S,
     connection: Callable[..., http.client.HTTPConnection] = OverpassConnection,
+    waits: Sequence[float] = BUSY_WAITS_S,
+    sleep: Callable[[float], None] = time.sleep,
+    tell: Callable[[str], None] = print,
 ) -> dict[str, Any]:
     """Send one query and return the answer, refusing anything that is not a whole one.
 
@@ -443,10 +542,78 @@ def post_overpass(
     truncated list of elements and a `remark` saying so. Crossings worked out
     from half the streets look exactly like crossings worked out from all of
     them, and they would be written into the notebook as fact.
+
+    A server too busy to answer (`BUSY`) is asked again, once after each of
+    `waits`, and says so through `tell` each time, since a command that sits
+    silent for a minute looks like one that has hung. Nothing else is retried:
+    a query the server refused will be refused again, and one that timed out
+    after three minutes is not worth three more without being asked.
     """
     parts = urllib.parse.urlsplit(url)
     if parts.scheme != "https" or not parts.hostname:
         raise GeocodeError(f"{url}: the Overpass endpoint has to be an https URL")
+    tries = len(waits) + 1
+    for attempt in range(tries):
+        raw, status, location, after = _post_once(query, url, parts, proxy, timeout, connection)
+        busy = _busy(status, raw)
+        if busy is None:
+            break
+        if attempt == tries - 1:
+            raise GeocodeError(
+                f"{url}: Overpass is busy, it answered {busy} {tries} times in a row. "
+                "Try again in a few minutes, or ask another instance with --overpass-url."
+            )
+        pause = waits[attempt]
+        if after is not None and after.strip().isdigit():
+            pause = min(max(float(after), pause), LONGEST_WAIT_S)
+        tell(
+            f"Overpass is busy, it answered {busy}: asking again in {pause:.0f} s, "
+            f"try {attempt + 2} of {tries}"
+        )
+        sleep(pause)
+
+    if 300 <= status < 400:
+        raise GeocodeError(f"{url}: redirected to {location}, which is not what was asked for")
+    if status != 200:
+        raise GeocodeError(f"{url}: the server answered {status}: {_said(raw)}")
+    try:
+        found = json.loads(raw)
+    except ValueError as exc:
+        raise GeocodeError(f"{url}: the answer was not JSON: {_said(raw)}") from exc
+    if not isinstance(found, dict):
+        raise GeocodeError(f"{url}: the answer was not an Overpass result")
+    remark = found.get("remark")
+    if remark:
+        raise GeocodeError(
+            f"{url}: the answer is incomplete and was not used ({remark}). "
+            "Try a smaller area, or an endpoint under less load."
+        )
+    return found
+
+
+def _busy(status: int, raw: bytes) -> str | None:
+    """Why an answer means "ask again later", or None when it means something else.
+
+    A busy status, or an error page that says as much with a 200 on it, which
+    is what Overpass sends when its dispatcher gives up: not a refusal of the
+    query, and the same query a minute later is answered.
+    """
+    if status in BUSY:
+        return f"{status} ({BUSY[status]})"
+    if status == 200 and not raw.lstrip().startswith(b"{") and b"too busy" in raw:
+        return "a page saying it was too busy"
+    return None
+
+
+def _post_once(
+    query: str,
+    url: str,
+    parts: urllib.parse.SplitResult,
+    proxy: Proxy | None,
+    timeout: float,
+    connection: Callable[..., http.client.HTTPConnection],
+) -> tuple[bytes, int, str | None, str | None]:
+    """One request: the body, the status, and the two headers anything here reads."""
     link = connection(parts.hostname, parts.port or 443, proxy=proxy, timeout=timeout)
     try:
         link.request(
@@ -459,29 +626,16 @@ def post_overpass(
             },
         )
         answer = link.getresponse()
-        raw, status, location = answer.read(), answer.status, answer.getheader("Location")
+        return (
+            answer.read(),
+            answer.status,
+            answer.getheader("Location"),
+            answer.getheader("Retry-After"),
+        )
     except OSError as exc:
         raise GeocodeError(f"{url}: {exc}") from exc
     finally:
         link.close()
-
-    if 300 <= status < 400:
-        raise GeocodeError(f"{url}: redirected to {location}, which is not what was asked for")
-    if status != 200:
-        raise GeocodeError(f"{url}: the server answered {status}, {raw[:200]!r}")
-    try:
-        found = json.loads(raw)
-    except ValueError as exc:
-        raise GeocodeError(f"{url}: the answer was not JSON, {raw[:200]!r}") from exc
-    if not isinstance(found, dict):
-        raise GeocodeError(f"{url}: the answer was not an Overpass result")
-    remark = found.get("remark")
-    if remark:
-        raise GeocodeError(
-            f"{url}: the answer is incomplete and was not used ({remark}). "
-            "Try a smaller area, or an endpoint under less load."
-        )
-    return found
 
 
 # --- Working the crossings out, offline --------------------------------------
@@ -698,7 +852,7 @@ class Geocoding:
     confusable: list[tuple[str, ...]] = field(default_factory=list)
     streets: int = 0
     drawn: list[Street] = field(default_factory=list)
-    buildings: list[tuple[tuple[float, float], ...]] = field(default_factory=list)
+    surroundings: StreetMap = field(default_factory=StreetMap)
     missing: list[str] = field(default_factory=list)
     checked: int = 0
     unchecked: int = 0
@@ -715,7 +869,7 @@ def geocode_notebook(
     proxy: Proxy | None = None,
     url: str = OVERPASS_URL,
     marks: Sequence[tuple[int, datetime]] = (),
-    buildings: bool = False,
+    surroundings: bool = False,
     fetch: Callable[..., dict[str, Any]] | None = None,
     max_speed_ms: float = MAX_WALKING_SPEED_MS,
 ) -> Geocoding:
@@ -784,15 +938,21 @@ def geocode_notebook(
                 result.found[line] = junction
 
     _check_the_walk(result, times, max_speed_ms)
-    if buildings and result.found:
+    if surroundings and result.found:
         # A second request, and only when asked for. The box cannot be known
         # until the crossings are, so this does not fold into the first one.
+        # A little wider than a picture shows, so nothing is cut at its edge.
         answer = ask(
-            buildings_query(around([(one.lat, one.lon) for one in result.found.values()])),
+            surroundings_query(
+                around(
+                    [(one.lat, one.lon) for one in result.found.values()],
+                    margin_m=SURROUNDINGS_M + 100.0,
+                )
+            ),
             url=url,
             proxy=proxy,
         )
-        result.buildings = drawn_buildings(answer.get("elements") or [])
+        result.surroundings = drawn_surroundings(answer.get("elements") or [])
     return result
 
 

@@ -54,4 +54,19 @@ jq -r 'select(.event=="scan") | .networks[] | select(.security=="open") | .ssid'
 wc -l 2026-09-14T17-45-03.jsonl          # how many records the outing produced
 ```
 
+## The streets file
+
+`--geocode --streets FILE` writes what OpenStreetMap drew, one shape per line, coordinates inline as `[lat, lon]` so the file is read back without asking anything:
+
+```
+{"street": "Rivera", "line": [[-34.903126, -56.156023], [-34.903131, -56.157581]]}
+{"road": "Rambla Costanera", "line": [[-33.5154, -58.2231], [-33.5157, -58.2203]]}
+{"building": [[-34.9, -56.2], [-34.9, -56.199], [-34.8995, -56.199], [-34.9, -56.2]]}
+{"water": [[[-33.51, -58.23], [-33.51, -58.21], [-33.50, -58.21]], [[-33.505, -58.22], [-33.505, -58.219], [-33.504, -58.219]]]}
+{"river": [[-33.512, -58.23], [-33.511, -58.21]]}
+{"park": [[[-33.518, -58.221], [-33.518, -58.220], [-33.517, -58.220]]]}
+```
+
+`street` lines are the streets the notebook names, and the only ones a scan is placed along. The rest come with `--surroundings` and are only drawn: `road` is every named street in the box, walked or not, `water` and `park` are areas given as a list of rings drawn together even-odd, so an island in a river is a hole in it, and `river` is a waterway drawn as a line. A line that is not one of these, or a point that is not two finite numbers on the earth, is skipped, and a file written before these kinds existed reads as it always did.
+
 See [the CLI reference](cli.md) for the flags that read and write these.

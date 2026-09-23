@@ -35,9 +35,16 @@ NEAR_CROSSING_M = 25.0
 # not the block between them: it is a way that loops, or the long way round a
 # one-way pair. Better the chord than a confident detour.
 LONGEST_DETOUR = 3.0
+# How much of the neighbourhood a picture shows around the walk, and so how much
+# of it `--geocode --surroundings` asks for. Enough for the river or the park a
+# few blocks off that says where the walk was, without drawing the whole city.
+SURROUNDINGS_M = 200.0
 
 Place = tuple[float, float]
 Line = tuple[Place, ...]
+# An area: every ring of it, drawn together even-odd, so that the island in a
+# river or the pond in a park is a hole and not more of the same.
+Area = tuple[Line, ...]
 
 
 def distance_metres(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -130,6 +137,39 @@ class Street:
         return line_length_m(self.line)
 
 
+def joined(pieces: Iterable[Line]) -> list[Line]:
+    """Lines that meet end to end, joined into as few lines as they make.
+
+    Whichever way round each piece was drawn: OpenStreetMap gives a way the
+    direction somebody traced it in, and two ways of one street, or two stretches
+    of one riverbank, meet head to head as often as head to tail.
+    """
+    lines = [tuple(piece) for piece in pieces if len(piece) >= 2]
+    found = True
+    while found:
+        found = False
+        for i, a in enumerate(lines):
+            for j in range(i + 1, len(lines)):
+                b = lines[j]
+                if a[-1] == b[0]:
+                    together = a + b[1:]
+                elif a[-1] == b[-1]:
+                    together = a + b[::-1][1:]
+                elif a[0] == b[-1]:
+                    together = b + a[1:]
+                elif a[0] == b[0]:
+                    together = a[::-1] + b[1:]
+                else:
+                    continue
+                lines[i] = together
+                del lines[j]
+                found = True
+                break
+            if found:
+                break
+    return lines
+
+
 def _chained(streets: Sequence[Street]) -> tuple[Street, ...]:
     """The ways of each street that meet end to end, joined into one line apiece.
 
@@ -140,42 +180,33 @@ def _chained(streets: Sequence[Street]) -> tuple[Street, ...]:
     """
     by_name: dict[str, list[Line]] = {}
     for street in streets:
-        if len(street.line) >= 2:
-            by_name.setdefault(street.name, []).append(tuple(street.line))
-    chained = []
-    for name, lines in by_name.items():
-        joined = True
-        while joined:
-            joined = False
-            for i, a in enumerate(lines):
-                for j in range(i + 1, len(lines)):
-                    b = lines[j]
-                    if a[-1] == b[0]:
-                        together = a + b[1:]
-                    elif a[-1] == b[-1]:
-                        together = a + b[::-1][1:]
-                    elif a[0] == b[-1]:
-                        together = b + a[1:]
-                    elif a[0] == b[0]:
-                        together = a[::-1] + b[1:]
-                    else:
-                        continue
-                    lines[i] = together
-                    del lines[j]
-                    joined = True
-                    break
-                if joined:
-                    break
-        chained.extend(Street(name, line) for line in lines)
-    return tuple(chained)
+        by_name.setdefault(street.name, []).append(tuple(street.line))
+    return tuple(Street(name, line) for name, lines in by_name.items() for line in joined(lines))
 
 
 @dataclass(frozen=True)
 class StreetMap:
-    """What the lookup drew: the streets, and the buildings they run between."""
+    """What the lookup drew: the streets, and the neighbourhood they run through.
+
+    `streets` are the ones the notebook names, the only ones a block is looked
+    for on. Everything else is `--surroundings`, there to be drawn: `roads` are
+    every named street in the box, walked or not, and are kept apart for
+    exactly that reason. A street nobody walked has no business competing for
+    the block between two marks, and one that crosses both of them near enough
+    would.
+    """
 
     streets: tuple[Street, ...] = ()
     buildings: tuple[Line, ...] = ()
+    water: tuple[Area, ...] = ()
+    rivers: tuple[Line, ...] = ()
+    parks: tuple[Area, ...] = ()
+    roads: tuple[Street, ...] = ()
+
+    @property
+    def surroundings(self) -> bool:
+        """Whether anything beyond the walked streets was drawn."""
+        return bool(self.buildings or self.water or self.rivers or self.parks or self.roads)
 
     def __len__(self) -> int:
         return len(self.streets)
@@ -222,25 +253,25 @@ def _drawn(line: Line) -> list[list[float]]:
     return [[round(lat, 7), round(lon, 7)] for lat, lon in line]
 
 
-def write_streets(
-    path: str | Path, streets: Iterable[Street], buildings: Iterable[Line] = ()
-) -> int:
+def write_streets(path: str | Path, drawn: StreetMap) -> int:
     """Keep what OpenStreetMap drew beside the notebook, one shape per line.
 
     Coordinates inline rather than node references, so the file stands on its
     own: it is read back without asking OpenStreetMap anything, which is the
     whole point of having asked once.
     """
-    written = 0
+    rows: list[dict[str, Any]] = [
+        *({"street": one.name, "line": _drawn(one.line)} for one in drawn.streets),
+        *({"road": one.name, "line": _drawn(one.line)} for one in drawn.roads),
+        *({"building": _drawn(shape)} for shape in drawn.buildings),
+        *({"water": [_drawn(ring) for ring in area]} for area in drawn.water),
+        *({"river": _drawn(line)} for line in drawn.rivers),
+        *({"park": [_drawn(ring) for ring in area]} for area in drawn.parks),
+    ]
     with Path(path).open("w", encoding="utf-8") as out:
-        for street in streets:
-            row = {"street": street.name, "line": _drawn(street.line)}
+        for row in rows:
             out.write(json.dumps(row, ensure_ascii=False) + "\n")
-            written += 1
-        for building in buildings:
-            out.write(json.dumps({"building": _drawn(building)}) + "\n")
-            written += 1
-    return written
+    return len(rows)
 
 
 def read_streets(path: str | Path) -> StreetMap:
@@ -253,12 +284,13 @@ def read_streets(path: str | Path) -> StreetMap:
     back an empty map, and an empty map means every block is placed on the
     chord, which is a quietly worse answer wearing the same face as a good one.
     """
-    found = []
     try:
         text = Path(path).read_text(encoding="utf-8", errors="replace")
     except FileNotFoundError:
         return StreetMap()
-    shapes = []
+    kept: dict[str, list[Any]] = {
+        kind: [] for kind in ("street", "road", "building", "water", "river", "park")
+    }
     for row in text.splitlines():
         if not row.strip():
             continue
@@ -268,17 +300,37 @@ def read_streets(path: str | Path) -> StreetMap:
             continue
         if not isinstance(fields, dict):
             continue
-        name, line = fields.get("street"), fields.get("line")
-        building = fields.get("building")
-        if isinstance(name, str) and isinstance(line, list):
-            places = _places(line)
-            if len(places) >= 2:
-                found.append(Street(name, places))
-        elif isinstance(building, list):
-            places = _places(building)
-            if len(places) >= 3:
-                shapes.append(places)
-    return StreetMap(tuple(found), tuple(shapes))
+        line = fields.get("line")
+        for kind in ("street", "road"):
+            name = fields.get(kind)
+            if isinstance(name, str) and isinstance(line, list):
+                places = _places(line)
+                if len(places) >= 2:
+                    kept[kind].append(Street(name, places))
+        for kind, least in (("building", 3), ("river", 2)):
+            shape = fields.get(kind)
+            if isinstance(shape, list):
+                places = _places(shape)
+                if len(places) >= least:
+                    kept[kind].append(places)
+        for kind in ("water", "park"):
+            rings = fields.get(kind)
+            if isinstance(rings, list):
+                area = tuple(
+                    places
+                    for ring in rings
+                    if isinstance(ring, list) and len(places := _places(ring)) >= 3
+                )
+                if area:
+                    kept[kind].append(area)
+    return StreetMap(
+        streets=tuple(kept["street"]),
+        buildings=tuple(kept["building"]),
+        water=tuple(kept["water"]),
+        rivers=tuple(kept["river"]),
+        parks=tuple(kept["park"]),
+        roads=tuple(kept["road"]),
+    )
 
 
 def _places(line: list[Any]) -> Line:

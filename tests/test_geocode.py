@@ -498,19 +498,24 @@ def test_the_connection_verifies_the_certificate_against_the_endpoints_name(monk
 
 
 class FakeAnswer:
-    def __init__(self, status=200, body=b"{}", location=None):
-        self.status, self.body, self.location = status, body, location
+    def __init__(self, status=200, body=b"{}", location=None, retry_after=None):
+        self.status, self.body = status, body
+        self.headers = {"Location": location, "Retry-After": retry_after}
 
     def read(self):
         return self.body
 
     def getheader(self, name):
-        return self.location
+        return self.headers[name]
 
 
 class FakeLink:
-    def __init__(self, answer=None, fail=None):
+    """One connection, or several in turn: each request answered by the next answer."""
+
+    def __init__(self, answer=None, fail=None, then=()):
+        self.answers = iter([answer, *then])
         self.answer, self.fail, self.sent, self.closed = answer, fail, None, False
+        self.asked = 0
 
     def __call__(self, host, port=443, *, proxy=None, timeout=None):
         self.opened = (host, port, proxy, timeout)
@@ -522,7 +527,8 @@ class FakeLink:
         self.sent = (method, path, body, headers)
 
     def getresponse(self):
-        return self.answer
+        self.asked += 1
+        return next(self.answers)
 
     def close(self):
         self.closed = True
@@ -553,9 +559,79 @@ def test_a_redirect_is_refused_because_nobody_asked_for_the_other_host():
         post_overpass("q", connection=link)
 
 
-def test_a_rate_limited_answer_names_the_status_it_got():
-    with pytest.raises(GeocodeError, match="answered 429"):
-        post_overpass("q", connection=FakeLink(FakeAnswer(status=429, body=b"slow down")))
+GOOD = json.dumps(ANSWER).encode()
+TOO_BUSY = (
+    b'<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 '
+    b'Strict//EN"\n    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">\n<html><head>'
+    b"<title>OSM3S Response</title></head><body>\n<p>The data included in this document is "
+    b"from www.openstreetmap.org. The data is made available under ODbL.</p>\n<p><strong "
+    b'style="color:#FF0000">Error</strong>: runtime error: open64: 0 Success /osm3s_osm_base '
+    b"Dispatcher_Client::request_read_and_idx::timeout. The server is probably too busy to "
+    b"handle your request. </p>\n</body>\n</html>"
+)
+
+
+def patient(link, waits=(15.0, 30.0, 60.0)):
+    """post_overpass with the pauses written down instead of slept, and what it said."""
+    slept, told = [], []
+    try:
+        return (
+            post_overpass("q", connection=link, waits=waits, sleep=slept.append, tell=told.append),
+            slept,
+            told,
+        )
+    except GeocodeError as exc:
+        return exc, slept, told
+
+
+def test_a_busy_server_is_asked_again_after_a_pause_and_says_so():
+    link = FakeLink(FakeAnswer(status=504, body=b"<html>504</html>"), then=[FakeAnswer(body=GOOD)])
+    found, slept, told = patient(link)
+    assert found == ANSWER and slept == [15.0] and link.asked == 2
+    assert told == [
+        "Overpass is busy, it answered 504 (gateway timeout): asking again in 15 s, try 2 of 4"
+    ]
+
+
+def test_a_server_that_stays_busy_is_given_up_on_with_what_to_do_next():
+    busy = [FakeAnswer(status=429, body=b"slow down") for _ in range(4)]
+    error, slept, told = patient(FakeLink(busy[0], then=busy[1:]))
+    assert isinstance(error, GeocodeError) and slept == [15.0, 30.0, 60.0] and len(told) == 3
+    assert "it answered 429 (too many requests) 4 times in a row" in str(error)
+    assert "--overpass-url" in str(error)
+
+
+def test_a_server_that_says_how_long_to_wait_is_believed_within_reason():
+    link = FakeLink(
+        FakeAnswer(status=503, retry_after="40"),
+        then=[
+            FakeAnswer(status=503, retry_after="600"),
+            FakeAnswer(status=503, retry_after="soon"),
+            FakeAnswer(body=GOOD),
+        ],
+    )
+    found, slept, _ = patient(link)
+    assert found == ANSWER and slept == [40.0, 120.0, 60.0]
+
+
+def test_the_page_overpass_sends_when_its_dispatcher_gives_up_counts_as_busy():
+    # A 200, and an HTML page rather than JSON, saying the server is too busy.
+    link = FakeLink(FakeAnswer(body=TOO_BUSY), then=[FakeAnswer(body=GOOD)])
+    found, slept, told = patient(link)
+    assert found == ANSWER and slept == [15.0]
+    assert "a page saying it was too busy" in told[0]
+
+
+def test_an_error_page_is_reported_as_what_it_says_and_not_as_its_markup():
+    refused = TOO_BUSY.replace(b"too busy", b"odd")
+    error, slept, _ = patient(FakeLink(FakeAnswer(status=400, body=refused)))
+    assert slept == []  # a refusal is not asked again
+    assert str(error).startswith(
+        "https://overpass-api.de/api/interpreter: the server answered 400: Error: runtime error:"
+    )
+    assert "<" not in str(error) and "ODbL" not in str(error)
+    long_one, _, _ = patient(FakeLink(FakeAnswer(status=400, body=b"x " * 300)))
+    assert str(long_one).endswith("\u2026")
 
 
 def test_a_body_that_is_not_json_is_reported_with_what_it_said():
@@ -745,38 +821,95 @@ def test_the_report_names_every_line_it_left_alone_and_why(tmp_path):
 
 
 def test_a_bounding_box_is_drawn_around_what_was_placed():
-    from enodia.geocode import around, buildings_query
+    from enodia.geocode import around, surroundings_query
 
     box = around([(-34.9000, -56.2000), (-34.9010, -56.1980)], margin_m=0.0)
     assert box == "-34.901000,-56.200000,-34.900000,-56.198000"
     padded = around([(-34.9000, -56.2000), (-34.9010, -56.1980)])
     assert padded != box  # el margen deja aire alrededor
-    query = buildings_query(box)
-    assert f"[bbox:{box}]" in query and "way[building];" in query and "out geom;" in query
+    query = surroundings_query(box)
+    assert f"[bbox:{box}]" in query and query.endswith("out geom;\n")
+    for asked in (
+        "way[building];",
+        "way[natural=water];",
+        "relation[natural=water];",
+        'way[waterway~"^(river|stream|canal)$"];',
+        "way[leisure=park];",
+        "relation[leisure=park];",
+        "way[landuse=grass];",
+    ):
+        assert asked in query, asked
+    # Every named street, walked or not, but not the paths across a plaza.
+    assert 'way[highway][name][highway!~"^(footway|path|' in query
 
 
-def test_the_building_outlines_come_out_of_an_answer_with_geometry():
-    from enodia.geocode import drawn_buildings
+def square(lat, lon, side=0.001):
+    """Four corners of a small square as out geom writes them, closed."""
+    corners = [(lat, lon), (lat, lon + side), (lat + side, lon + side), (lat + side, lon)]
+    return [{"lat": a, "lon": b} for a, b in [*corners, corners[0]]]
 
+
+def test_the_neighbourhood_is_sorted_into_what_each_shape_is():
+    from enodia.geocode import drawn_surroundings
+
+    river_bank = square(-34.91, -56.21, 0.004)
     elements = [
+        {"type": "way", "tags": {"building": "yes"}, "geometry": square(-34.9, -56.2)},
         {
             "type": "way",
-            "geometry": [
-                {"lat": -34.9, "lon": -56.2},
-                {"lat": -34.9, "lon": -56.199},
-                {"lat": -34.8995, "lon": -56.199},
+            "tags": {"leisure": "park", "landuse": "grass"},
+            "geometry": square(-34.9, -56.19),
+        },
+        {"type": "way", "tags": {"landuse": "grass"}, "geometry": square(-34.9, -56.18)},
+        {"type": "way", "tags": {"natural": "water"}, "geometry": square(-34.92, -56.2)},
+        {
+            "type": "way",
+            "tags": {"waterway": "river", "name": "Río"},
+            "geometry": [{"lat": -34.93, "lon": -56.2}, {"lat": -34.93, "lon": -56.19}],
+        },
+        {
+            "type": "way",
+            "tags": {"highway": "residential", "name": "Rambla"},
+            "geometry": [{"lat": -34.94, "lon": -56.2}, {"lat": -34.94, "lon": -56.19}],
+        },
+        {
+            # A multipolygon comes as the ways it is made of: two halves of
+            # the shore, one of them drawn the other way round, and an island.
+            "type": "relation",
+            "tags": {"natural": "water", "type": "multipolygon"},
+            "members": [
+                {"type": "way", "role": "outer", "geometry": river_bank[:3]},
+                {"type": "way", "role": "outer", "geometry": river_bank[2:][::-1]},
+                {"type": "way", "role": "inner", "geometry": square(-34.909, -56.209)},
+                {"type": "way", "role": "label", "geometry": square(-34.909, -56.209)},
+                {"type": "node", "role": "", "lat": -34.9, "lon": -56.2},
+                "ni siquiera un dict",
             ],
         },
-        {"type": "way", "geometry": [{"lat": -34.9, "lon": -56.2}]},  # dos puntos no son manzana
-        {"type": "way"},
+        {"type": "relation", "tags": {"natural": "water"}, "members": "no"},
+        {"type": "relation", "tags": {"building": "yes"}, "members": []},
+        {"type": "way", "tags": {"highway": "residential"}, "geometry": square(-34.95, -56.2)},
+        {"type": "way", "tags": {"highway": "residential", "name": "Corta"}, "geometry": []},
+        {"type": "way", "tags": {"building": "yes"}, "geometry": square(-34.9, -56.2)[:2]},
+        {"type": "way", "tags": {"waterway": "canal"}, "geometry": "no"},
+        {"type": "way", "tags": "no", "geometry": square(-34.9, -56.2)},
         {"type": "node", "id": 1},
         "ni siquiera un dict",
     ]
-    (only,) = drawn_buildings(elements)
-    assert len(only) == 3 and only[0] == (-34.9, -56.2)
+    found = drawn_surroundings(elements)
+    assert len(found.buildings) == 1 and len(found.buildings[0]) == 5
+    assert len(found.parks) == 2  # a park mapped as grass is one park, and grass is one too
+    assert len(found.rivers) == 1
+    assert [road.name for road in found.roads] == ["Rambla"]
+    closed, relation = found.water
+    assert len(closed) == 1
+    shore, island = relation
+    assert len(shore) == 5 and shore[0] == shore[-1]  # the two halves joined into one ring
+    assert len(island) == 5
+    assert found.streets == ()  # nothing here is a street a block is looked for on
 
 
-def test_the_buildings_are_a_second_request_and_only_when_asked_for(tmp_path):
+def test_the_neighbourhood_is_a_second_request_and_only_when_asked_for(tmp_path):
     asked = []
 
     def counting(query, url=None, proxy=None):
@@ -786,11 +919,8 @@ def test_the_buildings_are_a_second_request_and_only_when_asked_for(tmp_path):
                 "elements": [
                     {
                         "type": "way",
-                        "geometry": [
-                            {"lat": -34.9, "lon": -56.2},
-                            {"lat": -34.9, "lon": -56.199},
-                            {"lat": -34.8995, "lon": -56.199},
-                        ],
+                        "tags": {"building": "yes"},
+                        "geometry": square(-34.9, -56.2),
                     }
                 ]
             }
@@ -798,12 +928,12 @@ def test_the_buildings_are_a_second_request_and_only_when_asked_for(tmp_path):
 
     path = notebook(tmp_path, WALK)
     plain = geocode_notebook(path, "Montevideo", fetch=counting)
-    assert len(asked) == 1 and plain.buildings == []
+    assert len(asked) == 1 and not plain.surroundings.surroundings
 
     asked.clear()
-    withblocks = geocode_notebook(path, "Montevideo", buildings=True, fetch=counting)
+    around = geocode_notebook(path, "Montevideo", surroundings=True, fetch=counting)
     assert len(asked) == 2 and "way[building]" in asked[1]
-    assert len(withblocks.buildings) == 1
+    assert len(around.surroundings.buildings) == 1
 
 
 def test_a_junction_is_one_junction_however_its_nodes_came_out_of_the_answer():

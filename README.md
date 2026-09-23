@@ -102,6 +102,7 @@ On a later visit, ask where you are, once or as you walk:
 ```bash
 enodia --locate
 enodia --locate --watch
+enodia --locate --watch --live-map live.html --streets streets.jsonl   # and see it on a map
 ```
 
 ## Go further

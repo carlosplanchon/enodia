@@ -152,6 +152,23 @@ format, so the run can be located again later with `--locate FILE`, against anot
 other flags. Without it nothing is written, and `--dir` is refused: a run that only locates is
 not an outing, and does not belong among them.
 
+```bash
+enodia --locate --watch --live-map live.html --streets streets.jsonl
+```
+
+`--live-map FILE` draws the same run: every cycle it writes a page with the map's own
+fingerprints as grey dots, where you are as a large one with your last few answers fading behind
+it, and the line the terminal printed on top. Open it once in a browser and leave it open, since
+the page reloads itself every `--interval`. An answer the scans could not settle is drawn in
+another colour, and when the map loses you the last place it knew stays greyed. `--streets` adds
+the streets, and whatever `--surroundings` brought: the water, the parks and every named street.
+It needs a map whose fingerprints carry coordinates, which is one built from a notebook that
+`--geocode` has been through. The mouse wheel zooms where the pointer is, a drag moves the view,
+and the buttons zoom in, out, back to the whole map, or follow you: zoomed in, each reload keeps
+you in the middle until you drag the map away. The keys `+`, `-`, `0` and `f` do the same. The
+zoom is kept in the page's address, `live.html#x,y,width`, which is how it lasts from one reload
+to the next.
+
 `--sequence tie` is that, and the default. `--sequence path` asks the scans before it every
 time, not only on a tie: it chooses the likeliest path through all of them, staying on a
 stretch for nothing, stepping onto one that shares a mark for a little, jumping anywhere else
@@ -167,7 +184,7 @@ enodia --geocode notebook.txt --area Montevideo --out notebook.geo.txt          
 enodia --geocode notebook.txt --area Montevideo --marks LOG                     # time the untimed lines
 enodia --geocode notebook.txt --area Montevideo --proxy socks5://127.0.0.1:9050
 enodia --geocode notebook.txt --area Montevideo --streets streets.jsonl          # keep the street shapes
-enodia --geocode notebook.txt --area Montevideo --streets streets.jsonl --buildings
+enodia --geocode notebook.txt --area Montevideo --streets streets.jsonl --surroundings
 enodia --geocode notebook.txt --area Montevideo --overpass-url https://overpass.kumi.systems/api/interpreter
 enodia --geocode notebook.txt --area Montevideo --marks LOG --max-speed 6         # an outing by bicycle
 ```
@@ -175,6 +192,20 @@ enodia --geocode notebook.txt --area Montevideo --marks LOG --max-speed 6       
 This is the one command in Enodia that goes online, and only when you type it. `--area` is not
 optional: without it `Freire` matches a street in Chile. It takes a place as OpenStreetMap names
 it, or four numbers `s,w,n,e` for a bounding box.
+
+A public Overpass instance is often too busy to answer, and says so with a 429, a 504 or a page
+saying it is too busy. That is asked again three times, after 15, 30 and 60 seconds (or however
+long the server asks for, up to two minutes), with a line saying so each time. Anything else it
+answers is not asked again, and an error comes out as the sentence the server wrote, not its
+HTML. If it is still busy after that, try again later or name another instance with
+`--overpass-url`.
+
+`--streets FILE` keeps the shapes of the streets the notebook names, from the same one request.
+`--surroundings` adds a second request for the neighbourhood around the corners it found, 300 m
+on every side: the buildings, the water, the parks and every named street, walked or not, all
+into the same file for `--svg` and `--live-map` to draw. The streets nobody walked are kept
+apart and never used to place a scan. The data is OpenStreetMap's, under the Open Database
+License, and every picture drawn from it credits it at the foot.
 
 The original notebook is never touched. Without `--out`, the result goes beside it with `.geo`
 before the suffix. `--proxy` sends the one request through SOCKS5 and the proxy resolves the
@@ -314,8 +345,9 @@ says which flag is the odd one.
 | `--area`, `--marks`, `--proxy`, `--overpass-url`, `--max-speed` | `--geocode` |
 | `--out` | `--geocode` or `--export-public` |
 | `--ssid`, `--mac-shaped`, `--key-file` | `--export-public` |
-| `--streets` | `--geocode`, `--reconcile` or `--map-add` |
-| `--buildings` | `--geocode` and `--streets` |
+| `--streets` | `--geocode`, `--reconcile`, `--map-add` or `--live-map` |
+| `--surroundings` | `--geocode` and `--streets` |
+| `--live-map` | `--locate --watch` |
 | `--svg`, `--check-pace`, `--check-passes`, `--path-loss`, `--csv`, `--geojson`, `--scans` | `--reconcile` |
 | `--svg-names` | `--svg` |
 | `--pace` | `--reconcile` or `--map-add` |

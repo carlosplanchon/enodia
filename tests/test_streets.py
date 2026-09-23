@@ -9,6 +9,7 @@ from enodia.streets import (
     Street,
     StreetMap,
     distance_metres,
+    joined,
     line_length_m,
     nearest_point,
     point_along,
@@ -147,7 +148,7 @@ def test_a_street_split_into_several_ways_is_one_line_for_the_block_between_them
 
 def test_the_drawn_streets_survive_a_round_trip_through_the_file(tmp_path):
     path = tmp_path / "calles.jsonl"
-    assert write_streets(path, [Street("Curva", BEND)]) == 1
+    assert write_streets(path, CURVE) == 1
     back = read_streets(path)
     assert len(back) == 1
     assert back.streets[0].name == "Curva"
@@ -258,7 +259,7 @@ def test_the_report_says_how_many_blocks_followed_the_drawing(tmp_path, monkeypa
 def test_the_buildings_go_into_the_file_and_come_back_out(tmp_path):
     path = tmp_path / "calles.jsonl"
     block = ((-34.9, -56.2), (-34.9, -56.199), (-34.8995, -56.199), (-34.9, -56.2))
-    assert write_streets(path, [Street("Curva", BEND)], [block]) == 2
+    assert write_streets(path, StreetMap((Street("Curva", BEND),), (block,))) == 2
     back = read_streets(path)
     assert len(back) == 1 and len(back.buildings) == 1
     assert back.buildings[0] == block
@@ -298,3 +299,75 @@ def test_a_streets_file_that_cannot_be_read_is_not_a_map_with_no_streets_in_it(t
     folder.mkdir()
     with pytest.raises(OSError):
         read_streets(folder)
+
+
+RING = ((-34.9, -56.2), (-34.9, -56.199), (-34.8995, -56.199), (-34.9, -56.2))
+ISLAND = ((-34.8999, -56.1998), (-34.8999, -56.1995), (-34.8997, -56.1995), (-34.8999, -56.1998))
+
+
+def test_the_neighbourhood_goes_into_the_file_and_comes_back_out_whole(tmp_path):
+    path = tmp_path / "calles.jsonl"
+    drawn = StreetMap(
+        streets=(Street("Curva", BEND),),
+        buildings=(RING,),
+        water=((RING, ISLAND),),
+        rivers=(BEND,),
+        parks=((RING,),),
+        roads=(Street("Rambla", BEND),),
+    )
+    assert write_streets(path, drawn) == 6
+    assert read_streets(path) == drawn
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert [next(iter(row)) for row in rows] == [
+        "street",
+        "road",
+        "building",
+        "water",
+        "river",
+        "park",
+    ]
+
+
+def test_a_file_from_before_the_neighbourhood_reads_as_it_always_did(tmp_path):
+    path = tmp_path / "calles.jsonl"
+    path.write_text(
+        json.dumps({"street": "Curva", "line": [list(place) for place in BEND]})
+        + "\n"
+        + json.dumps({"building": [list(place) for place in RING]})
+        + "\n"
+    )
+    back = read_streets(path)
+    assert back == StreetMap((Street("Curva", BEND),), (RING,))
+    assert not StreetMap((Street("Curva", BEND),)).surroundings
+    assert back.surroundings
+
+
+def test_a_street_nobody_walked_is_drawn_and_never_taken_for_a_block():
+    # The neighbourhood's roads are every named street in the box. One that
+    # runs through both marks would be a better match than the walked street
+    # if it were allowed to compete, and it is not.
+    beside = StreetMap(roads=(Street("Otra", BEND),))
+    assert beside.between(BEND[0], BEND[-1]) is None
+    assert CURVE.between(BEND[0], BEND[-1]) is not None
+
+
+def test_an_area_keeps_the_rings_that_are_rings(tmp_path):
+    path = tmp_path / "calles.jsonl"
+    path.write_text(
+        '{"water": [[[-34.9, -56.2], [-34.9, -56.19]], "no", '
+        "[[-34.9, -56.2], [-34.9, -56.19], [-34.89, -56.19]]]}\n"
+        '{"water": [[[-34.9, -56.2]]]}\n'
+        '{"park": "no"}\n'
+        '{"river": [[-34.9, -56.2]]}\n'
+        '{"road": 7, "line": [[-34.9, -56.2], [-34.9, -56.19]]}\n'
+    )
+    back = read_streets(path)
+    assert back.water == ((((-34.9, -56.2), (-34.9, -56.19), (-34.89, -56.19)),),)
+    assert back.parks == () and back.rivers == () and back.roads == ()
+
+
+def test_pieces_that_meet_are_joined_whichever_way_round_they_were_drawn():
+    a, b, c, d = (0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0)
+    # Head to head, tail to tail, and one piece too short to be a line.
+    assert joined([(a, b), (c, b), (c, d), (d,)]) == [(a, b, c, d)]
+    assert joined([(a, b), (c, d)]) == [(a, b), (c, d)]

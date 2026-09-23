@@ -6,13 +6,15 @@ import argparse
 import os
 import sys
 import time
+from collections import deque
 from collections.abc import Iterator, Sequence
+from dataclasses import replace
 from pathlib import Path
 
 from enodia import __version__
 from enodia.anonymize import ExportError, export_outing, format_export, key_path, read_key
 from enodia.button import ButtonMarker, find_button_devices, list_input_devices
-from enodia.draw import svg_map
+from enodia.draw import live_map, mapped_places, svg_map
 from enodia.fingerprint import (
     Fingerprint,
     Location,
@@ -54,6 +56,10 @@ from enodia.reconcile import (
 from enodia.streets import StreetMap, read_streets, write_streets
 from enodia.system import data_dir, map_path, session_log_path
 from enodia.voice import BackgroundVoice, ESpeak, PicoTTS, VoiceController, default_voice
+
+# How many answers the live map keeps behind the current one: under a minute
+# of walk at the default interval, enough to show which way you were going.
+TRAIL = 10
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -336,11 +342,12 @@ def build_parser() -> argparse.ArgumentParser:
         "between two crossings, which is what happens without it",
     )
     parser.add_argument(
-        "--buildings",
+        "--surroundings",
         action="store_true",
-        help="with --geocode --streets: a second request for the buildings around what was "
-        "found, so that --svg can draw the blocks and not just the lines. Asked for "
-        "separately because the box to ask about is not known until the crossings are",
+        help="with --geocode --streets: a second request for the neighbourhood around what was "
+        "found, the buildings, the water, the parks and every named street, so that --svg and "
+        "--live-map can draw it. Asked for separately because the box to ask about is not "
+        "known until the crossings are",
     )
     parser.add_argument(
         "--svg",
@@ -397,6 +404,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="with --locate and no LOG: keep scanning every --interval seconds and say where "
         "you are as it changes; --cycles bounds it, Ctrl+C stops it, --log FILE records it",
+    )
+    parser.add_argument(
+        "--live-map",
+        metavar="FILE",
+        help="with --locate --watch: write a page every cycle showing where you are on the "
+        "map, to open once in a browser and leave open, since it reloads itself; with "
+        "--streets it draws the streets and whatever --surroundings brought too",
     )
     parser.add_argument(
         "--check-map",
@@ -514,13 +528,32 @@ def run_watch(
     run can then be located again from the file, against another map or with
     other flags. Lines are flushed as they are printed, since a run piped into
     `tee` is a run somebody is watching.
+
+    `--live-map FILE` is the same run drawn: every cycle the page is written
+    again, beside the target and renamed onto it, with the last `TRAIL`
+    answers behind the current one. A map without coordinates has nothing to
+    draw on, and says so before the radio is asked anything.
     """
     by_signal = args.match == "signal"
     by_rarity = args.weigh == "rarity"
     blocked = False
+    live = None if args.live_map is None else Path(args.live_map)
+    drawn = None
+    trail: deque[tuple[float, float]] = deque(maxlen=TRAIL)
+    if live is not None:
+        if not mapped_places(known):
+            print(f"error: {map_file}: no coordinates to draw", file=sys.stderr)
+            return 1
+        try:
+            drawn = walked_streets(args.streets)
+        except OSError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
     log = None if args.log is None else NetworkLog(Path(args.log))
     if log is not None:
         print(f"Recording scans to {log.path}", flush=True)
+    if live is not None:
+        print(f"Live map at {live}: open it in a browser", flush=True)
 
     def fresh() -> Iterator[list[SeenNetwork]]:
         nonlocal blocked
@@ -555,10 +588,20 @@ def run_watch(
         for found in follow(known, fresh(), args.sequence, by_signal, by_rarity):
             stamp = time.strftime("%H:%M:%S")
             if found is None:
-                print(f"{stamp}  not on the map", flush=True)
+                said = "not on the map"
             else:
-                doubt = ", uncertain" if found.uncertain else ""
-                print(f"{stamp}  {found.describe()}{doubt}", flush=True)
+                said = found.describe() + (", uncertain" if found.uncertain else "")
+            print(f"{stamp}  {said}", flush=True)
+            if live is not None:
+                where = None if found is None else found.place
+                if where is not None and where.lat is not None and where.lon is not None:
+                    trail.append((where.lat, where.lon))
+                page = live_map(known, found, trail, f"{stamp}  {said}", drawn, args.interval)
+                written = live.with_name(f".{live.name}.part")
+                written.write_text(page, encoding="utf-8")
+                # Renamed into place, so a browser reloading mid-write reads the
+                # page before or the page after and never half of one.
+                os.replace(written, live)
             moved = (
                 first
                 or (found is None) != (previous is None)
@@ -579,8 +622,8 @@ def run_watch(
     except KeyboardInterrupt:
         print("\nStopped.")
     except OSError as exc:
-        # The log is the one thing here that touches the disk, and a run that
-        # cannot write it has stopped keeping the record it was asked for.
+        # The log and the live map are what touch the disk here, and a run that
+        # cannot write them has stopped keeping what it was asked to keep.
         print(f"error: {exc}", file=sys.stderr)
         return 1
     return 0
@@ -647,7 +690,7 @@ def run_geocode(args: argparse.Namespace) -> int:
             proxy=parse_proxy(args.proxy) if args.proxy else None,
             url=args.overpass_url,
             marks=notebook_marks(args.marks, say_which_walk(args.marks, args.outing)),
-            buildings=args.buildings,
+            surroundings=args.surroundings,
             max_speed_ms=args.max_speed,
         )
         # Nothing resolved means nothing to write: a copy of the notebook with no
@@ -659,12 +702,25 @@ def run_geocode(args: argparse.Namespace) -> int:
     print(format_geocoding(result, target, written))
     if args.streets:
         try:
-            shapes = write_streets(args.streets, result.drawn, result.buildings)
+            drawn = replace(result.surroundings, streets=tuple(result.drawn))
+            shapes = write_streets(args.streets, drawn)
         except OSError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
-        blocks = f" and {len(result.buildings)} buildings" if result.buildings else ""
-        print(f"{shapes} shapes into {args.streets}: the streets it asked about{blocks}")
+        around = result.surroundings
+        kinds = [
+            f"{len(found)} {one if len(found) == 1 else many}"
+            for found, one, many in (
+                (around.buildings, "building", "buildings"),
+                (around.water, "stretch of water", "stretches of water"),
+                (around.rivers, "river", "rivers"),
+                (around.parks, "park", "parks"),
+                (around.roads, "named street", "named streets"),
+            )
+            if found
+        ]
+        extra = "".join(f", {one}" for one in kinds)
+        print(f"{shapes} shapes into {args.streets}: the streets it asked about{extra}")
     if not written:
         print("\nNothing was resolved, so no notebook was written.")
     return 0 if written else 1
@@ -983,10 +1039,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     ]
     if export_only and not args.export_public:
         parser.error(f"{', '.join(export_only)}: only meaningful together with --export-public")
-    if args.streets is not None and not (args.geocode or args.reconcile or args.map_add):
-        parser.error("--streets: only meaningful together with --geocode, --reconcile or --map-add")
-    if args.buildings and not (args.geocode and args.streets):
-        parser.error("--buildings: only meaningful together with --geocode and --streets")
+    if args.streets is not None and not (
+        args.geocode or args.reconcile or args.map_add or args.live_map
+    ):
+        parser.error(
+            "--streets: only meaningful together with --geocode, --reconcile, --map-add "
+            "or --live-map"
+        )
+    if args.live_map is not None and not args.watch:
+        parser.error("--live-map: only meaningful together with --locate --watch")
+    if args.surroundings and not (args.geocode and args.streets):
+        parser.error("--surroundings: only meaningful together with --geocode and --streets")
     reads_a_log = bool(
         args.reconcile or args.map_add or args.export_public or (args.geocode and args.marks)
     ) or bool(args.locate)

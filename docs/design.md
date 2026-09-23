@@ -22,6 +22,7 @@ one feature with somebody else's privacy on the line and its decisions fill a pa
 | what `--sequence path` does, and what it costs | *The path or the point, and why it is a flag* |
 | what `--check-map` holds out, and what a scan placed across a mark is | *A scan at a mark is on two stretches* |
 | why a block came out on the chord with the street drawn | *A street is more than one way* |
+| what the live map shows, and why an unsure answer looks unsure | *A live map, and what it may claim* |
 | why an unreadable file is not an absent one | *A failure to read is not evidence of absence* |
 | why a value in a log was thrown away | *Refused at the door* |
 | what a record actually is, and why the export is a serialiser | *One record, and two ways of writing it down* |
@@ -211,6 +212,28 @@ vertices where a way bends or meets another, not along a straight run: a mark ha
 straight 200 m block sat 100 m from the nearest vertex and that block fell back to the chord
 too. Each mark is projected onto the nearest point of the way instead, vertex or not, and the
 run is cut there.
+
+## A live map, and what it may claim
+
+`--locate --watch --live-map` draws each answer on a page that reloads itself, over the streets,
+water and parks `--geocode --surroundings` fetched once from OpenStreetMap. Not tiles: the OSM
+Foundation's tile policy forbids fetching them ahead of time for offline use, and a live map is
+looked at in the middle of a walk, with no connection to lean on. The data is another matter. It
+is under the Open Database License, which asks to be credited, and every picture drawn from it
+says so at the foot.
+
+The harder part is the one the plan of a walk already had: a dot on real streets reads as a
+fact. So an answer the scans could not settle between two stretches is drawn in another colour,
+with a ring the size of how far apart its evidence lay, and when the map loses you the last
+place it knew stays on the page greyed, with the words saying so, rather than vanishing or,
+worse, staying the colour of an answer. The streets nobody walked are drawn and named and never
+used to place anything. They are kept apart from the notebook's own because a street that runs
+near both marks of a block would otherwise compete for a block it does not belong to.
+
+Zooming it is the page's own business, a few lines of script and nothing fetched. The page is
+written again and reloaded every cycle, so a zoom held in the page would be lost every five
+seconds. It is kept in the address instead, which a reload keeps, and without script the page
+falls back to reloading itself whole, as it did before it could zoom.
 
 ## A failure to read is not evidence of absence
 

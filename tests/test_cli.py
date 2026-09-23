@@ -872,6 +872,71 @@ def test_locate_watch_refuses_a_log_directory(capsys):
     assert "--dir: not meaningful with --locate --watch" in capsys.readouterr().err
 
 
+def placed_streets(tmp_path):
+    """The map of two_streets, with every fingerprint where it was taken."""
+    mapa = two_streets(tmp_path)
+    rows = [json.loads(line) for line in mapa.read_text().splitlines()]
+    for index, row in enumerate(rows):
+        row["lat"], row["lon"] = -34.906, -56.190 + index * 0.0004
+    mapa.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    return mapa
+
+
+def test_locate_watch_draws_every_cycle_onto_a_live_map(monkeypatch, tmp_path, capsys):
+    from enodia.streets import Street, StreetMap, write_streets
+
+    mapa = placed_streets(tmp_path)
+    calles = tmp_path / "calles.jsonl"
+    rivera = Street("Rivera", ((-34.906, -56.19), (-34.906, -56.188)))
+    write_streets(calles, StreetMap(roads=(rivera,)))
+    live = tmp_path / "vivo.html"
+    watching(monkeypatch, [heard("Casa", "Kiosco"), [], heard("Bar")])
+    flags = ["--map", str(mapa), "--cycles", "3", "--live-map", str(live), "--streets", str(calles)]
+    seen = []
+    real = cli.live_map
+    # The trail is one deque kept for the run, so each cycle's is copied as it was.
+    monkeypatch.setattr(
+        cli, "live_map", lambda *a, **k: seen.append((a[1], list(a[2]))) or real(*a, **k)
+    )
+    assert cli.main([*WATCH, *flags]) == 0
+    assert f"Live map at {live}: open it in a browser" in capsys.readouterr().out
+    assert [None if one[0] is None else one[0].place.name_from for one in seen] == [
+        "Alfa",
+        None,
+        "Charlie",
+    ]
+    assert [len(one[1]) for one in seen] == [1, 1, 2]  # lost, the trail keeps what it knew
+    page = live.read_text(encoding="utf-8")
+    assert '<meta http-equiv="refresh" content="1">' in page and ">Rivera</text>" in page
+    assert "}, 1000);" in page  # the script's reload, at the same interval
+    assert 'between "Charlie" and "Delta", 50% of the way' in page
+    left = sorted(path.name for path in tmp_path.iterdir())
+    assert left == ["calles.jsonl", "mapa.jsonl", "vivo.html"]  # nothing half-written behind
+
+
+def test_a_live_map_needs_a_map_that_knows_where_it_was_taken(tmp_path, capsys):
+    # two_streets has no coordinates, so there is nothing to draw on, and it
+    # is said before the radio is asked anything.
+    mapa = two_streets(tmp_path)
+    live = str(tmp_path / "vivo.html")
+    assert cli.main([*WATCH, "--map", str(mapa), "--live-map", live]) == 1
+    assert f"error: {mapa}: no coordinates to draw" in capsys.readouterr().err
+
+
+def test_a_live_map_stops_on_streets_it_cannot_read_or_a_page_it_cannot_write(
+    monkeypatch, tmp_path, capsys
+):
+    mapa = placed_streets(tmp_path)
+    folder = tmp_path / "carpeta"
+    folder.mkdir()
+    flags = ["--map", str(mapa), "--cycles", "1", "--live-map"]
+    assert cli.main([*WATCH, *flags, str(tmp_path / "vivo.html"), "--streets", str(folder)]) == 1
+    assert "error:" in capsys.readouterr().err
+    watching(monkeypatch, [heard("Bar")])
+    assert cli.main([*WATCH, *flags, str(tmp_path / "no" / "vivo.html")]) == 1
+    assert "error:" in capsys.readouterr().err
+
+
 def test_locate_watch_stops_on_ctrl_c_and_keeps_the_cadence(monkeypatch, tmp_path, capsys):
     from enodia import fingerprint
 
@@ -1219,8 +1284,42 @@ def test_geocode_writes_the_drawn_streets_when_asked(monkeypatch, capsys, tmp_pa
     assert len(read_streets(calles)) == 1  # Agraciada, la única con dos nodos
 
 
+def test_geocode_says_what_of_the_neighbourhood_it_brought(monkeypatch, capsys, tmp_path):
+    from enodia import geocode
+    from enodia.streets import read_streets
+
+    nb, answer = geocodable(tmp_path)
+    shore = [
+        {"lat": -34.9, "lon": -56.2},
+        {"lat": -34.9, "lon": -56.19},
+        {"lat": -34.89, "lon": -56.19},
+    ]
+    around = {
+        "elements": [
+            {"type": "way", "tags": {"building": "yes"}, "geometry": shore},
+            {"type": "way", "tags": {"natural": "water"}, "geometry": shore},
+            {"type": "way", "tags": {"natural": "water"}, "geometry": shore},
+            {"type": "way", "tags": {"highway": "primary", "name": "Rambla"}, "geometry": shore},
+        ]
+    }
+    monkeypatch.setattr(
+        geocode,
+        "post_overpass",
+        lambda query, url=None, proxy=None: around if "out geom" in query else answer(query),
+    )
+    calles = tmp_path / "calles.jsonl"
+    flags = ["--geocode", str(nb), "--area", "Montevideo", "--streets", str(calles)]
+    assert cli.main([*flags, "--surroundings"]) == 0
+    assert (
+        f"5 shapes into {calles}: the streets it asked about, 1 building, "
+        "2 stretches of water, 1 named street"
+    ) in capsys.readouterr().out
+    back = read_streets(calles)
+    assert len(back) == 1 and len(back.water) == 2 and back.roads[0].name == "Rambla"
+
+
 def test_reconcile_places_scans_along_the_street_when_given_one(capsys, tmp_path):
-    from enodia.streets import Street, write_streets
+    from enodia.streets import Street, StreetMap, write_streets
 
     log, nb = reconcilable(tmp_path)
     # Through the three crossings of `reconcilable`, bulging north between them.
@@ -1232,7 +1331,7 @@ def test_reconcile_places_scans_along_the_street_when_given_one(capsys, tmp_path
         (-34.90, -56.170),
     )
     calles = tmp_path / "calles.jsonl"
-    write_streets(calles, [Street("Curva", bend)])
+    write_streets(calles, StreetMap((Street("Curva", bend),)))
     assert cli.main(["--reconcile", str(log), str(nb), "--scans"]) == 0
     plain = capsys.readouterr().out
     assert cli.main(["--reconcile", str(log), str(nb), "--scans", "--streets", str(calles)]) == 0
@@ -1240,11 +1339,11 @@ def test_reconcile_places_scans_along_the_street_when_given_one(capsys, tmp_path
 
 
 def test_map_add_takes_the_streets_too(capsys, tmp_path):
-    from enodia.streets import Street, write_streets
+    from enodia.streets import Street, StreetMap, write_streets
 
     log, nb = reconcilable(tmp_path)
     calles = tmp_path / "calles.jsonl"
-    write_streets(calles, [Street("Curva", ((-34.90, -56.190), (-34.90, -56.170)))])
+    write_streets(calles, StreetMap((Street("Curva", ((-34.90, -56.190), (-34.90, -56.170))),)))
     mapa = tmp_path / "mapa.jsonl"
     code = cli.main(["--map-add", str(log), str(nb), "--map", str(mapa), "--streets", str(calles)])
     assert code == 0 and "fingerprints from the outing" in capsys.readouterr().out
@@ -1255,18 +1354,24 @@ def test_streets_without_a_command_that_uses_them_is_an_error(capsys):
         cli.main(["--voice", "none", "--button", "off", "--streets", "calles.jsonl"])
     assert stopped.value.code == 2
     err = capsys.readouterr().err
-    assert "--streets: only meaningful together with --geocode, --reconcile or --map-add" in err
+    assert (
+        "--streets: only meaningful together with --geocode, --reconcile, --map-add or --live-map"
+        in err
+    )
 
 
 def test_reconcile_draws_the_walk_as_a_plan(capsys, tmp_path, monkeypatch):
-    from enodia.streets import Street, write_streets
+    from enodia.streets import Street, StreetMap, write_streets
 
     log, nb = reconcilable(tmp_path)
     calles = tmp_path / "calles.jsonl"
+    corner = (-34.8998, -56.189)
     write_streets(
         calles,
-        [Street("Curva", ((-34.90, -56.190), (-34.90, -56.186), (-34.90, -56.170)))],
-        [((-34.8998, -56.189), (-34.8998, -56.187), (-34.8996, -56.187), (-34.8998, -56.189))],
+        StreetMap(
+            streets=(Street("Curva", ((-34.90, -56.190), (-34.90, -56.186), (-34.90, -56.170))),),
+            buildings=((corner, (-34.8998, -56.187), (-34.8996, -56.187), corner),),
+        ),
     )
     plan = tmp_path / "plano.svg"
     code = cli.main(
@@ -1306,7 +1411,16 @@ def test_a_notebook_of_bare_names_has_no_plan_to_draw(capsys, tmp_path):
 @pytest.mark.parametrize(
     ("flags", "says"),
     [
-        (["--buildings"], "--buildings: only meaningful together with --geocode and --streets"),
+        (
+            ["--surroundings"],
+            "--surroundings: only meaningful together with --geocode and --streets",
+        ),
+        (["--buildings"], "unrecognized arguments: --buildings"),
+        (["--live-map", "m.html"], "--live-map: only meaningful together with --locate --watch"),
+        (
+            ["--locate", "--live-map", "m.html"],
+            "--live-map: only meaningful together with --locate --watch",
+        ),
         (["--svg", "p.svg"], "--svg: only meaningful together with --reconcile"),
         (["--svg-names"], "--svg-names: only meaningful together with --svg"),
         (
