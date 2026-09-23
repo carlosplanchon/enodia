@@ -139,9 +139,18 @@ with the ones before it the way a log's last scan is placed, so a tie is settled
 it happens. It prints one line per scan and speaks what changes: a new stretch, or the map
 losing you or finding you again, is said in full, and another tenth of the way along the same
 stretch is said only when the voice is free, since a percentage said late is another place. A
-fresh scan takes about five seconds per card, so an interval shorter than that is not kept. It
-writes no log: recording is the walk's job. `--cycles N` stops it after N scans, and Ctrl+C
-whenever.
+fresh scan takes about five seconds per card, so an interval shorter than that is not kept.
+`--cycles N` stops it after N scans, and Ctrl+C whenever.
+
+```bash
+enodia --locate --watch --log watch.jsonl
+enodia --locate watch.jsonl --map other.jsonl
+```
+
+With `--log FILE` it also records what it scanned, one scan record per cycle in the walk's own
+format, so the run can be located again later with `--locate FILE`, against another map or with
+other flags. Without it nothing is written, and `--dir` is refused: a run that only locates is
+not an outing, and does not belong among them.
 
 `--sequence tie` is that, and the default. `--sequence path` asks the scans before it every
 time, not only on a tie: it chooses the likeliest path through all of them, staying on a
@@ -312,7 +321,7 @@ says which flag is the odd one.
 | `--pace` | `--reconcile` or `--map-add` |
 | `--map`, `--match`, `--weigh`, `--sequence` | `--map-add`, `--locate`, `--check-map` or `--assistant` |
 | `--outing` | `--reconcile`, `--map-add`, `--export-public`, `--locate LOG` or `--geocode --marks` |
-| `--watch` | `--locate` scanning live, not `--locate LOG` |
+| `--watch` | `--locate` scanning live, not `--locate LOG`, and never with `--dir` |
 
 Each of those exits with status 2, the way a bad command line does.
 

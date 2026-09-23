@@ -85,7 +85,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--log",
         default=None,
         metavar="FILE",
-        help="write this one log file, as JSON Lines, instead of one file per outing",
+        help="write this one log file, as JSON Lines, instead of one file per outing; with "
+        "--locate --watch, record what the run scanned (default there: nothing is written)",
     )
     where.add_argument(
         "--dir",
@@ -394,8 +395,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--watch",
         action="store_true",
-        help="with --locate and no log: keep scanning every --interval seconds and say where "
-        "you are as it changes; --cycles bounds it, Ctrl+C stops it",
+        help="with --locate and no LOG: keep scanning every --interval seconds and say where "
+        "you are as it changes; --cycles bounds it, Ctrl+C stops it, --log FILE records it",
     )
     parser.add_argument(
         "--check-map",
@@ -504,12 +505,22 @@ def run_watch(
     after the scan and the lookup, and a fresh scan takes about five seconds
     per card, so a shorter interval is not kept. A blocked radio costs the
     cycle and nothing else, as on the walk: the run keeps what it knew, "Radio
-    blocked" is said once and "Scanning again" when it comes back. No log is
-    written, since recording is the walk's job.
+    blocked" is said once and "Scanning again" when it comes back.
+
+    Nothing is written unless `--log FILE` names a log, and then every cycle
+    goes into it in the walk's own format: one scan record of what all the
+    cards heard together, numbered by its cycle, or a `scan_failed` when the
+    radio was blocked, so the hole is not read as a street with no Wi-Fi. The
+    run can then be located again from the file, against another map or with
+    other flags. Lines are flushed as they are printed, since a run piped into
+    `tee` is a run somebody is watching.
     """
     by_signal = args.match == "signal"
     by_rarity = args.weigh == "rarity"
     blocked = False
+    log = None if args.log is None else NetworkLog(Path(args.log))
+    if log is not None:
+        print(f"Recording scans to {log.path}", flush=True)
 
     def fresh() -> Iterator[list[SeenNetwork]]:
         nonlocal blocked
@@ -520,11 +531,15 @@ def run_watch(
             try:
                 seen = scan_now(args.interface)
             except RadioBlocked as exc:
-                print(f"Cannot scan: {exc}")
+                print(f"Cannot scan: {exc}", flush=True)
+                if log is not None:
+                    log.record_scan_failed(None, str(exc))
                 if not blocked:
                     voice.say("Radio blocked", lang=args.lang)
                 blocked = True
             else:
+                if log is not None:
+                    log.record_scan(seen, cycle=done)
                 if blocked:
                     voice.say("Scanning again", lang=args.lang)
                 blocked = False
@@ -540,9 +555,10 @@ def run_watch(
         for found in follow(known, fresh(), args.sequence, by_signal, by_rarity):
             stamp = time.strftime("%H:%M:%S")
             if found is None:
-                print(f"{stamp}  not on the map")
+                print(f"{stamp}  not on the map", flush=True)
             else:
-                print(f"{stamp}  {found.describe()}" + (", uncertain" if found.uncertain else ""))
+                doubt = ", uncertain" if found.uncertain else ""
+                print(f"{stamp}  {found.describe()}{doubt}", flush=True)
             moved = (
                 first
                 or (found is None) != (previous is None)
@@ -562,6 +578,11 @@ def run_watch(
             previous, first = found, False
     except KeyboardInterrupt:
         print("\nStopped.")
+    except OSError as exc:
+        # The log is the one thing here that touches the disk, and a run that
+        # cannot write it has stopped keeping the record it was asked for.
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     return 0
 
 
@@ -981,6 +1002,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.watch and args.locate != "":
         parser.error(
             "--watch: only meaningful together with --locate and a live scan, not --locate LOG"
+        )
+    if args.watch and args.dir is not None:
+        parser.error(
+            "--dir: not meaningful with --locate --watch, which records only to a --log FILE"
         )
     if args.geocode and args.area is None:
         parser.error("--geocode: --area is needed, to say which city the notebook walks")

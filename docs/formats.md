@@ -45,6 +45,8 @@ One line per record is what the format is for. The log is written from a laptop 
 
 Frequencies are in MHz, as the backend reports them, not channel numbers: a channel is derived and ambiguous across bands, and which band an access point is on is what says how far a given signal strength puts it. Anything a backend cannot report is `null`, not a placeholder to parse back, with one exception: a network that hides its name is written `"ssid": ""`, because that is how the reader will hand it back and the file says what it is going to mean rather than something that has to be turned into it. Every record carries the `outing` it belongs to, a token for one run of the loop, and a scan record also carries the `cycle`, the pass of the loop it came from. Both exist because the clock has one second of resolution and two of anything can share a second. [The design notes](design.md) tell that story, along with what is checked when a log is read back and why.
 
+`--locate --watch --log FILE` writes the same format: one `scan` record per cycle with what every card heard together, and so no `interface`, or a `scan_failed` when the radio was blocked. It has no marks, so `--locate FILE` can read it and `--reconcile` has nothing to join it to.
+
 Because every record is a line of JSON, the log works with ordinary tools:
 
 ```bash

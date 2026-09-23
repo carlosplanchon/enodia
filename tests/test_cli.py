@@ -9,6 +9,7 @@ from ifpeek import AccessPoint
 import enodia
 from enodia import cli
 from enodia import voice as voice_module
+from enodia.netlog import read_log
 from enodia.voice import ESpeak, PicoTTS
 
 
@@ -820,6 +821,55 @@ def test_locate_watch_keeps_the_run_through_a_blocked_radio(monkeypatch, tmp_pat
     assert out.count("Say (Silent: False) > Scanning again") == 1
     assert out.count('between "Alfa" and "Bravo", 20% of the way') == 2
     assert out.count("Say (Silent: False) > Alfa to Bravo") == 1  # the same place is not repeated
+
+
+def test_locate_watch_records_every_cycle_to_the_log_it_is_given(monkeypatch, tmp_path, capsys):
+    # One scan record per cycle, in the walk's format, and a scan_failed where
+    # the radio was blocked, so the file can be located again afterwards and
+    # says the same thing the run said as it happened.
+    mapa = two_streets(tmp_path)
+    log = tmp_path / "watch.jsonl"
+    views = [heard("Casa", "Kiosco"), heard("Casa", "Pan")]
+    watching(monkeypatch, views, [None, "soft", None])
+    assert cli.main([*WATCH, "--map", str(mapa), "--cycles", "3", "--log", str(log)]) == 0
+    out = capsys.readouterr().out
+    assert f"Recording scans to {log}" in out
+    records = read_log(log)
+    assert [record.event for record in records] == ["scan", "scan_failed", "scan"]
+    assert [record.cycle for record in records] == [1, None, 3]
+    assert records[1].reason == "wlan0: radio soft blocked (rfkill)"
+    assert len({record.outing for record in records}) == 1
+    assert [sorted(one.ssid for one in record.networks) for record in records] == [
+        ["Casa", "Kiosco"],
+        [],
+        ["Casa", "Pan"],
+    ]
+    live = [line[10:] for line in out.splitlines() if line[:2].isdigit() and line[2] == ":"]
+    assert cli.main(["--locate", str(log), "--map", str(mapa), "--voice", "none"]) == 0
+    assert live[-1] in capsys.readouterr().out
+
+
+def test_locate_watch_writes_nothing_without_a_log(monkeypatch, tmp_path, capsys):
+    mapa = two_streets(tmp_path)
+    watching(monkeypatch, [heard("Bar")])
+    assert cli.main([*WATCH, "--map", str(mapa), "--cycles", "1"]) == 0
+    assert "Recording" not in capsys.readouterr().out
+    assert sorted(path.name for path in tmp_path.rglob("*.jsonl")) == ["mapa.jsonl"]
+
+
+def test_locate_watch_stops_when_it_cannot_write_its_log(monkeypatch, tmp_path, capsys):
+    mapa = two_streets(tmp_path)
+    watching(monkeypatch, [heard("Bar")])
+    log = tmp_path / "missing" / "watch.jsonl"
+    assert cli.main([*WATCH, "--map", str(mapa), "--cycles", "1", "--log", str(log)]) == 1
+    assert "error:" in capsys.readouterr().err
+
+
+def test_locate_watch_refuses_a_log_directory(capsys):
+    with pytest.raises(SystemExit) as stopped:
+        cli.main([*WATCH, "--dir", "somewhere"])
+    assert stopped.value.code == 2
+    assert "--dir: not meaningful with --locate --watch" in capsys.readouterr().err
 
 
 def test_locate_watch_stops_on_ctrl_c_and_keeps_the_cadence(monkeypatch, tmp_path, capsys):
