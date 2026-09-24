@@ -59,6 +59,72 @@ LOST = "#9a9186"
 LABEL_EVERY_M = 250.0
 LABEL_SIZE = 9.0
 
+# The live map at night: a dark counterpart for every colour it draws with, so
+# that nothing on the page is left light. The drawing carries the light ones as
+# its own attributes, which any viewer shows, and a page asked for the dark
+# theme lays these over them by class, since a rule of CSS outranks an
+# attribute of the SVG it styles.
+DARK_PAPER = "#16191d"
+DARK_BLOCK = "#23272d"
+DARK_BLOCK_EDGE = "#30353c"
+DARK_ROAD = "#2e343b"
+DARK_ROAD_EDGE = "#3d444d"
+DARK_STREET = "#3b424b"
+DARK_STREET_EDGE = "#4b535d"
+DARK_WATER = "#1d3d4f"
+DARK_PARK = "#1e3527"
+DARK_LABEL = "#9aa4ae"
+DARK_LOOSE = "#6e7781"
+DARK_HERE = "#4aa3df"
+DARK_UNSURE = "#e0a33a"
+DARK_LOST = "#7d8590"
+DARK_CROSSING = "#d6dce3"
+# How sure the last scan was of where it puts you: the class the dot, its ring
+# and the line of words above the map carry, and their colour in the light and
+# in the dark.
+STATES = {
+    "here": (HERE, DARK_HERE),
+    "unsure": (UNSURE, DARK_UNSURE),
+    "lost": (LOST, DARK_LOST),
+}
+# The dark theme, part by part: the page around the map, then each class of the
+# drawing. One selector a rule, so that each can be put under the root that
+# asks for the theme.
+DARK_RULES = (
+    ("body", f"background: {DARK_PAPER}; color: {DARK_CROSSING};"),
+    (
+        ".zoom button",
+        f"background: {DARK_PAPER}; border-color: {DARK_BLOCK_EDGE}; color: {DARK_CROSSING};",
+    ),
+    (".zoom button.on", f"background: {DARK_HERE}; color: {DARK_PAPER};"),
+    (".credit", f"color: {DARK_LABEL};"),
+    (".paper", f"fill: {DARK_PAPER};"),
+    (".water", f"fill: {DARK_WATER};"),
+    (".river", f"stroke: {DARK_WATER};"),
+    (".park", f"fill: {DARK_PARK};"),
+    (".building", f"fill: {DARK_BLOCK}; stroke: {DARK_BLOCK_EDGE};"),
+    (".road-edge", f"stroke: {DARK_ROAD_EDGE};"),
+    (".road", f"stroke: {DARK_ROAD};"),
+    (".street", f"stroke: {DARK_STREET};"),
+    (".street-edge", f"stroke: {DARK_STREET_EDGE};"),
+    (".halo", f"stroke: {DARK_PAPER};"),
+    (".label", f"fill: {DARK_LABEL};"),
+    ("line.scale", f"stroke: {DARK_CROSSING};"),
+    ("text.scale", f"fill: {DARK_CROSSING};"),
+    (".fingerprint", f"fill: {DARK_LOOSE};"),
+    (".trail", f"stroke: {DARK_HERE};"),
+    (".you", f"stroke: {DARK_PAPER};"),
+    *(
+        rule
+        for state, (_, dark) in STATES.items()
+        for rule in (
+            (f".you.{state}", f"fill: {dark};"),
+            (f".ring.{state}", f"fill: {dark}; stroke: {dark};"),
+            (f"p.{state}", f"border-left-color: {dark};"),
+        )
+    ),
+)
+
 
 @dataclass(frozen=True)
 class Frame:
@@ -176,12 +242,12 @@ def _scale_bar(frame: Frame) -> list[str]:
     bottom = frame.height - frame.margin / 2
     return [
         (
-            f'<line x1="{frame.margin:.1f}" y1="{bottom:.1f}" '
+            f'<line class="scale" x1="{frame.margin:.1f}" y1="{bottom:.1f}" '
             f'x2="{frame.margin + length:.1f}" y2="{bottom:.1f}" '
             f'stroke="{CROSSING}" stroke-width="2"/>'
         ),
         (
-            f'<text x="{frame.margin:.1f}" y="{bottom - 6:.1f}" font-size="12" '
+            f'<text class="scale" x="{frame.margin:.1f}" y="{bottom - 6:.1f}" font-size="12" '
             f'fill="{CROSSING}">{metres:.0f} m</text>'
         ),
     ]
@@ -247,10 +313,10 @@ def _labels(frame: Frame, streets: Sequence[Street]) -> list[str]:
                     # `paint-order`, which a viewer that does not know it
                     # would draw as the halo over the name.
                     out.append(
-                        f'<text {where} fill="none" stroke="{PAPER}" stroke-width="3" '
+                        f'<text class="halo" {where} fill="none" stroke="{PAPER}" stroke-width="3" '
                         f'stroke-linejoin="round">{_escape(name)}</text>'
                     )
-                    out.append(f'<text {where} fill="{LABEL}">{_escape(name)}</text>')
+                    out.append(f'<text class="label" {where} fill="{LABEL}">{_escape(name)}</text>')
                     since = -step / 2
                 since += step
     return out
@@ -259,23 +325,23 @@ def _labels(frame: Frame, streets: Sequence[Street]) -> list[str]:
 def _background(frame: Frame, drawn: StreetMap) -> list[str]:
     """The neighbourhood, from the bottom up: water, parks, blocks, streets, names."""
     out = [
-        f'<path d="{_rings(frame, area)}" fill="{WATER}" fill-rule="evenodd"/>'
+        f'<path class="water" d="{_rings(frame, area)}" fill="{WATER}" fill-rule="evenodd"/>'
         for area in drawn.water
         if frame.overlaps([place for ring in area for place in ring])
     ]
     out += [
-        f'<path d="{_path(frame, line)}" fill="none" stroke="{WATER}" stroke-width="4" '
-        'stroke-linecap="round" stroke-linejoin="round"/>'
+        f'<path class="river" d="{_path(frame, line)}" fill="none" stroke="{WATER}" '
+        'stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>'
         for line in drawn.rivers
         if frame.overlaps(line)
     ]
     out += [
-        f'<path d="{_rings(frame, area)}" fill="{PARK}" fill-rule="evenodd"/>'
+        f'<path class="park" d="{_rings(frame, area)}" fill="{PARK}" fill-rule="evenodd"/>'
         for area in drawn.parks
         if frame.overlaps([place for ring in area for place in ring])
     ]
     out += [
-        f'<path d="{_path(frame, shape)} Z" fill="{BLOCK}" stroke="{BLOCK_EDGE}" '
+        f'<path class="building" d="{_path(frame, shape)} Z" fill="{BLOCK}" stroke="{BLOCK_EDGE}" '
         'stroke-width="0.8"/>'
         for shape in drawn.buildings
         if _within(frame, shape)
@@ -284,20 +350,20 @@ def _background(frame: Frame, drawn: StreetMap) -> list[str]:
     # the crossing is open and not a grey line across it.
     shown = [road for road in drawn.roads if frame.overlaps(road.line)]
     out += [
-        f'<path d="{_path(frame, road.line)}" fill="none" stroke="{STREET_EDGE}" '
+        f'<path class="road-edge" d="{_path(frame, road.line)}" fill="none" stroke="{STREET_EDGE}" '
         'stroke-width="6.6" stroke-linecap="round" stroke-linejoin="round"/>'
         for road in shown
     ]
     out += [
-        f'<path d="{_path(frame, road.line)}" fill="none" stroke="{ROAD}" stroke-width="5" '
-        'stroke-linecap="round" stroke-linejoin="round"/>'
+        f'<path class="road" d="{_path(frame, road.line)}" fill="none" stroke="{ROAD}" '
+        'stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>'
         for road in shown
     ]
     out += [
-        f'<path d="{_path(frame, street.line)}" fill="none" stroke="{STREET}" '
+        f'<path class="street" d="{_path(frame, street.line)}" fill="none" stroke="{STREET}" '
         f'stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>'
-        f'<path d="{_path(frame, street.line)}" fill="none" stroke="{STREET_EDGE}" '
-        'stroke-width="0.8"/>'
+        f'<path class="street-edge" d="{_path(frame, street.line)}" fill="none" '
+        f'stroke="{STREET_EDGE}" stroke-width="0.8"/>'
         for street in drawn.streets
         if _within(frame, street.line)
     ]
@@ -414,22 +480,41 @@ def svg_map(
     return "\n".join(out)
 
 
-# The live map's zoom, in the page itself. The view is kept in the address, as
-# `#x,y,width` and `,f` while it follows you, because the page is written
-# again every cycle and reloaded, and the address is the one thing a reload
-# keeps: `location.reload()` loads the same URL, fragment and all. `%RELOAD%`
-# is the interval in milliseconds.
+# The theme the address asks for, set on the page before any of it is drawn.
+# In the head and apart from the rest, because the page is reloaded every few
+# seconds, and a theme set only at the end of it could let each reload show the
+# other one first.
+THEME_SCRIPT = """
+(function () {
+  var theme = new URLSearchParams(location.hash.slice(1)).get("theme");
+  if (theme === "dark" || theme === "light") { document.documentElement.classList.add(theme); }
+})();
+"""
+
+# The live map's zoom and theme, in the page itself. Both are kept in the
+# address, as `#view=x,y,width`, `&follow` while it follows you and
+# `&theme=dark` or `&theme=light` once one is chosen, because the page is
+# written again every cycle and reloaded, and the address is the one thing a
+# reload keeps: `location.reload()` loads the same URL, fragment and all. Read
+# with `URLSearchParams`, and written by hand because `URLSearchParams` would
+# escape the commas. `%RELOAD%` is the interval in milliseconds.
 ZOOM_SCRIPT = """
 (function () {
   var svg = document.getElementById("map");
   var box = svg.viewBox.baseVal;
   var W = box.width, H = box.height, least = W / 30;
   var here = (svg.getAttribute("data-here") || "").split(",").map(Number);
+  var saved = new URLSearchParams(location.hash.slice(1));
+  var asked = (saved.get("view") || "").split(",").map(Number);
   var view = {x: 0, y: 0, w: W, follow: true};
-  var found = /^#(-?[0-9.]+),(-?[0-9.]+),([0-9.]+)(,f)?$/.exec(location.hash);
-  if (found) {
-    view = {x: +found[1], y: +found[2], w: +found[3], follow: !!found[4]};
+  if (asked.length === 3 && asked.every(isFinite)) {
+    view = {x: asked[0], y: asked[1], w: asked[2], follow: saved.has("follow")};
   }
+  var root = document.documentElement, button = document.getElementById("theme");
+  var system = window.matchMedia("(prefers-color-scheme: dark)");
+  var theme = root.classList.contains("dark") ? "dark"
+    : root.classList.contains("light") ? "light" : "";
+  function dark() { return theme ? theme === "dark" : system.matches; }
   function tall() { return view.w * H / W; }
   function show() {
     view.w = Math.min(Math.max(view.w, least), W);
@@ -440,11 +525,18 @@ ZOOM_SCRIPT = """
     view.x = Math.min(Math.max(view.x, 0), W - view.w);
     view.y = Math.min(Math.max(view.y, 0), H - tall());
     svg.setAttribute("viewBox", [view.x, view.y, view.w, tall()].join(" "));
-    var whole = view.w >= W;
-    history.replaceState(null, "", whole ? location.pathname + location.search
-      : "#" + [view.x.toFixed(1), view.y.toFixed(1), view.w.toFixed(1)].join(",")
-        + (view.follow ? ",f" : ""));
+    var whole = view.w >= W, kept = [];
+    if (!whole) {
+      kept.push("view=" + [view.x.toFixed(1), view.y.toFixed(1), view.w.toFixed(1)].join(","));
+      if (view.follow) { kept.push("follow"); }
+    }
+    if (theme) { kept.push("theme=" + theme); }
+    history.replaceState(null, "", kept.length ? "#" + kept.join("&")
+      : location.pathname + location.search);
     document.getElementById("follow").classList.toggle("on", view.follow && !whole);
+    root.classList.toggle("dark", theme === "dark");
+    root.classList.toggle("light", theme === "light");
+    button.textContent = dark() ? "Light" : "Dark";
   }
   function point(event) {
     var at = svg.createSVGPoint();
@@ -489,8 +581,10 @@ ZOOM_SCRIPT = """
     if (view.w >= W) { view.w = W / 4; }
     show();
   };
+  // Whichever the page shows now, the system's or one chosen before, the other.
+  button.onclick = function () { theme = dark() ? "light" : "dark"; show(); };
   document.addEventListener("keydown", function (event) {
-    var keys = {"+": "in", "=": "in", "-": "out", "0": "all", "f": "follow"};
+    var keys = {"+": "in", "=": "in", "-": "out", "0": "all", "f": "follow", "t": "theme"};
     if (keys[event.key]) { document.getElementById(keys[event.key]).click(); }
   });
   show();
@@ -500,6 +594,14 @@ ZOOM_SCRIPT = """
   })();
 })();
 """
+
+
+def _dark(root: str) -> str:
+    """The dark theme's rules, each under `root`: the page that asks for it."""
+    return " ".join(
+        [f"{root} {{ color-scheme: dark; }}"]
+        + [f"{root} {selector} {{ {rules} }}" for selector, rules in DARK_RULES]
+    )
 
 
 def mapped_places(known: Sequence[Fingerprint]) -> list[Place]:
@@ -534,7 +636,10 @@ def live_map(
     zoom it: any browser follows the run with nothing to install and nothing
     fetched. The wheel zooms where the pointer is and a drag moves the view,
     and zoomed in, each reload centres on where you are until the map is
-    dragged away from it. Without script the page still reloads itself, whole.
+    dragged away from it. The page is light or dark as the system is, and a
+    button turns it to the other. The dark is only CSS over the drawing's own
+    colours, so without script the page still follows the system, and still
+    reloads itself, whole.
     """
     places = mapped_places(known)
     frame = Frame.around(places or [(0.0, 0.0)], width)
@@ -547,35 +652,37 @@ def live_map(
             f'<svg id="map" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {frame.width:.0f} '
             f'{frame.height:.0f}"{here}>'
         ),
-        f'<rect width="100%" height="100%" fill="{PAPER}"/>',
+        f'<rect class="paper" width="100%" height="100%" fill="{PAPER}"/>',
     ]
     if streets is not None:
         out += _background(frame, streets)
     out += [
-        f'<circle cx="{frame.x(lon):.1f}" cy="{frame.y(lat):.1f}" r="1.6" fill="{LOOSE}"/>'
+        f'<circle class="fingerprint" cx="{frame.x(lon):.1f}" cy="{frame.y(lat):.1f}" r="1.6" '
+        f'fill="{LOOSE}"/>'
         for lat, lon in places
     ]
     for index in range(len(shown) - 1):
         (lat1, lon1), (lat2, lon2) = shown[index], shown[index + 1]
         fade = (index + 1) / len(shown)
         out.append(
-            f'<line x1="{frame.x(lon1):.1f}" y1="{frame.y(lat1):.1f}" x2="{frame.x(lon2):.1f}" '
-            f'y2="{frame.y(lat2):.1f}" stroke="{HERE}" stroke-width="3" '
+            f'<line class="trail" x1="{frame.x(lon1):.1f}" y1="{frame.y(lat1):.1f}" '
+            f'x2="{frame.x(lon2):.1f}" y2="{frame.y(lat2):.1f}" stroke="{HERE}" stroke-width="3" '
             f'stroke-linecap="round" opacity="{fade:.2f}"/>'
         )
-    colour = LOST if found is None else UNSURE if found.uncertain else HERE
+    state = "lost" if found is None else "unsure" if found.uncertain else "here"
+    colour = STATES[state][0]
     if shown:
         lat, lon = shown[-1]
         x, y = frame.x(lon), frame.y(lat)
         if found is not None and found.scattered_m:
             radius = max(frame.pixels(found.scattered_m), 9.0)
             out.append(
-                f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{radius:.1f}" fill="{colour}" '
-                f'fill-opacity="0.12" stroke="{colour}" stroke-width="1"/>'
+                f'<circle class="ring {state}" cx="{x:.1f}" cy="{y:.1f}" r="{radius:.1f}" '
+                f'fill="{colour}" fill-opacity="0.12" stroke="{colour}" stroke-width="1"/>'
             )
         out.append(
-            f'<circle cx="{x:.1f}" cy="{y:.1f}" r="7" fill="{colour}" stroke="{PAPER}" '
-            'stroke-width="2.5"/>'
+            f'<circle class="you {state}" cx="{x:.1f}" cy="{y:.1f}" r="7" fill="{colour}" '
+            f'stroke="{PAPER}" stroke-width="2.5"/>'
         )
     out += _scale_bar(frame)
     out.append("</svg>")
@@ -600,6 +707,10 @@ def live_map(
             f".zoom button.on {{ background: {HERE}; color: {PAPER}; }}",
             ".credit { position: fixed; bottom: 6px; right: 12px; font-size: 11px;",
             f"color: {LABEL}; }}",
+            # The system's dark, unless the page was set light, and the page's
+            # own whenever it was set dark.
+            f"@media (prefers-color-scheme: dark) {{ {_dark('html:not(.light)')} }}",
+            _dark("html.dark"),
         ]
     )
     reload_s = max(round(interval), 1)
@@ -609,13 +720,15 @@ def live_map(
             '<html><head><meta charset="utf-8">',
             f'<noscript><meta http-equiv="refresh" content="{reload_s}"></noscript>',
             f"<title>Enodia: {_escape(said)}</title>",
-            f"<style>{style}</style></head><body>",
-            f"<p>{_escape(said)}</p>",
+            f"<style>{style}</style>",
+            f"<script>{THEME_SCRIPT}</script></head><body>",
+            f'<p class="{state}">{_escape(said)}</p>',
             (
                 '<div class="zoom"><button id="in" title="Zoom in (+)">+</button>'
                 '<button id="out" title="Zoom out (-)">&#8722;</button>'
                 '<button id="all" title="The whole map (0)">All</button>'
-                '<button id="follow" title="Keep me in the middle (f)">Follow me</button></div>'
+                '<button id="follow" title="Keep me in the middle (f)">Follow me</button>'
+                '<button id="theme" title="Light or dark (t)">Dark</button></div>'
             ),
             *out,
             credit,

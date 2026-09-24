@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from enodia.draw import HERE, LOST, UNSURE, WATER, Frame, live_map, svg_map
+from enodia.draw import DARK_RULES, HERE, LOST, UNSURE, WATER, Frame, live_map, svg_map
 from enodia.fingerprint import Fingerprint, Location, Place
 from enodia.netlog import LogRecord, SeenNetwork
 from enodia.reconcile import Estimate, PlacedNetwork, PlacedScan, Position, Reconciliation, Waypoint
@@ -368,6 +368,9 @@ def test_the_live_map_zooms_and_keeps_its_zoom_across_the_reload():
     assert '<noscript><meta http-equiv="refresh" content="5"></noscript>' in page
     assert "location.reload()" in page and "}, 5000);" in page
     assert "location.hash" in page and "history.replaceState" in page
+    # As named pairs, `#view=x,y,width&follow`, read as such and written by
+    # hand so the commas stay commas.
+    assert "URLSearchParams" in page and '"view=" +' in page and 'push("follow")' in page
     for button in ('id="in"', 'id="out"', 'id="all"', 'id="follow"'):
         assert button in page, button
     # Where you are, for the view to follow you to.
@@ -382,3 +385,95 @@ def test_the_live_map_credits_openstreetmap_outside_the_picture():
     page = live_map(fingerprints(), found(), [], "x", streets)
     assert '<div class="credit">\u00a9 OpenStreetMap contributors</div>' in page
     assert page.index("</svg>") < page.index('class="credit"')
+
+
+# --- the live map at night --------------------------------------------------------
+
+NEIGHBOURHOOD = StreetMap(
+    streets=(Street("Rivera", CORNERS),),
+    buildings=((CORNERS[0], (-34.9058, -56.1900), (-34.9058, -56.1895), CORNERS[0]),),
+    water=((AROUND,),),
+    rivers=(((-34.9066, -56.1905), (-34.9066, -56.1885)),),
+    parks=((((-34.9058, -56.1898), (-34.9058, -56.1896), (-34.9057, -56.1896)),),),
+    roads=(Street("Rivera", CORNERS), Street("Otra", ((-34.9064, -56.19), (-34.9056, -56.19)))),
+)
+
+
+def ruled(selector, tag, classes):
+    """Whether a rule of the dark theme picks out one element of the drawing."""
+    simple = re.fullmatch(r"(\w*)((?:\.[\w-]+)+)", selector)
+    if simple is None:
+        return False  # the page around the map, not the drawing
+    wanted = simple.group(2).split(".")[1:]
+    return simple.group(1) in ("", tag) and all(one in classes for one in wanted)
+
+
+def test_nothing_the_live_map_draws_is_left_light_in_the_dark():
+    # Every colour the drawing carries as an attribute has a rule of the dark
+    # theme over it, by class, since a rule of CSS outranks an attribute.
+    trail = [(-34.9060, -56.1900 + step * 0.0002) for step in range(4)]
+    unsure = found(alternative=Place("C1", "C2", 0.5), scattered_m=30.0)
+    page = live_map(fingerprints(), unsure, trail, "x", NEIGHBOURHOOD)
+    drawing = page[page.index("<svg") : page.index("</svg>")]
+    painted = set()
+    for tag, attributes in re.findall(r"<(\w+) ([^>]*)>", drawing):
+        named = re.search(r'class="([^"]+)"', attributes)
+        classes = named.group(1).split() if named else []
+        for paint in ("fill", "stroke"):
+            if f' {paint}="#' in f" {attributes}":
+                painted.add(" ".join(classes))
+                assert any(
+                    ruled(selector, tag, classes) and f"{paint}:" in rules
+                    for selector, rules in DARK_RULES
+                ), (tag, attributes)
+    assert painted >= {"paper", "water", "river", "park", "building", "road-edge", "road"}
+    assert painted >= {"street", "street-edge", "halo", "label", "scale", "fingerprint", "trail"}
+    assert painted >= {"ring unsure", "you unsure"}
+
+
+def test_the_live_map_is_dark_when_the_system_is_unless_it_was_set_light():
+    # The system's dark in a media query, unless the page was set light, and
+    # the page's own dark whenever it was set so, the same rules under both.
+    page = live_map(fingerprints(), found(), [HERE_NOW], "x")
+    style = page[page.index("<style>") : page.index("</style>")]
+    system, chosen = style.split("@media (prefers-color-scheme: dark) { ")[1].split(
+        " } html.dark", 1
+    )
+    assert system.startswith("html:not(.light) { color-scheme: dark; }")
+    assert chosen.startswith(" { color-scheme: dark; }")
+    assert "html.dark" not in system and "html:not(.light)" not in chosen
+    for selector, rules in DARK_RULES:
+        assert f"html:not(.light) {selector} {{ {rules} }}" in system
+        assert f"html.dark {selector} {{ {rules} }}" in chosen
+
+
+def test_a_button_turns_the_live_map_to_the_other_theme_and_the_address_keeps_it():
+    # Kept in the address with the zoom, and read in the head, before anything
+    # is drawn, so that a reload does not show the other theme first.
+    page = live_map(fingerprints(), found(), [HERE_NOW], "x")
+    head = page[: page.index("</head>")]
+    assert 'get("theme")' in head and "classList.add(theme)" in head
+    assert '<button id="theme" title="Light or dark (t)">Dark</button>' in page
+    assert '"t": "theme"' in page and '"theme=" + theme' in page
+
+
+def test_how_sure_the_answer_is_is_a_class_as_well_as_a_colour():
+    # For the dark theme to colour the dot, its ring and the line of words by.
+    sure = live_map(fingerprints(), found(), [HERE_NOW], "x")
+    unsure = found(alternative=Place("C1", "C2", 0.5), scattered_m=30.0)
+    doubtful = live_map(fingerprints(), unsure, [HERE_NOW], "x")
+    lost = live_map(fingerprints(), None, [HERE_NOW], "not on the map")
+    assert '<circle class="you here"' in sure and '<p class="here">' in sure
+    assert '<circle class="you unsure"' in doubtful and '<circle class="ring unsure"' in doubtful
+    assert '<p class="unsure">' in doubtful
+    assert '<circle class="you lost"' in lost and '<p class="lost">' in lost
+
+
+def test_the_plan_shares_the_classes_but_keeps_its_colours_and_takes_no_theme():
+    # A file for any viewer: its colours are its own attributes, with no style
+    # to turn them dark.
+    picture = svg_map(walked(streets=NEIGHBOURHOOD))
+    assert picture is not None and "<style" not in picture
+    assert '<path class="water" d="' in picture
+    assert f'fill="{WATER}" fill-rule="evenodd"' in picture
+    assert '<text class="label"' in picture and '<line class="scale"' in picture
