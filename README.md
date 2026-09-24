@@ -62,6 +62,8 @@ That one is synthetic: real streets of Montevideo, invented radios, made to show
 enodia --check-map --map samples/dolores/dolores-map.jsonl
 ```
 
+To see the real walk over a map, open `samples/dolores/dolores-walk.geojson` in a map viewer that reads GeoJSON, such as [GPXSee](https://www.gpxsee.org/) (on Arch Linux, `sudo pacman -S gpxsee`), or look at `samples/dolores/dolores-plan.svg`, the same walk drawn with no map service at all.
+
 ## Your first walk
 
 **1. Check the machine, then walk.**
@@ -92,6 +94,8 @@ enodia --map-add walk.jsonl notebook.geo.txt --streets streets.jsonl
 
 `--geocode` looks the corners up on OpenStreetMap and writes `notebook.geo.txt` beside the notebook, with the streets and the neighbourhood into `streets.jsonl`. It is optional: without coordinates, every place is a fraction of the way between two corners.
 
+The lookup is the one command that goes online. To keep it apart from your own address, send it through Tor: install the `socks` extra (`uv tool install "enodia[socks]"`), start the Tor daemon (on Arch Linux, `sudo pacman -S tor` and `sudo systemctl start tor`), and add `--proxy socks5://127.0.0.1:9050`. [Through Tor](docs/methodology.md#through-tor-if-you-want) says what that hides and what it does not.
+
 **4. Come back, and find yourself.**
 
 ```bash
@@ -99,6 +103,10 @@ enodia --locate --watch --streets streets.jsonl --live-map live.html
 ```
 
 Open `live.html` in a browser once and leave it open. `enodia --assistant` is a menu for the same steps, the lookup aside: the walk, the reconciliation, the map and finding yourself.
+
+![The live map in a browser: where the scan puts you on Carlos María Solari, the last answers fading behind it, the map's own fingerprints as grey dots, and the streets named.](https://raw.githubusercontent.com/carlosplanchon/enodia/main/assets/enodia_live.png)
+
+*The live map, zoomed in with Follow me, during a replay of the walk in `samples/dolores/` against its own map. It shows what the page looks like, not how exact it is.*
 
 ## How good is it?
 

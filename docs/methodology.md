@@ -167,6 +167,6 @@ An SVG, written once, that opens in any browser with nothing fetched. The lines 
 
 No tiles, and that is deliberate rather than lazy. The OSM wiki says of the standard tile layer that it is *"not designed and suited for heavily used applications"* and asks that bulk downloading be respected, so a distributed tool that fetches tiles is the case the policy is about. Drawing the vector data offline sidesteps all of it, keeps the reconciliation offline, and keeps the geometry measurable instead of only visible.
 
-If you would rather have a real slippy map with a basemap, that already works and always did: `--geojson` writes the walk out and uMap, QGIS or geojson.io draw it over OSM's own map, under their tile arrangements rather than Enodia's.
+If you would rather have a real slippy map with a basemap, that already works and always did: `--geojson` writes the walk out and GPXSee, uMap, QGIS or geojson.io draw it over OSM's own map, under their tile arrangements rather than Enodia's.
 
 **What the picture refuses to do is flatter itself.** A dot on a plan of real streets reads as a fact, and most of what a walk hears was never established. So an access point the walk pinned down is a dot, one it did not is a dashed ring the size of how far its sightings were spread, with nothing in the middle, and the legend says how many of each there were. Open networks get their own colour. There is a scale bar, because a plan you cannot measure is a drawing.
