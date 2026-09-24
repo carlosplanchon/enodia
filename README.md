@@ -104,9 +104,23 @@ enodia --locate --watch --streets streets.jsonl --live-map live.html
 
 Open `live.html` in a browser once and leave it open. `enodia --assistant` is a menu for the same steps, the lookup aside: the walk, the reconciliation, the map and finding yourself.
 
-![The live map in a browser: where the scan puts you on Carlos María Solari, the last answers fading behind it, the map's own fingerprints as violet dots, and the streets named.](https://raw.githubusercontent.com/carlosplanchon/enodia/main/assets/enodia_live.png)
+![The live map in a browser: where the scan puts you on Río Negro, with the streets it may be on shaded around it, the last answers fading behind it, the map's own fingerprints as violet dots, the streets named, and in the corner a panel of what the run is doing.](https://raw.githubusercontent.com/carlosplanchon/enodia/main/assets/enodia_live.png)
 
 *The live map, zoomed in with Follow me.*
+
+## How it works
+
+**Every spot sounds different.** From any point on a street you hear a particular set of Wi-Fi networks, some loud and some faint. That set is the spot's fingerprint (Wi-Fi fingerprinting), and a walk records one every five seconds.
+
+**Placing the walk.** You press the button at each corner, and Enodia spreads the scans between two corners by how fast the networks around you changed (the Jaccard distance between one scan and the next, added up along the block). If they stayed the same for a while, you had stopped. If they turned over quickly, you were moving. Where they say nothing either way, it assumes a steady pace (linear interpolation on the clock).
+
+**Placing the routers.** Each router goes in the middle of where it was heard, leaning towards where it was loudest (a weighted centroid, with weights from the log-distance path loss model). One heard all along the walk gets a ring instead of a dot, because the walk never pinned it down.
+
+**Finding yourself.** Later, Enodia listens and asks which recorded spot sounds most like now. It counts the networks the two have in common, out of all the ones either of them heard, and a rare network counts for more, the way a distinctive voice in a crowd tells you more than a common one (weighted Jaccard similarity, with rarity weights like IDF). Each earlier walk gets one vote, the block with the best match wins, and you are placed along it between its best matches (k nearest neighbours, one per walk, grouped by block).
+
+**Saying what it does not know.** If nothing sounds alike enough, the answer is "not on the map" (a similarity floor). If two blocks sound about as alike, it says so, and the scans just before it decide, since nobody jumps a block in five seconds (a softmax share of the evidence, and a vote of the last three scans). While you walk, the dot moves at a walking pace (a one-dimensional Kalman filter), and the streets you may be on are shaded around it: the worse the match, the wider the shade (an error band fitted on held-out walks).
+
+**Checking itself.** The numbers below come from hiding part of a walk and finding it again from the rest, like covering the answers of a quiz (hold-out validation, one walk or one corner left out at a time).
 
 ## How good is it?
 

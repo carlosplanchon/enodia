@@ -21,9 +21,9 @@ with WifiMonitor(
 | `enodia.voice` | `VoiceController` speaks now. `BackgroundVoice(controller)` queues, dropping utterances marked `optional` when it falls behind. `ESpeak`, `PicoTTS` |
 | `enodia.button` | `ButtonMarker(devices, on_press)`, `find_button_devices()`, `list_input_devices()`, `event_age(at)` |
 | `enodia.reconcile` | `reconcile(log, notebook, by_movement=True, outing=None, path_loss=3.0)`, `check_pace(...)`, `check_passes(...)`, `read_notebook(path, day, tz, marks)`, `network_turnover(a, b)`, `place_by_movement(scans, waypoints)`, `signal_weight(dbm, exponent)` |
-| `enodia.fingerprint` | `add_to_map(map, log, notebook)`, `read_map(path)`, `locate_scan(fingerprints, networks)`, `locate_sequence(fingerprints, scans, sequence="tie")`, `follow(fingerprints, scans, sequence="tie")`, `check_map(fingerprints)`, `scan_now(interface)`, `canonical(a, b, fraction)` |
+| `enodia.fingerprint` | `add_to_map(map, log, notebook)`, `read_map(path)`, `locate_scan(fingerprints, networks)`, `locate_sequence(fingerprints, scans, sequence="tie")`, `follow(fingerprints, scans, sequence="tie")`, `stretch_lines(fingerprints)`, `band_of(found, lines)`, `check_map(fingerprints)`, `scan_now(interface)`, `canonical(a, b, fraction)` |
 | `enodia.geocode` | `geocode_notebook(notebook, area)`, `read_crossings(path)`, `junction_of(a, b, places)`, `overpass_query(streets, area)`, `surroundings_query(bbox)`, `drawn_surroundings(elements)`, `parse_proxy(url)` |
-| `enodia.draw` | `svg_map(result, streets)`, `live_map(fingerprints, found, trail, said, streets)`, `Frame.around(places)` |
+| `enodia.draw` | `svg_map(result, streets)`, `live_map(fingerprints, found, trail, said, streets, notes=lines, written=when, band=band)`, `Frame.around(places)` |
 | `enodia.streets` | `read_streets(path)`, `write_streets(path, drawn)`, `StreetMap.between(here, there)`, `point_along(line, fraction)` |
 | `enodia.preflight` | `run_preflight(...)`, `format_preflight(checks, color)` |
 | `enodia.system` | `session_log_path(directory)`, `data_dir()`, `map_path()`, `battery()`, `lid_switch_setting()` and `scan_mac_setting()`, each answering with what it read and with the files it could not |

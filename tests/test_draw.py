@@ -1,24 +1,31 @@
 """Tests for drawing the walk as a plan."""
 
 import re
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from enodia.draw import (
+    BLOCK,
     DARK_FINGERPRINT,
+    DARK_PAPER,
+    DARK_ROAD,
     DARK_RULES,
     FINGERPRINT,
     HERE,
+    LAND,
     LOST,
+    ROAD,
     STATES,
+    STREET,
     UNSURE,
     WATER,
     Frame,
     live_map,
     svg_map,
 )
-from enodia.fingerprint import Fingerprint, Location, Place
+from enodia.fingerprint import Band, Fingerprint, Location, Place
 from enodia.netlog import LogRecord, SeenNetwork
 from enodia.reconcile import Estimate, PlacedNetwork, PlacedScan, Position, Reconciliation, Waypoint
 from enodia.streets import Street, StreetMap, distance_metres
@@ -110,7 +117,27 @@ def test_the_streets_and_the_blocks_are_drawn_when_there_are_any():
     drawn = svg_map(walked(streets=streets))
     assert plain is not None and drawn is not None
     assert drawn.count("<path") > plain.count("<path")
-    assert "#e7e1d8" in drawn  # la manzana rellena
+    assert f'fill="{BLOCK}"' in drawn  # la manzana rellena
+
+
+def luminance(colour):
+    """How light an sRGB colour is, as the contrast between two is measured."""
+    channels = [int(colour[at : at + 2], 16) / 255 for at in (1, 3, 5)]
+    linear = [one / 12.92 if one <= 0.04045 else ((one + 0.055) / 1.055) ** 2.4 for one in channels]
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+
+def contrast(one, other):
+    lighter, darker = sorted((luminance(one), luminance(other)), reverse=True)
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def test_the_streets_stand_out_from_the_ground_and_the_buildings_from_it_too():
+    # Drawn on the paper itself, the streets were white on nearly white, 1.03
+    # to one, and only their thin edges showed where they ran.
+    assert contrast(ROAD, LAND) >= 1.15 and contrast(STREET, LAND) >= 1.15
+    assert contrast(LAND, BLOCK) >= 1.15
+    assert contrast(DARK_ROAD, DARK_PAPER) >= 1.15  # as the dark theme already had it
 
 
 def test_geometry_outside_the_frame_is_left_out_of_the_file():
@@ -433,8 +460,9 @@ def test_nothing_the_live_map_draws_is_left_light_in_the_dark():
     # Every colour the drawing carries as an attribute has a rule of the dark
     # theme over it, by class, since a rule of CSS outranks an attribute.
     trail = [(-34.9060, -56.1900 + step * 0.0002) for step in range(4)]
-    unsure = found(alternative=Place("C1", "C2", 0.5), scattered_m=30.0)
-    page = live_map(fingerprints(), unsure, trail, "x", NEIGHBOURHOOD)
+    unsure = found(alternative=Place("C1", "C2", 0.5, -34.9060, -56.1890), scattered_m=30.0)
+    band = Band(30.0, (((-34.9060, -56.1900), (-34.9060, -56.1888)),))
+    page = live_map(fingerprints(), unsure, trail, "x", NEIGHBOURHOOD, band=band)
     drawing = page[page.index("<svg") : page.index("</svg>")]
     painted = set()
     for tag, attributes in re.findall(r"<(\w+) ([^>]*)>", drawing):
@@ -449,7 +477,7 @@ def test_nothing_the_live_map_draws_is_left_light_in_the_dark():
                 ), (tag, attributes)
     assert painted >= {"paper", "water", "river", "park", "building", "road-edge", "road"}
     assert painted >= {"street", "street-edge", "halo", "label", "scale", "fingerprint", "trail"}
-    assert painted >= {"ring unsure", "you unsure"}
+    assert painted >= {"ring unsure", "you unsure", "band unsure", "alternative"}
 
 
 def test_the_live_map_is_dark_when_the_system_is_unless_it_was_set_light():
@@ -498,3 +526,104 @@ def test_the_plan_shares_the_classes_but_keeps_its_colours_and_takes_no_theme():
     assert '<path class="water" d="' in picture
     assert f'fill="{WATER}" fill-rule="evenodd"' in picture
     assert '<text class="label"' in picture and '<line class="scale"' in picture
+
+
+# --- the panel of what the run is doing -----------------------------------------------
+
+
+def test_the_live_map_carries_a_panel_of_what_the_run_knows():
+    notes = ["Scan 3: 2 networks heard, 1 of them in the map", "A <b> & C"]
+    page = live_map(fingerprints(), found(), [HERE_NOW], "x", notes=notes, written=1.7e9 + 0.5)
+    start = page.index('<div class="telemetry">')
+    assert start < page.index("<svg")  # beside the picture, where a zoom does not carry it off
+    panel = page[start : page.index("<svg")]
+    assert '<div id="beat" data-written="1700000000500" data-late="30" hidden></div>' in panel
+    assert "<div>Scan 3: 2 networks heard, 1 of them in the map</div>" in panel
+    assert "<div>A &lt;b&gt; &amp; C</div>" in panel
+    assert "is Enodia still running?" in page
+
+
+def test_without_notes_or_a_time_the_live_map_has_no_panel_and_no_heartbeat():
+    # The page has no clock of its own: only the run that writes it knows when.
+    plain = live_map(fingerprints(), found(), [HERE_NOW], "x")
+    assert '<div class="telemetry">' not in plain and 'id="beat"' not in plain
+    assert "is Enodia still running?" not in plain
+    quiet = live_map(fingerprints(), found(), [HERE_NOW], "x", notes=["Scan 1: no networks heard"])
+    assert '<div class="telemetry"><div>Scan 1: no networks heard</div></div>' in quiet
+    assert 'id="beat"' not in quiet and "is Enodia still running?" not in quiet
+
+
+def test_the_heartbeat_waits_three_reloads_or_half_a_minute_before_it_turns_amber():
+    # Half a minute at the least, since two cards alone can take twenty seconds
+    # to scan whatever the interval.
+    def late(interval):
+        page = live_map(fingerprints(), found(), [HERE_NOW], "x", None, interval, written=0.0)
+        (seconds,) = re.findall(r'data-late="([0-9]+)"', page)
+        return int(seconds)
+
+    assert [late(0), late(5), late(20)] == [30, 30, 60]
+    page = live_map(fingerprints(), found(), [HERE_NOW], "x", None, 5, written=0.0)
+    assert "Updated " in page and "No news for " in page and "setInterval(tick, 1000)" in page
+    assert "}, 1000);" not in page  # the heartbeat's tick is not the page's reload
+
+
+def test_the_panel_lets_the_wheel_and_the_drag_through_and_moves_off_narrow_screens():
+    page = live_map(fingerprints(), found(), [HERE_NOW], "x", notes=["Scan 1"], written=0.0)
+    style = page[page.index("<style>") : page.index("</style>")]
+    assert ".telemetry { position: absolute; top: 8px; left: 12px;" in style
+    assert "pointer-events: none;" in style
+    assert "@media (max-width: 700px) { .telemetry { top: 48px; } }" in style
+
+
+def test_the_line_on_top_can_wrap_without_the_buttons_or_the_panel_covering_it():
+    # A narrow window makes three lines of it, and the buttons, put on the
+    # window at a guess of its height, covered the end of it. The map and what
+    # floats over it are placed below the line, however tall it is.
+    streets = StreetMap(roads=(Street("Rivera", CORNERS),))
+    page = live_map(fingerprints(), found(), [HERE_NOW], "x", streets, notes=["1"], written=0.0)
+    start = page.index('<div class="stage">')
+    assert page.index("</p>") < start
+    stage = page[start : page.index("<script>", start)]
+    for part in ('<div class="zoom">', '<div class="telemetry">', "<svg", '<div class="credit">'):
+        assert part in stage, part
+    style = page[page.index("<style>") : page.index("</style>")]
+    assert "position: fixed" not in style and "100vh -" not in style
+
+
+def test_the_panel_follows_the_theme():
+    selectors = [selector for selector, _ in DARK_RULES]
+    assert ".telemetry" in selectors and "#beat.late" in selectors
+
+
+# --- how far off the answer may be ------------------------------------------------------
+
+
+def test_how_far_off_the_answer_may_be_is_drawn_on_the_streets_under_the_fingerprints_and_the_dot():
+    # One path for every piece of it, so that where two meet at a corner the
+    # shade is not laid on twice, and beneath the map's own dots and yours.
+    pieces = (
+        ((-34.9060, -56.1900), (-34.9060, -56.1888)),
+        ((-34.9064, -56.1894), (-34.9056, -56.1894)),
+    )
+    page = live_map(fingerprints(), found(), [HERE_NOW], "x", band=Band(35.0, pieces))
+    (drawn,) = re.findall(r'<path class="band here" d="([^"]+)"', page)
+    assert drawn.count("M") == 2
+    band, dots, you = (page.index(one) for one in ('class="band', 'class="fingerprint"', 'r="7"'))
+    assert band < dots < you
+    assert 'class="band' not in live_map(fingerprints(), found(), [HERE_NOW], "x")
+    empty = live_map(fingerprints(), found(), [HERE_NOW], "x", band=Band(35.0, ()))
+    assert 'class="band' not in empty
+
+
+def test_an_uncertain_answer_marks_where_else_it_could_be_with_a_hollow_dot():
+    there = Place("C1", "C2", 0.5, -34.9060, -56.1890)
+    page = live_map(fingerprints(), found(alternative=there), [HERE_NOW], "x")
+    (circle,) = re.findall(r'<circle class="alternative" [^>]*>', page)
+    assert 'r="6" fill="none"' in circle and f'stroke="{UNSURE}"' in circle
+    # A tie the scans before settled is no doubt, and a place with no
+    # coordinates, or one off the picture, has nowhere to be marked.
+    settled = replace(found(alternative=there), settled=1)
+    unplaced = found(alternative=Place("C1", "C2", 0.5))
+    far = found(alternative=Place("C1", "C2", 0.5, -34.95, -56.30))
+    for answer in (settled, unplaced, far):
+        assert 'class="alternative"' not in live_map(fingerprints(), answer, [HERE_NOW], "x")

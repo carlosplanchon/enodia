@@ -20,6 +20,7 @@ one feature with somebody else's privacy on the line and its decisions fill a pa
 | why a scan after a hole in the log is not placed too early | *A hole in the scans is not a step* |
 | how a scan that could be at either of two corners is placed | *A tie is settled by the walk, not by the scan* |
 | why the live answer moves at a walk and not scan by scan | *A walk has a pace* |
+| how far off an answer may be, and why the pace cannot say | *How far off an answer may be* |
 | why an answer says it is at a corner | *A corner is somewhere too* |
 | how another card is calibrated against the map on the run | *Two cards hear one street differently* |
 | what `--along levels` does, and why it is experimental | *Where along the block, from the levels* |
@@ -171,6 +172,38 @@ The filter never chooses the stretch either: that stays with the scans (`tie`, `
 filter only follows the place along it, taking the walk over through the mark two stretches
 share and starting again from the scan after any other change, a gap of half a minute, or a
 stretch of no known length.
+
+## How far off an answer may be
+
+A dot says where, and nothing about how far off. The first answer at hand was the walking pace's
+own: the filter that keeps an answer to a pace carries a variance of where along the stretch you
+are, and a band that wide was one line of code. Measured on the walks held out of the real
+outing, it was worse than nothing. The answers the filter was surest of were the most wrong, 59
+m off at the median against 26 m for the ones it doubted, a correlation of -0.37, because a pass
+placed on the block next door is placed there consistently, scan after scan, and consistency is
+what the filter measures. It knows that it agrees with itself, not that it is right.
+
+What follows the error is how well the answer matched. On the same held-out walks the similarity
+goes with the error at -0.73, and about as strongly on the blocks the map knows as on the ones
+it does not. Two answers in three were within:
+
+| similarity | 0.8 and up | 0.7 to 0.8 | 0.6 to 0.7 | 0.5 to 0.6 | under 0.5 |
+|---|---|---|---|---|---|
+| error | 18 m | 22 m | 35 m | 48 m | about 70 m |
+
+The narrowest straight line under two in three of them is 20 m, and 60 m more for all the
+similarity short of a perfect match. On the even and the odd walks apart it holds 69% and 61%:
+one outing is a first measurement and not a law, which is why `--check-map` counts it on every
+map, in a row of its own. The synthetic sample holds less than half, because its noise is its
+generator's and follows nothing.
+
+The band is drawn on every mapped street within that distance of the dot, in a straight line,
+because a straight line is how the check measures when there are coordinates: a band along the
+street alone, round a corner, would claim more than the check counts. It is not drawn for the
+signal, whose similarities are on another scale, nor for networks weighed alike, since it was
+measured for neither. And the spread the report gives, of the walks behind an answer, is given
+only when there are two of them. With one walk it was always nought, and a nought reads as
+certainty.
 
 ## A corner is somewhere too
 
@@ -374,16 +407,27 @@ says so at the foot.
 
 The harder part is the one the plan of a walk already had: a dot on real streets reads as a
 fact. So an answer the scans could not settle between two stretches is drawn in another colour,
-with a ring the size of how far apart its evidence lay, and when the map loses you the last
-place it knew stays on the page greyed, with the words saying so, rather than vanishing or,
-worse, staying the colour of an answer. The streets nobody walked are drawn and named and never
-used to place anything. They are kept apart from the notebook's own because a street that runs
-near both marks of a block would otherwise compete for a block it does not belong to.
+with a hollow dot on the other stretch it could be on, and when the map loses you the last place
+it knew stays on the page greyed, with the words saying so, rather than vanishing or, worse,
+staying the colour of an answer. The streets nobody walked are drawn and named and never used to
+place anything. They are kept apart from the notebook's own because a street that runs near both
+marks of a block would otherwise compete for a block it does not belong to.
 
 Zooming it is the page's own business, a few lines of script and nothing fetched. The page is
 written again and reloaded every cycle, so a zoom held in the page would be lost every five
 seconds. It is kept in the address instead, which a reload keeps, and without script the page
 falls back to reloading itself whole, as it did before it could zoom.
+
+The page also says what an answer rests on, and how old it is. A panel beside the map gives the
+rest of what `--locate` prints, how many of the networks in view the map knows and how many
+walks agree, because a dot does not say whether two networks or twenty put it there. And a page
+that has stopped changing looks exactly like one that is live: it reloads itself whatever
+becomes of the run, so a run that had stopped, or a radio that was blocked, left the last answer
+on the screen as the current one. Now the page counts in the browser how long ago it was
+written, and says so in amber when no new page has come for three intervals, never less than
+half a minute, since a fresh scan of two cards can take ten seconds or more. A blocked radio
+writes a page of its own, greyed like a lost answer but saying why, since a scan that never
+happened is not a street the map does not know.
 
 ## A failure to read is not evidence of absence
 

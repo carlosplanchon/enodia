@@ -8,6 +8,7 @@ import sys
 import time
 from collections import deque
 from collections.abc import Iterator, Sequence
+from collections.abc import Set as AbstractSet
 from dataclasses import replace
 from functools import partial
 from pathlib import Path
@@ -17,6 +18,8 @@ from enodia.anonymize import ExportError, export_outing, format_export, key_path
 from enodia.button import ButtonMarker, find_button_devices, list_input_devices
 from enodia.draw import live_map, mapped_places, svg_map
 from enodia.fingerprint import (
+    CALIBRATION_PAIRS,
+    Band,
     Calibration,
     Fingerprint,
     Levels,
@@ -24,14 +27,19 @@ from enodia.fingerprint import (
     Pace,
     RadioBlocked,
     add_to_map,
+    band_m,
+    band_of,
     check_map,
     follow,
     format_location,
     format_map_check,
+    how_sure,
     locate_sequence,
+    otherwise,
     read_map,
     scan_now,
     scans_from_log,
+    stretch_lines,
 )
 from enodia.geocode import (
     MAX_WALKING_SPEED_MS,
@@ -440,7 +448,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--live-map",
         metavar="FILE",
         help="with --locate --watch: write a page every cycle showing where you are on the "
-        "map, to open once in a browser and leave open, since it reloads itself; with "
+        "map and what the run is doing, to open once in a browser and leave open, since it "
+        "reloads itself; with "
         "--streets it draws the streets and whatever --surroundings brought too",
     )
     parser.add_argument(
@@ -607,12 +616,19 @@ def run_watch(
 
     `--live-map FILE` is the same run drawn: every cycle the page is written
     again, beside the target and renamed onto it, with the last `TRAIL`
-    answers behind the current one. A map without coordinates has nothing to
-    draw on, and says so before the radio is asked anything.
+    answers behind the current one, the streets it may be on around it
+    (`band_of`), and a panel of what the run is doing (`telemetry`). The band
+    only matching by networks weighed by rarity, the one way it was measured.
+    A cycle whose radio was blocked is drawn too, the last place
+    greyed and the panel saying since when, rather than left showing the last
+    answer as the current one. A map without coordinates has nothing to draw
+    on, and says so before the radio is asked anything.
     """
     by_signal = args.match == "signal"
     by_rarity = args.weigh == "rarity"
-    blocked = False
+    banded = not by_signal and by_rarity
+    blocked_since: str | None = None
+    cycle = 0
     pace = Pace.of(known, args.max_speed) if args.walking_pace else None
     live = None if args.live_map is None else Path(args.live_map)
     drawn = None
@@ -644,30 +660,72 @@ def run_watch(
         print(f"Recording scans to {log.path}", flush=True)
     if live is not None:
         print(f"Live map at {live}: open it in a browser", flush=True)
+    # What the panel counts the networks heard against, and its line for the
+    # log, which is the same every cycle.
+    mapped = frozenset(key for one in known for key in one.keys)
+    recording = [] if log is None else [f"Recording scans to {log.path}"]
+    # The stretches' lines, for the band to be drawn on: the pace's own when it
+    # keeps the answers to them, and only where the band was measured.
+    lines = None
+    if live is not None and banded:
+        lines = pace.lines if pace is not None else stretch_lines(known)
+
+    def draw(
+        target: Path,
+        found: Location | None,
+        said: str,
+        notes: Sequence[str],
+        band: Band | None = None,
+    ) -> None:
+        """This cycle's page, written beside the target and renamed onto it."""
+        where = None if found is None else found.place
+        if where is not None and where.lat is not None and where.lon is not None:
+            trail.append((where.lat, where.lon))
+        page = live_map(
+            known,
+            found,
+            trail,
+            said,
+            drawn,
+            args.interval,
+            notes=notes,
+            written=time.time(),
+            band=band,
+        )
+        part = target.with_name(f".{target.name}.part")
+        part.write_text(page, encoding="utf-8")
+        # Renamed into place, so a browser reloading mid-write reads the page
+        # before or the page after and never half of one.
+        os.replace(part, target)
 
     def fresh() -> Iterator[list[SeenNetwork]]:
-        nonlocal blocked
-        done = 0
-        while args.cycles <= 0 or done < args.cycles:
+        nonlocal blocked_since, cycle
+        while args.cycles <= 0 or cycle < args.cycles:
             started = time.monotonic()
-            done += 1
+            cycle += 1
             try:
                 seen = scan_now(args.interface)
             except RadioBlocked as exc:
+                stamp = time.strftime("%H:%M:%S")
                 print(f"Cannot scan: {exc}", flush=True)
                 if log is not None:
                     log.record_scan_failed(None, str(exc))
-                if not blocked:
+                if blocked_since is None:
                     voice.say("Radio blocked", lang=args.lang)
-                blocked = True
+                    blocked_since = stamp
+                if live is not None:
+                    # Drawn all the same: left alone, the page would go on
+                    # showing the last answer as the current one.
+                    notes = [f"Radio blocked since {blocked_since}", *recording]
+                    draw(live, None, f"{stamp}  Cannot scan: {exc}", notes)
             else:
                 if log is not None:
-                    log.record_scan(seen, cycle=done)
-                if blocked:
+                    log.record_scan(seen, cycle=cycle)
+                if blocked_since is not None:
                     voice.say("Scanning again", lang=args.lang)
-                blocked = False
+                blocked_since = None
                 yield seen
-            if args.cycles <= 0 or done < args.cycles:
+            if args.cycles <= 0 or cycle < args.cycles:
                 remaining = args.interval - (time.monotonic() - started)
                 if remaining > 0:
                     time.sleep(remaining)
@@ -694,11 +752,7 @@ def run_watch(
                 print(card_reads(offset), flush=True)
                 announced = offset
             elif offset is None and measured is not None and not refused:
-                print(
-                    f"This card reads {abs(measured):.0f} dB off the map's card, too far to be "
-                    "a card: not corrected",
-                    flush=True,
-                )
+                print(card_refused(measured), flush=True)
                 refused = True
             latest = calibration.correct(seen)
             yield latest
@@ -706,6 +760,8 @@ def run_watch(
     previous: Location | None = None
     first = True
     try:
+        # One answer for each scan handed in, which is what keeps `cycle` and
+        # `latest` those of the scan each answer is for.
         for answer in follow(known, corrected(fresh()), args.sequence, by_signal, by_rarity):
             if levels is not None:
                 answer = levels.place(answer, latest)
@@ -717,15 +773,9 @@ def run_watch(
                 said = found.describe() + (", uncertain" if found.uncertain else "")
             print(f"{stamp}  {said}", flush=True)
             if live is not None:
-                where = None if found is None else found.place
-                if where is not None and where.lat is not None and where.lon is not None:
-                    trail.append((where.lat, where.lon))
-                page = live_map(known, found, trail, f"{stamp}  {said}", drawn, args.interval)
-                written = live.with_name(f".{live.name}.part")
-                written.write_text(page, encoding="utf-8")
-                # Renamed into place, so a browser reloading mid-write reads the
-                # page before or the page after and never half of one.
-                os.replace(written, live)
+                band = None if lines is None or found is None else band_of(found, lines)
+                told = telemetry(cycle, latest, mapped, found, pace, calibration, banded=banded)
+                draw(live, found, f"{stamp}  {said}", [*told, *recording], band)
             if first or spoken(found) != spoken(previous):
                 say_location(voice, found, args.lang, args.ssid_lang)
             elif found is not None and found.corner is None and previous is not None:
@@ -744,6 +794,49 @@ def run_watch(
     return 0
 
 
+def telemetry(
+    cycle: int,
+    heard: Sequence[SeenNetwork],
+    mapped: AbstractSet[str],
+    found: Location | None,
+    pace: Pace | None = None,
+    calibration: Calibration | None = None,
+    *,
+    banded: bool = False,
+) -> list[str]:
+    """What the live map's panel says of one cycle: the scan, the answer and the walk.
+
+    The networks counted are the ones with an address, the only ones a map can
+    know. How sure the answer is, and what else it could have been, are in the
+    words `--locate` prints them in. How far off it may be only when `banded`,
+    matching the way the band was measured, and only for an answer with a
+    place to be off from. The pace is given only once two answers have
+    measured one: a walk started again stands still, which is an assumption
+    and not a speed.
+    """
+    keys = {network.key for network in heard if network.identified}
+    known = len(keys & mapped)
+    if not keys:
+        scan = "no networks heard"
+    elif len(keys) == 1:
+        scan = f"1 network heard, which the map {'knows' if known else 'does not know'}"
+    else:
+        scan = f"{len(keys)} networks heard, {known or 'none'} of them in the map"
+    lines = [f"Scan {cycle}: {scan}"]
+    if found is not None:
+        lines.append(how_sure(found))
+        if banded and found.place.coordinates is not None:
+            lines.append(f"Within about {5 * round(band_m(found.score) / 5)} m, 2 times in 3")
+        if (sentence := otherwise(found)) is not None:
+            lines.append(sentence)
+        walking = pace.walking if pace is not None and pace.carried else None
+        if walking is not None:
+            lines.append(f"Walking at {abs(walking.speed):.1f} m/s")
+    if calibration is not None:
+        lines.append(card_state(calibration))
+    return lines
+
+
 def card_reads(offset: float) -> str:
     """What the run learned about this card, said once when it starts correcting for it."""
     rounded = round(offset)
@@ -753,6 +846,26 @@ def card_reads(offset: float) -> str:
     return (
         f"Calibrated against the map: this card reads {abs(rounded)} dB {way} the map's card, "
         "and is corrected for that"
+    )
+
+
+def card_refused(measured: float) -> str:
+    """What the run says of a card it measured too far from the map's to be a card."""
+    return (
+        f"This card reads {abs(measured):.0f} dB off the map's card, too far to be a card: "
+        "not corrected"
+    )
+
+
+def card_state(calibration: Calibration) -> str:
+    """Where learning this card stands: corrected for, refused, or still being learned."""
+    offset, measured = calibration.offset, calibration.measured
+    if offset is not None:
+        return card_reads(offset)
+    if measured is not None:
+        return card_refused(measured)
+    return (
+        f"Calibrating the card: {len(calibration.pairs)} of {CALIBRATION_PAIRS} readings compared"
     )
 
 
@@ -906,7 +1019,11 @@ def run_map(args: argparse.Namespace, map_file: Path) -> int:
             check(keep_pace=True),
             check(by_signal=True, calibrate=True),
         ]
-        print(format_map_check(fingerprints, *checked, card_offset=offset, along=along))
+        print(
+            format_map_check(
+                fingerprints, *checked, card_offset=offset, along=along, by_rarity=by_rarity
+            )
+        )
         return 0
 
     # A map that is not there is an error here, and not an empty map. `read_map`

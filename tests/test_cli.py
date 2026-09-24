@@ -9,7 +9,17 @@ from ifpeek import AccessPoint
 import enodia
 from enodia import cli
 from enodia import voice as voice_module
-from enodia.netlog import read_log
+from enodia.draw import BLOCK
+from enodia.fingerprint import (
+    CALIBRATION_PAIRS,
+    Calibration,
+    Location,
+    Pace,
+    Place,
+    how_sure,
+    otherwise,
+)
+from enodia.netlog import SeenNetwork, read_log
 from enodia.voice import ESpeak, PicoTTS
 
 
@@ -956,8 +966,218 @@ def test_locate_watch_draws_every_cycle_onto_a_live_map(monkeypatch, tmp_path, c
     assert '<meta http-equiv="refresh" content="1">' in page and ">Rivera</text>" in page
     assert "}, 1000);" in page  # the script's reload, at the same interval
     assert 'between "Charlie" and "Delta", 50% of the way' in page
+    assert "<div>Scan 3: 1 network heard, which the map knows</div>" in page
+    assert 'id="beat"' in page  # and when it was written, for the page to count from
     left = sorted(path.name for path in tmp_path.iterdir())
     assert left == ["calles.jsonl", "mapa.jsonl", "vivo.html"]  # nothing half-written behind
+
+
+def test_a_blocked_radio_is_drawn_on_the_live_map_instead_of_left_looking_current(
+    monkeypatch, tmp_path, capsys
+):
+    # Left alone, the page went on showing the last answer as the current one.
+    # Drawn, the last place is greyed, the line on top says why, and the panel
+    # since when. The terminal and the voice say what they said before.
+    mapa = placed_streets(tmp_path)
+    live = tmp_path / "vivo.html"
+    watching(monkeypatch, [heard("Casa", "Kiosco"), heard("Bar")], [None, "soft", "soft", None])
+    stamps = iter(["12:00:00", "12:00:05", "12:00:10", "12:00:15"])
+    monkeypatch.setattr(cli.time, "strftime", lambda fmt, *rest: next(stamps))
+    drawn = []
+    real = cli.live_map
+    monkeypatch.setattr(
+        cli,
+        "live_map",
+        lambda *a, **k: (
+            drawn.append((a[1], a[3], len(a[2]), k["notes"], real(*a, **k))) or drawn[-1][-1]
+        ),
+    )
+    flags = ["--map", str(mapa), "--cycles", "4", "--live-map", str(live)]
+    assert cli.main([*WATCH, *flags]) == 0
+    blocked = "Cannot scan: wlan0: radio soft blocked (rfkill)"
+    assert [said for _, said, _, _, _ in drawn] == [
+        '12:00:00  between "Alfa" and "Bravo", 20% of the way',
+        f"12:00:05  {blocked}",
+        f"12:00:10  {blocked}",
+        '12:00:15  between "Charlie" and "Delta", 50% of the way',
+    ]
+    assert [found is None for found, *_ in drawn] == [False, True, True, False]
+    assert [trail for _, _, trail, _, _ in drawn] == [1, 1, 1, 2]  # blocked, it stays put
+    assert drawn[1][3] == drawn[2][3] == ["Radio blocked since 12:00:05"]
+    assert drawn[3][3][0] == "Scan 4: 1 network heard, which the map knows"
+    page = drawn[1][4]
+    assert f'<p class="lost">12:00:05  {blocked}</p>' in page
+    assert '<circle class="you lost"' in page  # the last place it knew, greyed
+    out = capsys.readouterr().out
+    assert out.count(blocked) == 2
+    assert out.count("Say (Silent: False) > Radio blocked") == 1
+    assert out.count("Say (Silent: False) > Scanning again") == 1
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["mapa.jsonl", "vivo.html"]
+
+
+def banded(monkeypatch, views, *flags, tmp_path):
+    """What each cycle of a live map was drawn with: the answer, its band and its panel."""
+    mapa = placed_streets(tmp_path)
+    watching(monkeypatch, views)
+    drawn = []
+    real = cli.live_map
+
+    def recorded(*a, **k):
+        drawn.append((a[1], k["band"], k["notes"]))
+        return real(*a, **k)
+
+    monkeypatch.setattr(cli, "live_map", recorded)
+    live = tmp_path / "vivo.html"
+    places = ["--map", str(mapa), "--cycles", str(len(views)), "--live-map", str(live)]
+    assert cli.main([*flags, *places]) == 0
+    return drawn, live.read_text(encoding="utf-8")
+
+
+def test_the_live_map_draws_how_far_off_the_answer_may_be_and_the_panel_says_it(
+    monkeypatch, tmp_path, capsys
+):
+    # On the stretches' lines, the pace's own or the map's without it, and in the
+    # panel rounded to five metres.
+    from enodia.fingerprint import band_m
+
+    paced = [flag for flag in WATCH if flag != "--no-walking-pace"]
+    for flags in (WATCH, paced):
+        drawn, page = banded(monkeypatch, [heard("Casa", "Kiosco")], *flags, tmp_path=tmp_path)
+        ((found, band, notes),) = drawn
+        assert band is not None and band.radius_m == band_m(found.score) and band.pieces
+        assert f"Within about {5 * round(band_m(found.score) / 5)} m, 2 times in 3" in notes
+        assert '<path class="band here"' in page
+        capsys.readouterr()
+
+
+def test_no_band_is_drawn_or_promised_under_match_signal_or_weigh_alike(
+    monkeypatch, tmp_path, capsys
+):
+    # It was measured matching by networks weighed by rarity, and on nothing else.
+    for other in (["--match", "signal"], ["--weigh", "alike"]):
+        views = [heard("Casa", "Kiosco")]
+        drawn, page = banded(monkeypatch, views, *WATCH, *other, tmp_path=tmp_path)
+        ((found, band, notes),) = drawn
+        assert found is not None and band is None
+        assert not any(note.startswith("Within about") for note in notes)
+        assert '<path class="band' not in page
+        capsys.readouterr()
+
+
+def test_a_stretch_with_no_line_gets_no_band_but_the_panel_still_says_how_far_off(
+    monkeypatch, tmp_path, capsys
+):
+    # Charlie-Delta has one fingerprint, which is no line to draw the band on,
+    # and the answer still has a place to be that far off from.
+    drawn, _ = banded(monkeypatch, [heard("Bar")], *WATCH, tmp_path=tmp_path)
+    ((found, band, notes),) = drawn
+    assert found is not None and found.place.name_from == "Charlie" and band is None
+    assert any(note.startswith("Within about") for note in notes)
+    capsys.readouterr()
+
+
+def test_a_page_that_cannot_be_written_while_the_radio_is_blocked_stops_the_run(
+    monkeypatch, tmp_path, capsys
+):
+    mapa = placed_streets(tmp_path)
+    watching(monkeypatch, [], ["soft"])
+    flags = ["--map", str(mapa), "--cycles", "2", "--live-map", str(tmp_path / "no" / "vivo.html")]
+    assert cli.main([*WATCH, *flags]) == 1
+    assert "error:" in capsys.readouterr().err
+
+
+def test_the_live_map_carries_the_run_in_its_panel(monkeypatch, tmp_path, capsys):
+    # Kept to a walking pace, which the second answer has measured, recording
+    # to a log, and written at a moment the page can count from.
+    mapa = placed_streets(tmp_path)
+    live, log = tmp_path / "vivo.html", tmp_path / "watch.jsonl"
+    clock = iter(range(0, 100, 5))
+    monkeypatch.setattr(cli.time, "monotonic", lambda: float(next(clock)))
+    monkeypatch.setattr(cli.time, "time", lambda: 1_700_000_000.0)
+    watching(monkeypatch, [heard("Casa", "Kiosco"), heard("Casa", "Pan")])
+    flags = ["--locate", "--watch", "--voice", "none", "-i", "wlan0", "-t", "0", "--cycles", "2"]
+    places = ["--map", str(mapa), "--live-map", str(live), "--log", str(log)]
+    assert cli.main([*flags, *places]) == 0
+    page = live.read_text(encoding="utf-8")
+    assert 'data-written="1700000000000"' in page
+    assert "<div>Scan 2: 2 networks heard, 2 of them in the map</div>" in page
+    assert "best similarity" in page and "<div>Walking at " in page
+    assert f"<div>Recording scans to {log}</div>" in page
+    capsys.readouterr()
+
+
+# --- what the panel says ------------------------------------------------------------
+
+
+def radio(name, bssid):
+    return SeenNetwork(name, bssid, "psk", 2412, -60, None)
+
+
+def test_the_panel_counts_what_the_scan_heard_and_what_of_it_the_map_knows():
+    # By address, each once, and never an anonymous one: the only networks a
+    # map can know.
+    casa, bar = radio("Casa", "aa:bb:cc:dd:ee:01"), radio("Bar", "AA:BB:CC:DD:EE:02")
+    hidden = radio("", None)
+    mapped = frozenset({"aa:bb:cc:dd:ee:01", "aa:bb:cc:dd:ee:02"})
+
+    def scan(*heard, known=mapped):
+        return cli.telemetry(7, heard, known, None)
+
+    assert scan(casa, bar, hidden, casa) == ["Scan 7: 2 networks heard, 2 of them in the map"]
+    one_known = frozenset({"aa:bb:cc:dd:ee:01"})
+    assert scan(casa, bar, known=one_known) == ["Scan 7: 2 networks heard, 1 of them in the map"]
+    none = frozenset()
+    assert scan(casa, bar, known=none) == ["Scan 7: 2 networks heard, none of them in the map"]
+    assert scan(casa, hidden) == ["Scan 7: 1 network heard, which the map knows"]
+    assert scan(casa, known=none) == ["Scan 7: 1 network heard, which the map does not know"]
+    assert scan(hidden) == scan() == ["Scan 7: no networks heard"]
+
+
+def test_the_panel_gives_the_evidence_in_the_reports_own_words():
+    here = Place("Alfa", "Bravo", 0.5, length_m=100.0)
+    torn = Location(here, 0.8, 2, 0.1, alternative=Place("Charlie", "Delta", 0.5))
+    assert cli.telemetry(3, [], frozenset(), torn)[1:] == [how_sure(torn), otherwise(torn)]
+    plain = Location(here, 0.8, 2, 0.1)
+    assert cli.telemetry(3, [], frozenset(), plain)[1:] == [how_sure(plain)]
+    assert cli.telemetry(3, [], frozenset(), None) == ["Scan 3: no networks heard"]
+
+
+def test_the_panel_gives_the_pace_only_once_it_has_measured_one():
+    # A walk started again stands still, which is an assumption and not a pace,
+    # and a speed back towards the first mark is a pace all the same.
+    def at(fraction):
+        return Location(Place("Alfa", "Bravo", fraction, length_m=100.0), 0.9, 1, 0.0)
+
+    def paced(found, pace):
+        return [line for line in cli.telemetry(1, [], frozenset(), found, pace) if "m/s" in line]
+
+    pace = Pace({})
+    first = pace.keep(at(0.5), 0.0)
+    assert paced(first, pace) == []
+    back = pace.keep(at(0.4), 5.0)
+    assert pace.walking is not None and pace.walking.speed < 0
+    assert paced(back, pace) == [f"Walking at {-pace.walking.speed:.1f} m/s"]
+    # Lost, the walk is kept for when it is found again, and there is no pace.
+    assert pace.keep(None, 10.0) is None and pace.carried
+    assert paced(None, pace) == []
+    assert paced(back, None) == []
+
+
+def test_the_panel_says_where_the_cards_calibration_stands():
+    learning = Calibration()
+    assert cli.card_state(learning) == (
+        f"Calibrating the card: 0 of {CALIBRATION_PAIRS} readings compared"
+    )
+    learning.pairs.extend([-6.0] * CALIBRATION_PAIRS)
+    assert cli.card_state(learning) == cli.card_reads(-6.0)
+    assert cli.telemetry(1, [], frozenset(), None, calibration=learning)[-1] == cli.card_reads(-6)
+    refused = Calibration()
+    refused.pairs.extend([27.0] * CALIBRATION_PAIRS)
+    assert (
+        cli.card_state(refused)
+        == cli.card_refused(27.0)
+        == ("This card reads 27 dB off the map's card, too far to be a card: not corrected")
+    )
 
 
 def test_a_live_map_needs_a_map_that_knows_where_it_was_taken(tmp_path, capsys):
@@ -1299,7 +1519,11 @@ def test_weighing_every_network_alike_reaches_the_check_and_the_lookup(
 
     monkeypatch.setattr(cli, "check_map", counted)
     assert cli.main(["--check-map", "--map", str(mapa), "--weigh", "alike"]) == 0
-    assert checked == [False] * 6 and "by networks" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert checked == [False] * 6 and "by networks" in out
+    # The band was measured weighing by rarity, and is not judged here.
+    (band,) = [line for line in out.splitlines() if "within the band" in line]
+    assert band.split()[3:] == ["-"] * 6
     located = []
 
     def placed(fingerprints, scans, **kwargs):
@@ -1677,7 +1901,7 @@ def test_reconcile_draws_the_walk_as_a_plan(capsys, tmp_path, monkeypatch):
     assert code == 0 and f"Plan drawn into {plan}" in capsys.readouterr().out
     drawn = plan.read_text(encoding="utf-8")
     assert drawn.startswith("<svg xmlns=") and ">Middle<" in drawn
-    assert "#e7e1d8" in drawn  # la manzana
+    assert f'fill="{BLOCK}"' in drawn  # la manzana
     assert 'font-size="6"' not in drawn
     # The names are asked for through the flag. This walk pins no network
     # down, so there is none to write; that the drawing writes them when there

@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from itertools import pairwise
 from math import atan2, cos, degrees, log10, radians
 
-from enodia.fingerprint import Fingerprint, Location
+from enodia.fingerprint import Band, Fingerprint, Location
 from enodia.reconcile import Reconciliation
 from enodia.streets import (
     SURROUNDINGS_M,
@@ -37,8 +37,12 @@ from enodia.streets import (
 WIDTH = 1200.0
 MARGIN = 48.0
 PAPER = "#faf8f5"
-BLOCK = "#e7e1d8"
-BLOCK_EDGE = "#d6cec2"
+# The ground between the streets, and not the paper around the picture: tinted,
+# so that the streets drawn over it in white stand out, which on the paper they
+# hardly did. Buildings, where there are any, darker again.
+LAND = "#ebe6dd"
+BLOCK = "#d8d0c3"
+BLOCK_EDGE = "#c6bcae"
 STREET = "#ffffff"
 STREET_EDGE = "#ded7cc"
 ROUTE = "#1a6b8a"
@@ -56,6 +60,14 @@ LOST = "#9a9186"
 # The map's own fingerprints on the live map, in a colour no answer is drawn in:
 # grey was already that of an answer that lost you.
 FINGERPRINT = "#a08cd6"
+# How much of the map shows through the panel of what the run is doing: the
+# alpha of a colour written in hex, after the colour.
+TRANSLUCENT = "d9"
+# The band of how far off an answer may be: twice as wide as a walked street, so
+# that the street shows through it, and faint enough that the fingerprints on it
+# do too.
+BAND_WIDTH = 14.0
+BAND_OPACITY = 0.25
 # One name of a street per this many metres of it, at most. A grid of blocks is
 # a hundred metres a side, and a name on every one of them is a pattern, not a
 # label.
@@ -101,6 +113,15 @@ DARK_RULES = (
     ),
     (".zoom button.on", f"background: {DARK_HERE}; color: {DARK_PAPER};"),
     (".credit", f"color: {DARK_LABEL};"),
+    (
+        ".telemetry",
+        (
+            f"background: {DARK_PAPER}{TRANSLUCENT}; border-color: {DARK_BLOCK_EDGE}; "
+            f"color: {DARK_CROSSING};"
+        ),
+    ),
+    ("#beat.late", f"background: {DARK_UNSURE}; color: {DARK_PAPER};"),
+    ("svg", f"background: {DARK_PAPER};"),
     (".paper", f"fill: {DARK_PAPER};"),
     (".water", f"fill: {DARK_WATER};"),
     (".river", f"stroke: {DARK_WATER};"),
@@ -117,12 +138,14 @@ DARK_RULES = (
     (".fingerprint", f"fill: {DARK_FINGERPRINT};"),
     (".trail", f"stroke: {DARK_HERE};"),
     (".you", f"stroke: {DARK_PAPER};"),
+    (".alternative", f"stroke: {DARK_UNSURE};"),
     *(
         rule
         for state, (_, dark) in STATES.items()
         for rule in (
             (f".you.{state}", f"fill: {dark};"),
             (f".ring.{state}", f"fill: {dark}; stroke: {dark};"),
+            (f".band.{state}", f"stroke: {dark};"),
             (f"p.{state}", f"border-left-color: {dark};"),
         )
     ),
@@ -311,12 +334,12 @@ def _labels(frame: Frame, streets: Sequence[Street]) -> list[str]:
                         f'x="{x:.1f}" y="{y:.1f}" dy="-4.5" font-size="{LABEL_SIZE:g}" '
                         f'text-anchor="middle" transform="rotate({angle:.1f} {x:.1f} {y:.1f})"'
                     )
-                    # Twice: once as a halo the colour of the paper, then the
+                    # Twice: once as a halo the colour of the ground, then the
                     # name on it, so it reads over whatever it crosses. Not
                     # `paint-order`, which a viewer that does not know it
                     # would draw as the halo over the name.
                     out.append(
-                        f'<text class="halo" {where} fill="none" stroke="{PAPER}" stroke-width="3" '
+                        f'<text class="halo" {where} fill="none" stroke="{LAND}" stroke-width="3" '
                         f'stroke-linejoin="round">{_escape(name)}</text>'
                     )
                     out.append(f'<text class="label" {where} fill="{LABEL}">{_escape(name)}</text>')
@@ -421,7 +444,7 @@ def svg_map(
             f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {frame.width:.0f} '
             f'{frame.height:.0f}" width="{frame.width:.0f}" height="{frame.height:.0f}">'
         ),
-        f'<rect width="100%" height="100%" fill="{PAPER}"/>',
+        f'<rect width="100%" height="100%" fill="{LAND}"/>',
     ]
 
     if drawn is not None:
@@ -599,6 +622,55 @@ ZOOM_SCRIPT = """
 """
 
 
+# How long a page may go without a new one before the live map says it has had
+# no news: three reloads, and never under half a minute, because a fresh scan
+# takes about five seconds a card, and two cards can make a cycle of ten to
+# twenty whatever the interval.
+LATE_S = 30
+
+# The panel's first line: how long ago the page was written, counted in the
+# browser. A page that has stopped changing looks just like one that is live,
+# since it reloads itself whatever becomes of the run. `setInterval` is handed
+# `tick` by name, and the reload's own `}, %RELOAD%);` is not imitated.
+BEAT_SCRIPT = """
+(function () {
+  var beat = document.getElementById("beat");
+  var written = Number(beat.getAttribute("data-written"));
+  var late = Number(beat.getAttribute("data-late"));
+  function tick() {
+    var age = Math.max(0, Math.round((Date.now() - written) / 1000));
+    var overdue = age >= late;
+    beat.textContent = overdue ? "No news for " + age + " s: is Enodia still running?"
+      : "Updated " + age + " s ago";
+    beat.classList.toggle("late", overdue);
+    beat.hidden = false;
+  }
+  tick();
+  setInterval(tick, 1000);
+})();
+"""
+
+
+def _panel(notes: Sequence[str], written: float | None, reload_s: int) -> str:
+    """The panel of what the run is doing, or nothing when there is nothing to say.
+
+    The heartbeat only when the page says when it was written, and hidden until
+    the script fills it: without script, the time on the line above the map is
+    the one the page has.
+    """
+    if not notes and written is None:
+        return ""
+    beat = ""
+    if written is not None:
+        late = max(3 * reload_s, LATE_S)
+        beat = (
+            f'<div id="beat" data-written="{round(written * 1000)}" data-late="{late}" '
+            "hidden></div>"
+        )
+    lines = "".join(f"<div>{_escape(note)}</div>" for note in notes)
+    return f'<div class="telemetry">{beat}{lines}</div>'
+
+
 def _dark(root: str) -> str:
     """The dark theme's rules, each under `root`: the page that asks for it."""
     return " ".join(
@@ -624,16 +696,23 @@ def live_map(
     streets: StreetMap | None = None,
     interval: float = 5.0,
     width: float = WIDTH,
+    *,
+    notes: Sequence[str] = (),
+    written: float | None = None,
+    band: Band | None = None,
 ) -> str:
     """One moment of `--locate --watch`, as a page that reloads itself every interval.
 
     The map's own fingerprints are the violet dots, the streets the walk put on
     it, and where the last scan puts you is the large one, with the last few
-    answers fading behind it. An answer the scan could not settle between two
-    stretches is drawn in another colour, and with the ring of how far apart
-    its evidence lay when that is known, since a sure-looking dot is the one
-    claim this picture must not make on the scan's behalf. Lost, the last
-    place it knew stays on the page, greyed, with the words saying so.
+    answers fading behind it and `band`, the streets it may be on, shaded
+    around it. An answer the scan could not settle between two stretches is
+    drawn in another colour, with a hollow dot on the other stretch it could be
+    on, since a sure-looking dot is the one claim this picture must not make on
+    the scan's behalf. One whose coordinates were withheld, two places in the
+    map sharing its names, gets a ring the size of how far apart they lay.
+    Lost, the last place it knew stays on the page, greyed, with the words
+    saying so.
 
     A page and not a picture, for the few lines of script that reload it and
     zoom it: any browser follows the run with nothing to install and nothing
@@ -643,6 +722,13 @@ def live_map(
     button turns it to the other. The dark is only CSS over the drawing's own
     colours, so without script the page still follows the system, and still
     reloads itself, whole.
+
+    `notes` are the lines of a panel of what the run is doing, beside the map,
+    and `written` is when the page was written, in seconds since the epoch.
+    With it the panel counts how long ago that was, and says so in another
+    colour once no new page has come for three reloads or `LATE_S`. Without it
+    there is no such line: the page has no clock of its own, and only the run
+    that writes it knows when that was.
     """
     places = mapped_places(known)
     frame = Frame.around(places or [(0.0, 0.0)], width)
@@ -655,10 +741,21 @@ def live_map(
             f'<svg id="map" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {frame.width:.0f} '
             f'{frame.height:.0f}"{here}>'
         ),
-        f'<rect class="paper" width="100%" height="100%" fill="{PAPER}"/>',
+        f'<rect class="paper" width="100%" height="100%" fill="{LAND}"/>',
     ]
     if streets is not None:
         out += _background(frame, streets)
+    state = "lost" if found is None else "unsure" if found.uncertain else "here"
+    colour = STATES[state][0]
+    if band is not None and band.pieces:
+        # One path for all of it, so that where two pieces meet at a corner the
+        # shade is not laid on twice.
+        pieces = " ".join(_path(frame, piece) for piece in band.pieces)
+        out.append(
+            f'<path class="band {state}" d="{pieces}" fill="none" stroke="{colour}" '
+            f'stroke-width="{BAND_WIDTH:g}" stroke-opacity="{BAND_OPACITY:g}" '
+            'stroke-linecap="round" stroke-linejoin="round"/>'
+        )
     out += [
         f'<circle class="fingerprint" cx="{frame.x(lon):.1f}" cy="{frame.y(lat):.1f}" r="1.6" '
         f'fill="{FINGERPRINT}"/>'
@@ -672,8 +769,15 @@ def live_map(
             f'x2="{frame.x(lon2):.1f}" y2="{frame.y(lat2):.1f}" stroke="{HERE}" stroke-width="3" '
             f'stroke-linecap="round" opacity="{fade:.2f}"/>'
         )
-    state = "lost" if found is None else "unsure" if found.uncertain else "here"
-    colour = STATES[state][0]
+    elsewhere = None
+    if found is not None and found.uncertain and found.alternative is not None:
+        elsewhere = found.alternative.coordinates
+    if elsewhere is not None and frame.holds(elsewhere):
+        out.append(
+            f'<circle class="alternative" cx="{frame.x(elsewhere[1]):.1f}" '
+            f'cy="{frame.y(elsewhere[0]):.1f}" r="6" fill="none" stroke="{UNSURE}" '
+            'stroke-width="2.5"/>'
+        )
     if shown:
         lat, lon = shown[-1]
         x, y = frame.x(lon), frame.y(lat)
@@ -699,17 +803,37 @@ def live_map(
     style = " ".join(
         [
             f"body {{ margin: 0; background: {PAPER}; color: {CROSSING};",
-            "font-family: sans-serif; overflow: hidden; }",
+            "font-family: sans-serif; overflow: hidden;",
+            "display: flex; flex-direction: column; height: 100vh; }",
             "p { margin: 0; padding: 10px 16px; font-size: 18px;",
             f"border-left: 6px solid {colour}; }}",
-            "svg { display: block; width: 100%; height: calc(100vh - 44px);",
+            # The map below the line on top, however many lines a narrow window
+            # makes of it, and what floats over the map placed on the map: put
+            # on the window at a guess of that line's height, the buttons
+            # covered the end of it.
+            ".stage { position: relative; flex: 1; min-height: 0; }",
+            # The ground behind the whole map, since the picture's own covers
+            # its first view and not one zoomed in elsewhere.
+            f"svg {{ display: block; width: 100%; height: 100%; background: {LAND};",
             "touch-action: none; cursor: grab; }",
-            ".zoom { position: fixed; top: 52px; right: 12px; display: flex; gap: 6px; }",
+            ".zoom { position: absolute; top: 8px; right: 12px; display: flex; gap: 6px; }",
             f".zoom button {{ font-size: 16px; padding: 4px 10px; background: {PAPER};",
             f"border: 1px solid {BLOCK_EDGE}; border-radius: 4px; color: {CROSSING}; }}",
             f".zoom button.on {{ background: {HERE}; color: {PAPER}; }}",
-            ".credit { position: fixed; bottom: 6px; right: 12px; font-size: 11px;",
+            ".credit { position: absolute; bottom: 6px; right: 12px; font-size: 11px;",
             f"color: {LABEL}; }}",
+            # Over the map and not in the way of it: the wheel and the drag go
+            # through to the map beneath.
+            ".telemetry { position: absolute; top: 8px; left: 12px; max-width: 56ch;",
+            "padding: 6px 10px; font-size: 12px; line-height: 1.5; pointer-events: none;",
+            f"background: {PAPER}{TRANSLUCENT}; border: 1px solid {BLOCK_EDGE};",
+            f"border-radius: 4px; color: {CROSSING}; }}",
+            # Amber behind the words and not in them, which on the paper would
+            # hardly be read.
+            f"#beat.late {{ background: {UNSURE}; color: {CROSSING}; font-weight: bold;",
+            "margin: 0 -4px; padding: 0 4px; border-radius: 3px; }",
+            # Too narrow for the panel and the buttons side by side.
+            "@media (max-width: 700px) { .telemetry { top: 48px; } }",
             # The system's dark, unless the page was set light, and the page's
             # own whenever it was set dark.
             f"@media (prefers-color-scheme: dark) {{ {_dark('html:not(.light)')} }}",
@@ -717,6 +841,7 @@ def live_map(
         ]
     )
     reload_s = max(round(interval), 1)
+    panel = _panel(notes, written, reload_s)
     return "\n".join(
         [
             "<!DOCTYPE html>",
@@ -726,6 +851,7 @@ def live_map(
             f"<style>{style}</style>",
             f"<script>{THEME_SCRIPT}</script></head><body>",
             f'<p class="{state}">{_escape(said)}</p>',
+            '<div class="stage">',
             (
                 '<div class="zoom"><button id="in" title="Zoom in (+)">+</button>'
                 '<button id="out" title="Zoom out (-)">&#8722;</button>'
@@ -733,9 +859,12 @@ def live_map(
                 '<button id="follow" title="Keep me in the middle (f)">Follow me</button>'
                 '<button id="theme" title="Light or dark (t)">Dark</button></div>'
             ),
+            *([panel] if panel else []),
             *out,
             credit,
+            "</div>",
             f"<script>{ZOOM_SCRIPT.replace('%RELOAD%', str(reload_s * 1000))}</script>",
+            *([f"<script>{BEAT_SCRIPT}</script>"] if written is not None else []),
             "</body></html>",
             "",
         ]

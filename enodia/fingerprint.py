@@ -35,7 +35,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import datetime
 from itertools import pairwise
-from math import exp, log
+from math import cos, exp, log, radians, sqrt
 from pathlib import Path
 from statistics import mean, median
 from typing import Any
@@ -65,7 +65,7 @@ from enodia.reconcile import (
     merged_scans,
     reconcile,
 )
-from enodia.streets import StreetMap
+from enodia.streets import EARTH_RADIUS_M, StreetMap
 
 # --- A place, in a frame that does not depend on which walk saw it -----------
 
@@ -1052,7 +1052,11 @@ class _Walking:
     when: float
 
 
-def _line(places: Sequence[Place]) -> tuple[float, float, float, float] | None:
+# A stretch's fitted line: latitude and longitude as `a + b * fraction`, `c + d * fraction`.
+StretchLine = tuple[float, float, float, float]
+
+
+def _line(places: Sequence[Place]) -> StretchLine | None:
     """A straight line of latitude and longitude against the fraction, fitted to one stretch.
 
     Least squares over every fingerprint of the stretch that has coordinates,
@@ -1071,6 +1075,14 @@ def _line(places: Sequence[Place]) -> tuple[float, float, float, float] | None:
     lat = sum((fraction - mean_f) * (where[0] - mean_lat) for fraction, where in known) / square
     lon = sum((fraction - mean_f) * (where[1] - mean_lon) for fraction, where in known) / square
     return mean_lat - lat * mean_f, lat, mean_lon - lon * mean_f, lon
+
+
+def stretch_lines(fingerprints: Sequence[Fingerprint]) -> dict[tuple[str, str], StretchLine]:
+    """A line fitted to each stretch of a map that has two fractions with coordinates to fit."""
+    by_stretch: dict[tuple[str, str], list[Place]] = {}
+    for one in fingerprints:
+        by_stretch.setdefault(one.place.key, []).append(one.place)
+    return {key: line for key, places in by_stretch.items() if (line := _line(places))}
 
 
 class Pace:
@@ -1095,23 +1107,23 @@ class Pace:
 
     def __init__(
         self,
-        lines: Mapping[tuple[str, str], tuple[float, float, float, float]],
+        lines: Mapping[tuple[str, str], StretchLine],
         max_speed_ms: float = MAX_WALKING_SPEED_MS,
     ) -> None:
         self.lines = dict(lines)
         self.max_speed_ms = max_speed_ms
         self.walking: _Walking | None = None
+        # Whether the last answer kept carried on the walk of the one before, so
+        # that the speed is one the answers measured: a walk started again
+        # stands still until a second answer says which way it went.
+        self.carried = False
 
     @classmethod
     def of(
         cls, fingerprints: Sequence[Fingerprint], max_speed_ms: float = MAX_WALKING_SPEED_MS
     ) -> Pace:
         """A pace for a run against this map, with a line fitted to each of its stretches."""
-        by_stretch: dict[tuple[str, str], list[Place]] = {}
-        for one in fingerprints:
-            by_stretch.setdefault(one.place.key, []).append(one.place)
-        lines = {key: line for key, places in by_stretch.items() if (line := _line(places))}
-        return cls(lines, max_speed_ms)
+        return cls(stretch_lines(fingerprints), max_speed_ms)
 
     def _carried(self, place: Place, when: float) -> _Walking | None:
         """The walk so far, in this stretch's own measure, or None to start again."""
@@ -1143,11 +1155,12 @@ class Pace:
         place = found.place
         length = place.length_m
         if length is None or length <= 0:
-            self.walking = None
+            self.walking, self.carried = None, False
             return found
         seen = place.fraction * length
         noise = max(PACE_SCAN_M, found.spread * length) ** 2
         walking = self._carried(place, when)
+        self.carried = walking is not None
         if walking is None:
             at, speed = seen, 0.0
             spread = (noise, self.max_speed_ms**2, 0.0)
@@ -1180,6 +1193,91 @@ class Pace:
             # withheld because two places share the stretch's names stay withheld.
             lat, lon = line[0] + line[1] * fraction, line[2] + line[3] * fraction
         return replace(found, place=replace(place, fraction=fraction, lat=lat, lon=lon))
+
+
+# How far off an answer may be: 20 m, and 60 m more for all the similarity short of a
+# perfect match. Measured on the walks held out of the real outing, tied and kept to a pace as
+# `--watch` runs them, matching by networks weighed by rarity: there the similarity follows the
+# error, a rank correlation of -0.73, and this is the narrowest straight line under which two
+# answers in three fell, 336 of 518, with 69% and 61% of the even and the odd walks apart. The
+# variance the pace carries was measured first and follows the error the wrong way round, since
+# a pass placed on the block next door is placed there consistently.
+BAND_BASE_M = 20.0
+BAND_SLOPE_M = 60.0
+
+
+def band_m(score: float) -> float:
+    """How far from where an answer puts you it may be off, two times in three."""
+    return BAND_BASE_M + BAND_SLOPE_M * (1.0 - score)
+
+
+@dataclass(frozen=True)
+class Band:
+    """The streets an answer may be on: every stretch of the map within `radius_m` of it.
+
+    In a straight line and not along the street, because that is how
+    `check_map` measures an error where there are coordinates, and a band
+    drawn along the street alone would claim more, round a corner, than the
+    check counts. Each piece is the part of one stretch's fitted line inside
+    the circle, from one end of it to the other.
+    """
+
+    radius_m: float
+    pieces: tuple[tuple[tuple[float, float], tuple[float, float]], ...]
+
+
+def _on(line: StretchLine, fraction: float) -> tuple[float, float]:
+    return line[0] + line[1] * fraction, line[2] + line[3] * fraction
+
+
+def _reach(
+    line: StretchLine, centre: tuple[float, float], radius_m: float
+) -> tuple[float, float] | None:
+    """The fractions of one stretch's line within `radius_m` of `centre`, or None if none are.
+
+    On the flat earth `distance_metres` assumes, in metres around the centre,
+    where the line is `start + fraction * step` and the circle's edge is where
+    that is `radius_m` long.
+    """
+    squeeze = cos(radians(centre[0]))
+
+    def flat(fraction: float) -> tuple[float, float]:
+        lat, lon = _on(line, fraction)
+        return (
+            EARTH_RADIUS_M * radians(lon - centre[1]) * squeeze,
+            EARTH_RADIUS_M * radians(lat - centre[0]),
+        )
+
+    (x0, y0), (x1, y1) = flat(0.0), flat(1.0)
+    dx, dy = x1 - x0, y1 - y0
+    square = dx * dx + dy * dy
+    if square <= 0.0:
+        return None  # a line with no length to it
+    half = x0 * dx + y0 * dy
+    gap = half * half - square * (x0 * x0 + y0 * y0 - radius_m * radius_m)
+    if gap <= 0.0:
+        return None  # it passes nowhere near
+    root = sqrt(gap)
+    low, high = max(0.0, (-half - root) / square), min(1.0, (-half + root) / square)
+    return (low, high) if low < high else None  # near, but only beyond the stretch's own ends
+
+
+def band_of(found: Location, lines: Mapping[tuple[str, str], StretchLine]) -> Band | None:
+    """Where an answer may be: every stretch of the map within `band_m` of it.
+
+    None when the answer has no coordinates, which keeps the withheld ones
+    withheld, or when its own stretch has no line to draw on.
+    """
+    centre = found.place.coordinates
+    if centre is None or found.place.key not in lines:
+        return None
+    radius = band_m(found.score)
+    pieces = []
+    for line in lines.values():
+        reach = _reach(line, centre, radius)
+        if reach is not None:
+            pieces.append((_on(line, reach[0]), _on(line, reach[1])))
+    return Band(radius, tuple(pieces))
 
 
 # Placing an answer along its stretch by the levels (`Levels`, `--along levels`),
@@ -1443,6 +1541,51 @@ class Calibration:
         return list(networks) if offset is None else shifted(networks, -offset)
 
 
+def how_sure(location: Location) -> str:
+    """How many walks agree on an answer, how well the best matched and how far apart they lay.
+
+    The words `--locate` prints under the answer, and the live map's panel
+    beside it. The spread only when there are two walks to spread: one walk
+    speaks once, and the spread of a single look is nought whatever the
+    answer, which read as certainty.
+    """
+    if location.matches == 1:
+        return f"1 walk, best similarity {location.score:.0%}"
+    spread = location.place.metres(location.spread)
+    return (
+        f"{location.matches} walks agree, best similarity {location.score:.0%}, "
+        f"spread {location.spread:.0%} of the stretch"
+        + ("" if spread is None else f" ({spread:.0f} m)")
+    )
+
+
+def otherwise(location: Location) -> str | None:
+    """What else an answer could have been and what decided it, or None if nothing else.
+
+    A tie the scans before it settled, a tie they could not, or a scan they
+    overruled. Two stretches that meet at the corner both answers are at are
+    no tie at all (`Location.uncertain`), and get nothing said about them.
+    """
+
+    def before(one: str, many: str) -> str:
+        n = location.settled
+        return f"The scan before it {one}" if n == 1 else f"The {n} scans before it {many}"
+
+    if location.alternative is not None and location.settled:
+        return (
+            f"The scan alone could as easily be {said(location.alternative)}. "
+            f"{before('settles', 'settle')} it here."
+        )
+    if location.uncertain and location.alternative is not None:
+        return f"Uncertain: it could as easily be {said(location.alternative)}"
+    if location.alone is not None:
+        return (
+            f"The scan alone would have said {said(location.alone)}. "
+            f"{before('puts', 'put')} it here."
+        )
+    return None
+
+
 def format_location(location: Location | None, map_path: str | Path) -> str:
     """Human-readable answer to "where am I"."""
     if location is None:
@@ -1454,32 +1597,11 @@ def format_location(location: Location | None, map_path: str | Path) -> str:
     where = location.place.coordinates
     if where is not None:
         lines.append(f"  around [{where[0]:.5f}, {where[1]:.5f}]")
-    spread = location.place.metres(location.spread)
-    agree = "1 walk" if location.matches == 1 else f"{location.matches} walks agree"
-    lines.append(
-        f"  {agree}, best similarity {location.score:.0%}, "
-        f"spread {location.spread:.0%} of the stretch"
-        + ("" if spread is None else f" ({spread:.0f} m)")
-    )
+    lines.append(f"  {how_sure(location)}")
     if location.when is not None:
         lines.append(f"  from evidence last gathered {location.when.strftime('%Y-%m-%d %H:%M')}")
-
-    def before(one: str, many: str) -> str:
-        n = location.settled
-        return f"The scan before it {one}" if n == 1 else f"The {n} scans before it {many}"
-
-    if location.alternative is not None and location.settled:
-        lines.append(
-            f"  The scan alone could as easily be {said(location.alternative)}. "
-            f"{before('settles', 'settle')} it here."
-        )
-    elif location.uncertain and location.alternative is not None:
-        lines.append(f"  Uncertain: it could as easily be {said(location.alternative)}")
-    elif location.alone is not None:
-        lines.append(
-            f"  The scan alone would have said {said(location.alone)}. "
-            f"{before('puts', 'put')} it here."
-        )
+    if (sentence := otherwise(location)) is not None:
+        lines.append(f"  {sentence}")
     if location.scattered_m is not None:
         lines.append(
             f"  No coordinates given: the fingerprints behind this answer are "
@@ -1869,7 +1991,27 @@ def _middle(values: Sequence[float]) -> tuple[float, float]:
     return sum(ordered) / len(ordered), median
 
 
-def _column(results: Sequence[HeldOutScan]) -> tuple[list[str], int, int]:
+def _within_band(results: Sequence[HeldOutScan]) -> str:
+    """How many answers the band held, of the ones it can be judged on.
+
+    One on the wrong stretch is outside it: it is an answer, and leaving it
+    out would flatter the band exactly where the answer was worst. An
+    abstention claimed no band, and an answer with nothing measured in metres
+    cannot be judged.
+    """
+    held = judged = 0
+    for one in results:
+        if one.found is None:
+            continue
+        if one.wrong_stretch:
+            judged += 1
+        elif one.error_m is not None:
+            judged += 1
+            held += one.error_m <= band_m(one.found.score)
+    return f"{held} of {judged}" if judged else "-"
+
+
+def _column(results: Sequence[HeldOutScan], banded: bool = True) -> tuple[list[str], int, int]:
     """One way of matching as a column of numbers, and what the distances cover.
 
     The fractions and the distances are separate rows rather than one falling
@@ -1890,6 +2032,7 @@ def _column(results: Sequence[HeldOutScan]) -> tuple[list[str], int, int]:
     ]
     rows += ["-", "-"] if not fractions else [f"{one:.0%}" for one in _middle(fractions)]
     rows += ["-", "-"] if not metres else [f"{one:.0f} m" for one in _middle(metres)]
+    rows.append(_within_band(results) if banded else "-")
     pull = pulled_in(results)
     rows.append("-" if pull is None else f"{pull:+.0f} m")
     faster, steps = jumps(results)
@@ -1916,8 +2059,13 @@ def format_map_check(
     calibrated: Sequence[HeldOutScan],
     card_offset: float = 0.0,
     along: str = "matches",
+    by_rarity: bool = True,
 ) -> str:
-    """Human-readable verdict on how well the map locates a walk it has not seen."""
+    """Human-readable verdict on how well the map locates a walk it has not seen.
+
+    The band is judged in the columns matching by networks, and only when they
+    are weighed by rarity, the one way it was measured.
+    """
     if not by_networks:
         return (
             "Nothing to check: a map needs two walks before one of them can be held out.\n"
@@ -1934,15 +2082,16 @@ def format_map_check(
         "median error, of a stretch",
         "mean error in metres",
         "median error in metres",
+        "within the band",
         "pulled in, near a corner",
         "moved faster than a walk",
     ]
-    left, placed, measured = _column(by_networks)
-    right, _, _ = _column(by_signal)
-    corrected, _, _ = _column(calibrated)
-    ties, _, _ = _column(settling_ties)
-    path, _, _ = _column(choosing_path)
-    pace, _, _ = _column(keeping_pace)
+    left, placed, measured = _column(by_networks, by_rarity)
+    right, _, _ = _column(by_signal, banded=False)
+    corrected, _, _ = _column(calibrated, banded=False)
+    ties, _, _ = _column(settling_ties, by_rarity)
+    path, _, _ = _column(choosing_path, by_rarity)
+    pace, _, _ = _column(keeping_pace, by_rarity)
     counted = map_summary(fingerprints)
     heard = ""
     if card_offset:
@@ -1988,7 +2137,12 @@ def format_map_check(
         "within a fifth of a block of a corner landed towards the middle of the block, on "
         "average, and negative past the corner, into the block next door. Moved faster than a "
         "walk counts the steps between two answers in a row on the right stretch that nobody "
-        "walks in the seconds between them."
+        "walks in the seconds between them. Within the band counts the answers no further from "
+        "where the scan was taken, in a straight line, than the band the live map draws around "
+        f"them: {BAND_BASE_M:g} m, and {BAND_SLOPE_M:g} m more for all the similarity short of "
+        "a perfect match. An answer on the wrong stretch counts as outside it, and one with "
+        "nothing measured in metres is left out. The band was measured matching by networks "
+        "weighed by rarity, and is not given for the signal or for networks weighed alike."
     )
     lines.append(textwrap.fill(explained, 90, initial_indent="  ", subsequent_indent="  "))
     names = [name for one in fingerprints for name in one.place.stretch]

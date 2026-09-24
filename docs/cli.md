@@ -95,8 +95,8 @@ enodia --check-map --card-offset -6                            # heard as a card
 
 `--check-pace` needs coordinates on the crossings, since it measures in metres along the walk.
 `--check-passes` needs none: it compares two passes over one stretch against each other.
-`--check-map` needs a map with at least two passes in it, and holds out one outing at a time,
-or one pass down one stretch when the map holds a single outing, never a single scan, since a
+`--check-map` needs a map with at least two passes in it, and holds out one outing at a time, or
+one pass down one stretch when the map holds a single outing, never a single scan, since a
 scan's neighbour was taken five seconds later and sees almost the same networks. Its table has
 six columns: each scan alone by networks, by signal as well, by signal with the card calibrated
 on the run, with the scans before it settling a tie or choosing the path, the two ways
@@ -105,8 +105,11 @@ hears every held-out scan as a card reading that many dB higher, or lower when n
 hear it, which is what another card costs each column and what calibrating wins back. Its row
 "pulled in, near a corner" is how far the answers to scans taken near a corner land towards the
 middle of the block, on average, and negative past the corner, the answers that went into the
-block next door counted too. [The methodology notes](methodology.md) say what each of the three
-can and cannot tell you.
+block next door counted too. Its row "within the band" is how many answers were no further from
+where the scan was taken, in a straight line, than the band `--live-map` draws around them, 20 m
+and 60 m more for all the similarity short of a perfect match. It is given only for matching by
+networks weighed by rarity, the one way it was measured. [The methodology notes](methodology.md)
+say what each of the three can and cannot tell you.
 
 ## The map, and finding yourself again
 
@@ -206,17 +209,31 @@ enodia --locate --watch --live-map live.html --streets streets.jsonl
 fingerprints as violet dots, where you are as a large one with your last few answers fading
 behind it, and the line the terminal printed on top. Open it once in a browser and leave it
 open, since the page reloads itself every `--interval`. An answer the scans could not settle is
-drawn in another colour, and when the map loses you the last place it knew stays greyed.
-`--streets` adds the streets, and whatever `--surroundings` brought: the water, the parks and
-every named street. It needs a map whose fingerprints carry coordinates, which is one built from
-a notebook that `--geocode` has been through. A `--streets` file that is not there is an error,
-as a missing map is, and not a page quietly drawn with no streets. The mouse wheel zooms where
-the pointer is, a drag moves the view, and the buttons zoom in, out, back to the whole map, or
-follow you: zoomed in, each reload keeps you in the middle until you drag the map away. The keys
-`+`, `-`, `0` and `f` do the same. The page is light or dark as the system is. The Dark or Light
-button, or the key `t`, turns it to the other and keeps it there. The zoom and the theme are
-kept in the page's address, `live.html#view=x,y,width&follow&theme=dark`, which is how they last
-from one reload to the next.
+drawn in another colour, and when the map loses you the last place it knew stays greyed. Around
+where you are, the page shades every mapped street within the distance the answer may be off by,
+20 m and 60 m more for all the similarity it lacks, which on the one real outing held two
+answers in three. An answer the scans could not settle marks the other stretch it could be on
+with a hollow dot. The band is not drawn under `--match signal` or `--weigh alike`, where that
+distance was never measured. `--streets` adds the streets, and whatever `--surroundings`
+brought: the water, the parks and every named street. It needs a map whose fingerprints carry
+coordinates, which is one built from a notebook that `--geocode` has been through. A `--streets`
+file that is not there is an error, as a missing map is, and not a page quietly drawn with no
+streets. The mouse wheel zooms where the pointer is, a drag moves the view, and the buttons zoom
+in, out, back to the whole map, or follow you: zoomed in, each reload keeps you in the middle
+until you drag the map away. The keys `+`, `-`, `0` and `f` do the same. The page is light or
+dark as the system is. The Dark or Light button, or the key `t`, turns it to the other and keeps
+it there. The zoom and the theme are kept in the page's address,
+`live.html#view=x,y,width&follow&theme=dark`, which is how they last from one reload to the
+next.
+
+A panel at the top left says what the run is doing: how long ago the page was written, the scan
+by its cycle number with how many networks it heard and how many of them the map knows, how sure
+the answer is and what settled a tie, in the words `--locate` prints, how far off it may be, the
+pace once two answers have measured it, what the run has learned about the card under `--match
+signal`, and the log it is recording to. A page that has stopped changing looks just like a live
+one, so when no new page has come for three intervals, and never less than half a minute, the
+first line turns amber and asks whether Enodia is still running. When the radio is blocked the
+page is still written, with the last place greyed and the panel saying since when.
 
 `--sequence tie` is that, and the default. `--sequence path` asks the scans before it every
 time, not only on a tie: it chooses the likeliest path through all of them, staying on a stretch

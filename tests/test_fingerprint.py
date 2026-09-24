@@ -3,11 +3,12 @@
 import itertools
 import json
 import os
+import re
 import stat
 import threading
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
-from math import exp, log
+from math import cos, exp, log, radians
 from statistics import mean
 
 import ifpeek
@@ -33,10 +34,12 @@ from enodia.fingerprint import (
     follow,
     format_location,
     format_map_check,
+    how_sure,
     key_weights,
     locate_scan,
     locate_sequence,
     map_summary,
+    otherwise,
     outing_name,
     read_map,
     scan_now,
@@ -53,6 +56,7 @@ from enodia.reconcile import (
     Waypoint,
     reconcile,
 )
+from enodia.streets import EARTH_RADIUS_M, distance_metres
 
 TZ = timezone(timedelta(hours=-3))
 
@@ -390,6 +394,77 @@ def test_the_report_says_where_you_are_and_how_sure_it_is():
     assert "2 walks agree, best similarity 100%, spread 10% of the stretch (20 m)" in report
     assert "from evidence last gathered 2026-09-05 17:05" in report
     assert "Uncertain" not in report
+
+
+def test_the_report_reads_the_same_line_for_line_once_its_sentences_are_shared():
+    # The live map's panel says how sure an answer is and what else it could
+    # have been in these same words, so here they are pinned whole.
+    here = Place("Alfa", "Bravo", 0.3, -34.90, -56.19891, 200.0)
+    elsewhere = Place("Charlie", "Delta", 0.5)
+    when = datetime(2026, 9, 5, 17, 5, tzinfo=TZ)
+    settled = fingerprint.Location(here, 1.0, 2, 0.1, elsewhere, when, settled=2)
+    assert format_location(settled, "mapa.jsonl") == "\n".join(
+        [
+            'You are between "Alfa" and "Bravo", 30% of the way',
+            "  around [-34.90000, -56.19891]",
+            "  2 walks agree, best similarity 100%, spread 10% of the stretch (20 m)",
+            "  from evidence last gathered 2026-09-05 17:05",
+            (
+                '  The scan alone could as easily be between "Charlie" and "Delta", 50% of the '
+                "way. The 2 scans before it settle it here."
+            ),
+        ]
+    )
+    torn = fingerprint.Location(Place("Alfa", "Bravo", 0.5), 0.8, 1, 0.0, elsewhere)
+    assert format_location(torn, "mapa.jsonl") == "\n".join(
+        [
+            'You are between "Alfa" and "Bravo", 50% of the way',
+            "  1 walk, best similarity 80%",
+            '  Uncertain: it could as easily be between "Charlie" and "Delta", 50% of the way',
+        ]
+    )
+    overruled = replace(torn, alternative=None, settled=1, alone=elsewhere)
+    assert format_location(overruled, "mapa.jsonl").splitlines()[-1] == (
+        '  The scan alone would have said between "Charlie" and "Delta", 50% of the way. '
+        "The scan before it puts it here."
+    )
+
+
+def test_how_sure_an_answer_is_reads_as_the_report_reads_it():
+    lone = fingerprint.Location(Place("Alfa", "Bravo", 0.5), 0.8, 1, 0.0)
+    # One walk has nothing to spread, and saying it spread nought read as certainty.
+    assert how_sure(lone) == "1 walk, best similarity 80%"
+    agreed = fingerprint.Location(Place("Alfa", "Bravo", 0.5, length_m=200.0), 1.0, 2, 0.1)
+    assert how_sure(agreed) == (
+        "2 walks agree, best similarity 100%, spread 10% of the stretch (20 m)"
+    )
+    assert f"  {how_sure(agreed)}" in format_location(agreed, "mapa.jsonl").splitlines()
+
+
+def test_what_else_an_answer_could_have_been_is_one_sentence_or_nothing():
+    plain = fingerprint.Location(Place("Alfa", "Bravo", 0.5, length_m=100.0), 0.9, 1, 0.0)
+    assert otherwise(plain) is None
+    there = Place("Charlie", "Delta", 0.5)
+    torn = replace(plain, alternative=there)
+    assert otherwise(torn) == (
+        'Uncertain: it could as easily be between "Charlie" and "Delta", 50% of the way'
+    )
+    assert otherwise(replace(torn, settled=1)) == (
+        'The scan alone could as easily be between "Charlie" and "Delta", 50% of the way. '
+        "The scan before it settles it here."
+    )
+    many = otherwise(replace(torn, settled=3))
+    assert many is not None and many.endswith("The 3 scans before it settle it here.")
+    overruled = replace(plain, settled=2, alone=there)
+    assert otherwise(overruled) == (
+        'The scan alone would have said between "Charlie" and "Delta", 50% of the way. '
+        "The 2 scans before it put it here."
+    )
+    # Two stretches that meet at the corner both answers are at: no doubt.
+    soca, brito = "Rivera y Soca", "Rivera y Brito del Pino"
+    past = Place(brito, "Rivera y Bolívar", 0.04, length_m=100.0)
+    corner = fingerprint.Location(Place(soca, brito, 0.97, length_m=100.0), 0.9, 1, 0.0, past)
+    assert otherwise(corner) is None
 
 
 def test_the_report_says_plainly_when_you_are_not_on_the_map():
@@ -1873,6 +1948,29 @@ def test_not_on_the_map_passes_through_and_forgets_nothing():
     assert pace.walking is kept
 
 
+def test_the_pace_says_whether_it_carried_the_walk_or_started_again():
+    # The live map's panel gives the speed only once answers have measured it:
+    # a walk started again stands still, which is an assumption and not a pace.
+    pace = fingerprint.Pace({})
+    assert not pace.carried
+    pace.keep(at(0.1), 0.0)
+    assert not pace.carried  # the first answer
+    pace.keep(at(0.2), 5.0)
+    assert pace.carried
+    pace.keep(at(0.1, street=("Bravo", "Charlie")), 10.0)
+    assert pace.carried  # through the mark the two stretches share
+    pace.keep(at(0.9, street=("Echo", "Foxtrot")), 15.0)
+    assert not pace.carried  # a jump
+    pace.keep(at(0.8, street=("Echo", "Foxtrot")), 20.0)
+    assert pace.carried
+    pace.keep(at(0.7, street=("Echo", "Foxtrot")), 21.0 + fingerprint.PACE_RESET_S)
+    assert not pace.carried  # a long gap
+    pace.keep(at(0.6, street=("Echo", "Foxtrot")), 56.0)
+    assert pace.carried
+    pace.keep(at(0.5, length=None), 61.0)
+    assert not pace.carried  # no length to measure a pace along
+
+
 def test_the_kept_place_is_put_on_the_line_the_map_draws_for_its_stretch():
     street = ("Alfa", "Bravo")
     fingerprints = [
@@ -2229,3 +2327,137 @@ def test_the_check_can_place_along_the_levels():
     said = " ".join(report.split())
     assert "placed along its stretch by the levels, which is experimental" in said
     assert "pulled in, near a corner" in report
+
+
+# --- how far off an answer may be ---------------------------------------------------
+
+CENTRE = (-34.9, -56.19)
+
+
+def point(east, north):
+    """A place so many metres east and north of CENTRE, on the flat earth the band assumes."""
+    lat = CENTRE[0] + north / (EARTH_RADIUS_M * radians(1))
+    lon = CENTRE[1] + east / (EARTH_RADIUS_M * radians(1) * cos(radians(CENTRE[0])))
+    return lat, lon
+
+
+def straight(start, end):
+    """The fitted line of a stretch drawn from one place to another, both in metres."""
+    (lat0, lon0), (lat1, lon1) = point(*start), point(*end)
+    return (lat0, lat1 - lat0, lon0, lon1 - lon0)
+
+
+def test_the_lines_of_a_map_are_the_ones_the_pace_keeps_its_answers_to():
+    known = [
+        Fingerprint(Place("Alfa", "Bravo", 0.2, -34.90, -56.2000, 100.0), (net("A"),)),
+        Fingerprint(Place("Alfa", "Bravo", 0.8, -34.90, -56.1994, 100.0), (net("A"),)),
+        # One fraction is no line to fit, and neither is a stretch with no coordinates.
+        Fingerprint(Place("Charlie", "Delta", 0.5, -34.91, -56.20, 100.0), (net("B"),)),
+        Fingerprint(Place("Echo", "Foxtrot", 0.3), (net("C"),)),
+        Fingerprint(Place("Echo", "Foxtrot", 0.7), (net("C"),)),
+    ]
+    lines = fingerprint.stretch_lines(known)
+    assert set(lines) == {Place("Alfa", "Bravo", 0.5).key}
+    assert fingerprint.Pace.of(known).lines == lines
+
+
+def test_an_answer_may_be_off_by_twenty_metres_and_sixty_more_for_all_the_similarity_it_lacks():
+    assert [fingerprint.band_m(score) for score in (1.0, 0.5, 0.0)] == [20.0, 50.0, 80.0]
+
+
+def test_the_band_is_every_stretch_the_map_knows_within_it_round_the_corner_as_well():
+    # Twenty metres short of a corner, with 35 m to be off by: its own block up to
+    # the corner, the side street as far as the straight distance reaches, and
+    # the block straight on for what is left of it.
+    centre = point(-20, 0)
+    assert fingerprint.band_m(0.75) == 35.0
+    reach = fingerprint._reach
+    assert reach(straight((-100, 0), (0, 0)), centre, 35.0) == pytest.approx((0.45, 1.0))
+    assert reach(straight((0, 0), (0, 100)), centre, 35.0) == pytest.approx((0.0, 0.2872), abs=1e-4)
+    assert reach(straight((0, 0), (100, 0)), centre, 35.0) == pytest.approx((0.0, 0.15))
+    # A block far off, one on the same line but past the next corner, and a line
+    # with no length to it: none of them is within reach.
+    assert reach(straight((0, 300), (100, 300)), centre, 35.0) is None
+    assert reach(straight((100, 0), (200, 0)), centre, 35.0) is None
+    corner = point(0, 0)
+    assert reach((corner[0], 0.0, corner[1], 0.0), centre, 35.0) is None
+    lines = {
+        Place("Oeste", "Esquina", 0.5).key: straight((-100, 0), (0, 0)),
+        Place("Esquina", "Norte", 0.5).key: straight((0, 0), (0, 100)),
+        Place("Esquina", "Este", 0.5).key: straight((0, 0), (100, 0)),
+        Place("Lejos", "Mas lejos", 0.5).key: straight((0, 300), (100, 300)),
+    }
+    found = fingerprint.Location(Place("Oeste", "Esquina", 0.8, *centre, 100.0), 0.75, 1, 0.0)
+    band = fingerprint.band_of(found, lines)
+    assert band is not None and band.radius_m == 35.0 and len(band.pieces) == 3
+    (start, end), *_ = band.pieces
+    assert distance_metres(*start, *point(-55, 0)) < 0.01 and distance_metres(*end, *corner) < 0.01
+
+
+def test_the_scan_lies_on_the_band_exactly_when_its_error_is_within_it():
+    # What --check-map counts is the straight distance, and the band is drawn so
+    # that a place on a street is on it exactly when it is that near.
+    centre = point(-20, 0)
+    low, high = fingerprint._reach(straight((0, 0), (0, 100)), centre, 35.0)
+    for north in (10, 25, 28, 29, 32, 45):
+        near = distance_metres(*centre, *point(0, north)) <= 35.0
+        assert (low <= north / 100 <= high) is near, north
+
+
+def test_an_answer_with_its_coordinates_withheld_or_no_line_to_draw_on_has_no_band():
+    lines = {Place("Oeste", "Esquina", 0.5).key: straight((-100, 0), (0, 0))}
+    withheld = fingerprint.Location(Place("Oeste", "Esquina", 0.8), 0.75, 1, 0.0)
+    assert fingerprint.band_of(withheld, lines) is None
+    unlined = fingerprint.Location(Place("Norte", "Sur", 0.5, *point(0, 50), 100.0), 0.75, 1, 0.0)
+    assert fingerprint.band_of(unlined, lines) is None
+
+
+def test_one_walk_has_nothing_to_spread_and_the_answer_does_not_say_it_did():
+    lone = fingerprint.Location(Place("Alfa", "Bravo", 0.5, length_m=100.0), 0.8, 1, 0.0)
+    assert "spread" not in format_location(lone, "mapa.jsonl")
+    agreed = replace(lone, matches=2, spread=0.1)
+    assert "spread 10% of the stretch (10 m)" in format_location(agreed, "mapa.jsonl")
+
+
+def test_the_check_counts_the_answers_the_band_held_and_a_different_street_as_outside_it():
+    # An abstention claims no band, and an answer with nothing measured in
+    # metres cannot be judged. One on another street is an answer, and outside.
+    here = Place("Alfa", "Bravo", 0.5, length_m=100.0)
+    sure = fingerprint.Location(here, 1.0, 1, 0.0)  # a band of twenty metres
+    elsewhere = fingerprint.Location(Place("Charlie", "Delta", 0.5), 1.0, 1, 0.0)
+    results = [
+        HeldOutScan(here, sure, 12.0, 0.12),
+        HeldOutScan(here, sure, 30.0, 0.30),
+        HeldOutScan(here, elsewhere, None, None),
+        HeldOutScan(here, None, None, None),
+        HeldOutScan(here, sure, None, 0.1),
+    ]
+    assert fingerprint._within_band(results) == "1 of 3"
+    assert fingerprint._column(results)[0][9] == "1 of 3"
+    assert fingerprint._column(results, banded=False)[0][9] == "-"
+
+
+def test_the_band_is_not_judged_where_nothing_was_measured_in_metres():
+    here = Place("Alfa", "Bravo", 0.5)
+    sure = fingerprint.Location(here, 1.0, 1, 0.0)
+    unmeasured = [HeldOutScan(here, sure, None, 0.1), HeldOutScan(here, None, None, None)]
+    assert fingerprint._within_band(unmeasured) == "-"
+
+
+def test_the_check_gives_no_band_for_the_signal_or_for_networks_weighed_alike():
+    walks = two_walks()
+    results = check_map(walks)
+
+    def row(report):
+        (line,) = [one for one in report.splitlines() if "within the band" in one]
+        return re.findall(r"\d+ of \d+|-", line.split("within the band")[1])
+
+    assert row(format_map_check(walks, *[results] * 6)) == [
+        "2 of 2",
+        "-",
+        "-",
+        "2 of 2",
+        "2 of 2",
+        "2 of 2",
+    ]
+    assert row(format_map_check(walks, *[results] * 6, by_rarity=False)) == ["-"] * 6

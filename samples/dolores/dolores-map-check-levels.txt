@@ -13,6 +13,7 @@ placed along its stretch by the levels, which is experimental:
   median error, of a stretch            31%            28%                 29%            33%               33%                34%
   mean error in metres                 33 m           32 m                32 m           35 m              36 m               36 m
   median error in metres               29 m           27 m                28 m           31 m              30 m               31 m
+  within the band                394 of 518              -                   -     375 of 518        363 of 518         365 of 518
   pulled in, near a corner            -13 m          -13 m               -13 m          -12 m             -12 m              -11 m
   moved faster than a walk          8 of 52        5 of 48             5 of 48        8 of 55           7 of 45            3 of 55
 
@@ -28,7 +29,12 @@ placed along its stretch by the levels, which is experimental:
   near a corner is how far the answers to scans taken within a fifth of a block of a
   corner landed towards the middle of the block, on average, and negative past the corner,
   into the block next door. Moved faster than a walk counts the steps between two answers
-  in a row on the right stretch that nobody walks in the seconds between them.
+  in a row on the right stretch that nobody walks in the seconds between them. Within the
+  band counts the answers no further from where the scan was taken, in a straight line,
+  than the band the live map draws around them: 20 m, and 60 m more for all the similarity
+  short of a perfect match. An answer on the wrong stretch counts as outside it, and one
+  with nothing measured in metres is left out. The band was measured matching by networks
+  weighed by rarity, and is not given for the signal or for networks weighed alike.
 
   518 of 518 answers were backed only by the outing the scan came from,
   which flatters this result: that is the map recognising a walk, not a place.
