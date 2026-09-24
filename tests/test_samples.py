@@ -164,6 +164,17 @@ def test_the_real_outing_map_is_what_its_outing_builds(tmp_path):
     assert built == kept
 
 
+def test_the_real_outing_plan_is_what_the_command_draws(tmp_path, capsys):
+    # The neighbourhood as OpenStreetMap has it, the walk over it, and where
+    # each access point probably stands, all of it from the exported outing.
+    plan = tmp_path / "plan.svg"
+    command = ["--reconcile", *DOLORES_FILES, *DOLORES_STREETS, "--svg", str(plan)]
+    assert cli.main(command) == 0
+    capsys.readouterr()
+    beside = DOLORES / "dolores-plan.svg"
+    assert plan.read_text(encoding="utf-8") == beside.read_text(encoding="utf-8")
+
+
 @slow
 @pytest.mark.parametrize(
     ("flags", "artifact"),

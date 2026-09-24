@@ -43,6 +43,15 @@ along it stands, and so is when it was walked. The walker chose that.
     --streets samples/dolores/dolores-streets.jsonl --map samples/dolores/dolores-map.jsonl
   ```
 
+- `dolores-plan.svg`: the walk as a plan over the neighbourhood, with where each access point
+  probably stands, drawn from the exported outing. No network is named on it, since the export
+  removed the names.
+
+  ```bash
+  enodia --reconcile samples/dolores/dolores-outing.jsonl samples/dolores/dolores-notebook.txt \
+    --streets samples/dolores/dolores-streets.jsonl --svg samples/dolores/dolores-plan.svg
+  ```
+
 - `dolores-map-check.txt`, `dolores-map-check-levels.txt`: each pass held out and located from
   the rest, without and with the experimental `--along levels`
 
@@ -57,9 +66,9 @@ were walked once, and holding that pass out leaves nothing on the block, which i
 answers land across a mark. A second outing over the same streets, exported with the same key,
 is what turns this into the honest test.
 
-`tests/test_samples.py` rebuilds the map from the outing and checks that no network in it has
-anything but a pseudonym. The two map checks take minutes, so they run only when asked for, as
-one job of the CI does on every push:
+`tests/test_samples.py` rebuilds the map and redraws the plan from the outing, and checks that
+no network in the outing or the map has anything but a pseudonym. The two map checks take
+minutes, so they run only when asked for, as one job of the CI does on every push:
 
 ```bash
 ENODIA_SLOW=1 uv run pytest tests/test_samples.py --no-cov
