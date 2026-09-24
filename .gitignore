@@ -227,4 +227,4 @@ networks.jsonl
 # What --export-public writes is meant to be published, and the rule above would
 # hide it. Nothing else in the repository is exempt.
 !public/*.jsonl
-!samples/*.jsonl
+!samples/**/*.jsonl
