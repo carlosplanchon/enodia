@@ -90,6 +90,7 @@ enodia --reconcile LOG notebook.txt --check-passes              # how far apart 
 enodia --check-map                                             # hold out a pass and locate it from the rest
 enodia --check-map --match signal                              # the same, scored on signal as well
 enodia --check-map --weigh alike                               # the same, every network counted alike
+enodia --check-map --card-offset -6                            # heard as a card reading 6 dB lower would
 ```
 
 `--check-pace` needs coordinates on the crossings, since it measures in metres along the walk.
@@ -97,8 +98,11 @@ enodia --check-map --weigh alike                               # the same, every
 `--check-map` needs a map with at least two passes in it, and holds out one outing at a time,
 or one pass down one stretch when the map holds a single outing, never a single scan, since a
 scan's neighbour was taken five seconds later and sees almost the same networks. Its table has
-four columns: each scan alone by networks, by signal as well, and with the scans before it
-settling a tie or choosing the path, the two ways `--sequence` names.
+six columns: each scan alone by networks, by signal as well, by signal with the card calibrated
+on the run, with the scans before it settling a tie or choosing the path, the two ways
+`--sequence` names, and at a walking pace, the way `--locate --watch` runs. `--card-offset DB`
+hears every held-out scan as a card reading that many dB higher, or lower when negative, would
+hear it, which is what another card costs each column and what calibrating wins back.
 [The methodology notes](methodology.md) say what each of the three can and cannot tell you.
 
 ## The map, and finding yourself again
@@ -157,6 +161,17 @@ takes each scan's place as it comes. The pace is 2.5 m/s at most, and `--max-spe
 on a bicycle, `--max-speed 7`, or the dot trails behind you and reaches every corner late. A map
 built on foot and used from a bicycle matches a little worse whatever the pace, since a scan
 takes about five seconds and a bicycle covers a quarter of a block in that time.
+
+With `--match signal` the run also calibrates the card against the map. Two cards hear the same
+network several dB apart, and comparing levels takes that for a poorer match. So wherever
+matching on the networks alone is sure of the place, the levels this card heard are set against
+the ones the map kept there, and once there are thirty such pairs, about half a minute of walk,
+their median corrects every level before it is compared. It is said once: `Calibrated against
+the map: this card reads 6 dB below the map's card, and is corrected for that`. It is learned
+afresh every run and never kept, since the difference is against the card that built this map,
+and a difference past 20 dB is not a card reading differently: it is reported and not corrected.
+`--match networks` compares no levels and has nothing to calibrate, and what `--log` records is
+what the card heard, uncorrected.
 
 ```bash
 enodia --locate --watch --log watch.jsonl
@@ -369,6 +384,7 @@ says which flag is the odd one.
 | `--streets` | `--geocode`, `--reconcile`, `--map-add` or `--live-map` |
 | `--surroundings` | `--geocode` and `--streets` |
 | `--live-map`, `--no-walking-pace` | `--locate --watch` |
+| `--card-offset` | `--check-map` |
 | `--svg`, `--check-pace`, `--check-passes`, `--path-loss`, `--csv`, `--geojson`, `--scans` | `--reconcile` |
 | `--svg-names` | `--svg` |
 | `--pace` | `--reconcile` or `--map-add` |

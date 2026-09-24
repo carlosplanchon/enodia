@@ -7,7 +7,7 @@ import stat
 import threading
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
-from math import log
+from math import exp, log
 
 import ifpeek
 import pytest
@@ -606,6 +606,7 @@ def test_with_two_outings_the_whole_outing_is_held_out_and_its_next_stretch_with
         check_map([*lunes, *martes], sequence="tie"),
         check_map([*lunes, *martes], sequence="path"),
         check_map([*lunes, *martes], keep_pace=True),
+        check_map([*lunes, *martes], by_signal=True, calibrate=True),
     )
     assert "Each outing held out in turn, and its scans located from the other outings:" in report
     assert "placed across a mark                    0              0" in report
@@ -620,6 +621,7 @@ def test_the_check_reports_both_methods_side_by_side():
         check_map(walks, sequence="tie"),
         check_map(walks, sequence="path"),
         check_map(walks, keep_pace=True),
+        check_map(walks, by_signal=True, calibrate=True),
     )
     assert "Map: 2 fingerprints, 2 walks over 1 stretches, 1 outings." in report
     assert "Each walk held out in turn" in report
@@ -646,6 +648,7 @@ def test_the_check_reports_fractions_when_no_stretch_has_a_length():
         check_map(walks, sequence="tie"),
         check_map(walks, sequence="path"),
         check_map(walks, keep_pace=True),
+        check_map(walks, by_signal=True, calibrate=True),
     )
     assert "mean error, of a stretch              20%            20%" in report
     assert "mean error in metres                    -              -" in report
@@ -664,6 +667,7 @@ def test_the_check_reports_nothing_measurable_when_every_scan_missed():
         check_map(walks, sequence="tie"),
         check_map(walks, sequence="path"),
         check_map(walks, keep_pace=True),
+        check_map(walks, by_signal=True, calibrate=True),
     )
     assert "mean error, of a stretch                -              -" in report
     assert "mean error in metres                    -              -" in report
@@ -685,12 +689,13 @@ def test_the_median_of_an_even_and_an_odd_number_of_errors():
         check_map(walks, sequence="tie"),
         check_map(walks, sequence="path"),
         check_map(walks, keep_pace=True),
+        check_map(walks, by_signal=True, calibrate=True),
     )
     assert "median error" in report
 
 
 def test_nothing_to_check_is_said_rather_than_shown_as_an_empty_table():
-    report = format_map_check([], [], [], [], [], [])
+    report = format_map_check([], [], [], [], [], [], [])
     assert "Nothing to check" in report and "turn round at the corner" in report
 
 
@@ -750,6 +755,7 @@ def test_the_check_says_when_a_map_only_recognised_its_own_walk():
         check_map(walks, sequence="tie"),
         check_map(walks, sequence="path"),
         check_map(walks, keep_pace=True),
+        check_map(walks, by_signal=True, calibrate=True),
     )
     assert "2 of 2 answers were backed only by the outing the scan came from" in report
     assert "recognising a walk, not a place" in report
@@ -767,6 +773,7 @@ def test_a_second_outing_over_the_same_street_is_not_flattered():
         check_map(walks, sequence="tie"),
         check_map(walks, sequence="path"),
         check_map(walks, keep_pace=True),
+        check_map(walks, by_signal=True, calibrate=True),
     )
     assert "backed only by the outing" not in report
 
@@ -799,6 +806,7 @@ def test_a_map_of_mixed_notebooks_does_not_average_metres_over_a_subset():
         check_map(walks, sequence="tie"),
         check_map(walks, sequence="path"),
         check_map(walks, keep_pace=True),
+        check_map(walks, by_signal=True, calibrate=True),
     )
     assert "placed on the right stretch             4              4" in report
     assert "mean error, of a stretch              30%            30%" in report  # las cuatro
@@ -820,6 +828,7 @@ def test_the_map_check_names_crossings_written_both_ways_round():
         check_map(walks, sequence="tie"),
         check_map(walks, sequence="path"),
         check_map(walks, keep_pace=True),
+        check_map(walks, by_signal=True, calibrate=True),
     )
     assert "written both ways round" in report
     assert '"Agraciada y Freire" and "Freire y Agraciada"' in report
@@ -1026,6 +1035,7 @@ def test_the_check_in_sequence_settles_what_a_scan_alone_could_not(sequence):
         check_map(fingerprints, sequence="tie"),
         check_map(fingerprints, sequence="path"),
         check_map(fingerprints, keep_pace=True),
+        check_map(fingerprints, by_signal=True, calibrate=True),
     )
     assert "settling ties" in report and "choosing the path" in report
 
@@ -1086,6 +1096,7 @@ def test_a_map_of_two_outings_finds_one_of_them_from_the_other(tmp_path, monkeyp
         check_map(fingerprints, sequence="tie"),
         check_map(fingerprints, sequence="path"),
         check_map(fingerprints, keep_pace=True),
+        check_map(fingerprints, by_signal=True, calibrate=True),
     )
     assert "Map: 8 fingerprints, 2 walks over 1 stretches, 2 outings." in report
     assert "backed only by the outing" not in report
@@ -1109,6 +1120,7 @@ def test_one_outing_alone_can_only_recognise_itself(tmp_path, monkeypatch):
         check_map(fingerprints, sequence="tie"),
         check_map(fingerprints, sequence="path"),
         check_map(fingerprints, keep_pace=True),
+        check_map(fingerprints, by_signal=True, calibrate=True),
     )
     assert "1 outings." in report and "recognising a walk, not a place" in report
 
@@ -1667,6 +1679,7 @@ def test_a_map_can_be_counted_without_being_checked(tmp_path):
         check_map(walks, sequence="tie"),
         check_map(walks, sequence="path"),
         check_map(walks, keep_pace=True),
+        check_map(walks, by_signal=True, calibrate=True),
     )
 
     assert map_summary([]) == MapSummary(0, 0, 0, ())
@@ -1956,3 +1969,130 @@ def test_two_stretches_that_meet_at_the_corner_both_answers_are_at_are_not_a_dou
     # And in the middle of a block with the alternative at a corner.
     halfway = fingerprint.Location(replace(here, fraction=0.5), 0.9, 1, 0.0, alternative=past)
     assert halfway.uncertain
+
+
+# --- one card against another -----------------------------------------------------
+
+
+def block_of_levels(outing="one", start=None, length=100.0):
+    """Five places down one block, each with ten networks of its own, all heard strongly.
+
+    Each its own walk: places that share no network are not one look at one place.
+    """
+    return [
+        mark(
+            0.1 + 0.2 * place,
+            *(
+                net(f"n{place}{index}", -55 - index, bssid=f"aa:bb:cc:dd:{place:02x}:{index:02x}")
+                for index in range(10)
+            ),
+            walk=f"{outing}#{place}",
+            when=None if start is None else start + timedelta(seconds=5 * place),
+            length=length,
+        )
+        for place in range(5)
+    ]
+
+
+def test_levels_are_shifted_in_dbm_and_in_the_percentage_when_that_is_all_there_is():
+    loud = SeenNetwork("Casa", "aa:bb:cc:dd:ee:01", "wpa2", 2412, -60, 70)
+    percent = SeenNetwork("Bar", "aa:bb:cc:dd:ee:02", "wpa2", 2412, None, 70)
+    silent = SeenNetwork("Pan", "aa:bb:cc:dd:ee:03", "wpa2", 2412, None, None)
+    louder, higher, same = fingerprint.shifted([loud, percent, silent], 6.0)
+    assert louder.signal_dbm == -54 and louder.signal_percent == 70
+    assert higher.signal_percent == 80 and higher.strength == pytest.approx(percent.strength + 6)
+    assert same == silent
+    assert fingerprint.shifted([percent], 60.0)[0].signal_percent == 100
+    assert fingerprint.shifted([percent], -60.0)[0].signal_percent == 0
+
+
+def test_a_card_reading_low_is_learned_on_the_run_and_corrected():
+    street = block_of_levels()
+    calibration = fingerprint.Calibration()
+    low = [fingerprint.shifted(one.networks, -6.0) for one in street]
+    for scan in low[:2]:
+        calibration.learn(street, scan)
+    assert calibration.measured is None and calibration.offset is None  # twenty pairs
+    assert calibration.correct(low[0]) == low[0]
+    calibration.learn(street, low[2])
+    assert calibration.offset == pytest.approx(-6.0)
+    corrected = calibration.correct(low[3])
+    assert [one.signal_dbm for one in corrected] == [one.signal_dbm for one in street[3].networks]
+
+
+def test_only_a_sure_answer_and_a_strong_pair_teach_anything():
+    street = block_of_levels()
+    calibration = fingerprint.Calibration()
+    calibration.learn(street, [net("Nadie", -60, bssid="aa:bb:cc:dd:ff:ff")])  # not on the map
+    strangers = [net(f"x{i}", -60, bssid=f"aa:bb:cc:dd:fe:{i:02x}") for i in range(12)]
+    unsure = [*street[0].networks[:2], *strangers]
+    calibration.learn(street, unsure)  # a poor match
+    faint = [replace(one, signal_dbm=-99) for one in street[1].networks]
+    calibration.learn(street, faint)  # heard, but too weak on the mean of the two to count
+    level_less = [replace(one, signal_dbm=None) for one in street[2].networks]
+    calibration.learn(street, level_less)
+    assert len(calibration.pairs) == 0
+    # Two stretches alike are a doubt about where the scan was, and teach nothing.
+    twin = [
+        replace(one, place=replace(one.place, name_to="Charlie"), walk=f"twin#{index}")
+        for index, one in enumerate(street)
+    ]
+    calibration.learn([*street, *twin], street[3].networks)
+    assert len(calibration.pairs) == 0
+
+
+def test_a_fingerprint_far_along_the_stretch_is_not_compared_with_the_scan():
+    # The same networks at both ends of a long block: the answer is the middle
+    # of them, and neither is near enough to it to say what was heard there.
+    ends = [mark(fraction, *block_of_levels()[0].networks, length=None) for fraction in (0.1, 0.9)]
+    calibration = fingerprint.Calibration()
+    calibration.learn(ends, fingerprint.shifted(ends[0].networks, -6.0))
+    assert len(calibration.pairs) == 0
+
+
+def test_an_offset_too_large_to_be_a_card_is_measured_and_not_applied():
+    street = block_of_levels()
+    calibration = fingerprint.Calibration()
+    for one in street[:3]:
+        calibration.learn(street, fingerprint.shifted(one.networks, 12.0))
+    calibration.pairs.extend([27.0] * 60)
+    assert calibration.measured == pytest.approx(27.0) and calibration.offset is None
+    assert calibration.correct(street[0].networks) == list(street[0].networks)
+
+
+def test_the_check_hears_another_card_and_learns_it_back_on_the_run():
+    first = datetime(2026, 9, 1, 17, 0, tzinfo=TZ)
+    second = first + timedelta(days=1)
+    walks = [*block_of_levels("lunes", first), *block_of_levels("martes", second)]
+    low = check_map(walks, by_signal=True, card_offset=-6.0)
+    back = check_map(walks, by_signal=True, calibrate=True, card_offset=-6.0)
+    assert all(one.found is not None for one in low + back)
+    # Six decibels low scores every place at exp(-0.6) of what it is.
+    assert all(one.found.score == pytest.approx(exp(-0.6)) for one in low)
+    # Each outing is a run of its own: three scans to learn, then corrected.
+    corrected = [one.corrected_db for one in back]
+    assert corrected[:2] == [None, None] and corrected[5:7] == [None, None]
+    assert corrected[2:5] == [pytest.approx(-6.0)] * 3
+    assert back[4].found.score == pytest.approx(1.0)
+    report = format_map_check(
+        walks,
+        check_map(walks, card_offset=-6.0),
+        low,
+        check_map(walks, sequence="tie", card_offset=-6.0),
+        check_map(walks, sequence="path", card_offset=-6.0),
+        check_map(walks, keep_pace=True, card_offset=-6.0),
+        back,
+        card_offset=-6.0,
+    )
+    assert "heard as a card reading 6 dB lower would hear them" in " ".join(report.split())
+    assert "here it corrected 6 of 10 scans, by -6.0 dB." in " ".join(report.split())
+    # With the passes of one outing held out, the whole outing is one run.
+    one_outing = [
+        replace(one, outing="lunes", walk=f"lunes#{index}") for index, one in enumerate(walks)
+    ]
+    carried = check_map(one_outing, by_signal=True, calibrate=True, card_offset=-6.0)
+    assert [one.corrected_db for one in carried][:2] == [None, None]
+    assert all(one.corrected_db == pytest.approx(-6.0) for one in carried[2:])
+    never = format_map_check(walks, *[check_map(walks)] * 6)
+    assert "here it never had pairs enough to correct anything." in " ".join(never.split())
+    assert "heard as a card" not in never

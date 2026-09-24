@@ -16,6 +16,7 @@ from enodia.anonymize import ExportError, export_outing, format_export, key_path
 from enodia.button import ButtonMarker, find_button_devices, list_input_devices
 from enodia.draw import live_map, mapped_places, svg_map
 from enodia.fingerprint import (
+    Calibration,
     Fingerprint,
     Location,
     Pace,
@@ -62,6 +63,9 @@ from enodia.voice import BackgroundVoice, ESpeak, PicoTTS, VoiceController, defa
 # How many answers the live map keeps behind the current one: under a minute
 # of walk at the default interval, enough to show which way you were going.
 TRAIL = 10
+# How far what the run learned about the card has to move before it is said
+# again: less is the median of a few more pairs settling, not news.
+CALIBRATION_NEWS_DB = 2.0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -429,6 +433,15 @@ def build_parser() -> argparse.ArgumentParser:
         "report how far off it was, with and without the signal",
     )
     parser.add_argument(
+        "--card-offset",
+        type=float,
+        default=0.0,
+        metavar="DB",
+        help="with --check-map: hear every held-out scan as a card reading DB decibels above "
+        "the map's would (below, when negative), to see what another card costs each way of "
+        "matching and what calibrating on the run wins back (default: the same card)",
+    )
+    parser.add_argument(
         "--match",
         choices=["networks", "signal"],
         default="networks",
@@ -560,6 +573,11 @@ def run_watch(
     so the dot moves the way somebody walks and not the way one scan after
     another lands; `--no-walking-pace` takes each scan as it comes.
 
+    With `--match signal` the card is calibrated against the map on the run
+    (`Calibration`): each scan teaches it where the level-free matching is sure,
+    and once it knows, the levels are corrected before they are compared, and
+    it says so. What `--log` records is what the card heard, uncorrected.
+
     `--live-map FILE` is the same run drawn: every cycle the page is written
     again, beside the target and renamed onto it, with the last `TRAIL`
     answers behind the current one. A map without coordinates has nothing to
@@ -614,10 +632,37 @@ def run_watch(
                 if remaining > 0:
                     time.sleep(remaining)
 
+    calibration = Calibration() if by_signal else None
+    announced: float | None = None
+    refused = False
+
+    def corrected(scans: Iterator[list[SeenNetwork]]) -> Iterator[list[SeenNetwork]]:
+        """Each scan at the levels the map's card would have read, once the run knows them."""
+        nonlocal announced, refused
+        for seen in scans:
+            if calibration is None:
+                yield seen
+                continue
+            calibration.learn(known, seen, by_rarity)
+            offset, measured = calibration.offset, calibration.measured
+            if offset is not None and (
+                announced is None or abs(offset - announced) >= CALIBRATION_NEWS_DB
+            ):
+                print(card_reads(offset), flush=True)
+                announced = offset
+            elif offset is None and measured is not None and not refused:
+                print(
+                    f"This card reads {abs(measured):.0f} dB off the map's card, too far to be "
+                    "a card: not corrected",
+                    flush=True,
+                )
+                refused = True
+            yield calibration.correct(seen)
+
     previous: Location | None = None
     first = True
     try:
-        for answer in follow(known, fresh(), args.sequence, by_signal, by_rarity):
+        for answer in follow(known, corrected(fresh()), args.sequence, by_signal, by_rarity):
             found = answer if pace is None else pace.keep(answer, time.monotonic())
             stamp = time.strftime("%H:%M:%S")
             if found is None:
@@ -651,6 +696,18 @@ def run_watch(
         print(f"error: {exc}", file=sys.stderr)
         return 1
     return 0
+
+
+def card_reads(offset: float) -> str:
+    """What the run learned about this card, said once when it starts correcting for it."""
+    rounded = round(offset)
+    if not rounded:
+        return "Calibrated against the map: this card reads as the map's card did"
+    way = "below" if rounded < 0 else "above"
+    return (
+        f"Calibrated against the map: this card reads {abs(rounded)} dB {way} the map's card, "
+        "and is corrected for that"
+    )
 
 
 def say_which_walk(log_path: str | None, wanted: str | None) -> str | None:
@@ -788,16 +845,23 @@ def run_map(args: argparse.Namespace, map_file: Path) -> int:
         except OSError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
-        print(
-            format_map_check(
+        offset = args.card_offset
+        # In the order the report's columns are read in, the calibrated one last.
+        checked = [
+            check_map(fingerprints, by_rarity=by_rarity, card_offset=offset),
+            check_map(fingerprints, by_signal=True, by_rarity=by_rarity, card_offset=offset),
+            check_map(fingerprints, sequence="tie", by_rarity=by_rarity, card_offset=offset),
+            check_map(fingerprints, sequence="path", by_rarity=by_rarity, card_offset=offset),
+            check_map(fingerprints, keep_pace=True, by_rarity=by_rarity, card_offset=offset),
+            check_map(
                 fingerprints,
-                check_map(fingerprints, by_rarity=by_rarity),
-                check_map(fingerprints, by_signal=True, by_rarity=by_rarity),
-                check_map(fingerprints, sequence="tie", by_rarity=by_rarity),
-                check_map(fingerprints, sequence="path", by_rarity=by_rarity),
-                check_map(fingerprints, keep_pace=True, by_rarity=by_rarity),
-            )
-        )
+                by_signal=True,
+                calibrate=True,
+                by_rarity=by_rarity,
+                card_offset=offset,
+            ),
+        ]
+        print(format_map_check(fingerprints, *checked, card_offset=offset))
         return 0
 
     # A map that is not there is an error here, and not an empty map. `read_map`
@@ -1102,6 +1166,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error(
             "--watch: only meaningful together with --locate and a live scan, not --locate LOG"
         )
+    if args.card_offset and not args.check_map:
+        parser.error("--card-offset: only meaningful together with --check-map")
     if args.watch and args.dir is not None:
         parser.error(
             "--dir: not meaningful with --locate --watch, which records only to a --log FILE"

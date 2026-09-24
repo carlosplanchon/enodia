@@ -1052,6 +1052,80 @@ def test_walking_pace_is_only_meaningful_with_watch(capsys):
     )
 
 
+def ten_strong(tmp_path):
+    """A map of one place with ten networks heard at -60 dBm, and those networks by name."""
+    names = [f"Red{index}" for index in range(10)]
+    mapa = tmp_path / "mapa.jsonl"
+    row = {
+        "outing": "a",
+        "walk": "a#0",
+        "from": "Alfa",
+        "to": "Bravo",
+        "fraction": 0.5,
+        "length_m": 100.0,
+        "networks": [
+            {"ssid": name, "bssid": f"aa:bb:cc:dd:ee:{index:02x}", "signal_dbm": -60}
+            for index, name in enumerate(names)
+        ],
+    }
+    mapa.write_text(json.dumps(row) + "\n")
+    return mapa, names
+
+
+def read_at(names, dbm):
+    """What a card reading every one of them at `dbm` hears."""
+    return [
+        AccessPoint(name, f"aa:bb:cc:dd:ee:{index:02x}", 2412, dbm, None, "psk", False)
+        for index, name in enumerate(names)
+    ]
+
+
+@pytest.mark.parametrize(
+    ("dbm", "match", "says"),
+    [
+        (-66, "signal", "Calibrated against the map: this card reads 6 dB below the map's card"),
+        (-87, "signal", "This card reads 27 dB off the map's card, too far to be a card"),
+        (-66, "networks", None),
+    ],
+)
+def test_locate_watch_calibrates_the_card_against_the_map_when_levels_are_compared(
+    dbm, match, says, monkeypatch, tmp_path, capsys
+):
+    # Ten networks a scan, so three scans make the thirty pairs it needs. It is
+    # said once, when it starts correcting, and not again while it holds.
+    mapa, names = ten_strong(tmp_path)
+    watching(monkeypatch, [read_at(names, dbm) for _ in range(5)])
+    assert cli.main([*WATCH, "--map", str(mapa), "--cycles", "5", "--match", match]) == 0
+    out = capsys.readouterr().out
+    if says is None:
+        assert "card" not in out
+    else:
+        assert out.count(says) == 1
+
+
+def test_what_the_card_reads_is_said_plainly():
+    same = "Calibrated against the map: this card reads as the map's card did"
+    assert cli.card_reads(0.4) == same
+    assert cli.card_reads(4.6) == (
+        "Calibrated against the map: this card reads 5 dB above the map's card, "
+        "and is corrected for that"
+    )
+
+
+def test_the_map_check_can_hear_the_map_as_another_card_would(tmp_path, capsys):
+    log, nb, mapa = mapped(tmp_path)
+    cli.main(["--map-add", str(log), str(nb), "--map", str(mapa)])
+    capsys.readouterr()
+    assert cli.main(["--check-map", "--map", str(mapa), "--card-offset", "-6"]) == 0
+    out = " ".join(capsys.readouterr().out.split())
+    assert "heard as a card reading 6 dB lower would hear them" in out
+    assert "signal, calibrated" in out
+    with pytest.raises(SystemExit) as stopped:
+        cli.main(["--voice", "none", "--button", "off", "--card-offset", "-6"])
+    assert stopped.value.code == 2
+    assert "--card-offset: only meaningful together with --check-map" in capsys.readouterr().err
+
+
 def test_locate_watch_stops_on_ctrl_c_and_keeps_the_cadence(monkeypatch, tmp_path, capsys):
     from enodia import fingerprint
 
@@ -1144,7 +1218,7 @@ def test_weighing_every_network_alike_reaches_the_check_and_the_lookup(
 
     monkeypatch.setattr(cli, "check_map", counted)
     assert cli.main(["--check-map", "--map", str(mapa), "--weigh", "alike"]) == 0
-    assert checked == [False] * 5 and "by networks" in capsys.readouterr().out
+    assert checked == [False] * 6 and "by networks" in capsys.readouterr().out
     located = []
 
     def placed(fingerprints, scans, **kwargs):

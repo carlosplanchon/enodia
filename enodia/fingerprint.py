@@ -28,6 +28,7 @@ import json
 import os
 import stat
 import tempfile
+import textwrap
 from collections import deque
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
@@ -36,6 +37,7 @@ from datetime import datetime
 from itertools import pairwise
 from math import exp, log
 from pathlib import Path
+from statistics import median
 from typing import Any
 
 import ifpeek
@@ -1204,6 +1206,107 @@ def follow(
         yield locate_sequence(fingerprints, list(run), sequence, by_signal, by_rarity=by_rarity)
 
 
+# --- One card against another ---------------------------------------------
+
+# Learning, on the run, how far this card reads from the one that built the map
+# (`Calibration`). How sure a level-free answer must be before it teaches
+# anything, how near along its stretch a fingerprint must be to be compared
+# with the scan, how strong a pair has to be, on the mean of its two readings,
+# how many pairs make an offset and how many are kept, and past how many
+# decibels it is not a card reading differently but something else.
+CALIBRATION_SURE = 0.4
+CALIBRATION_NEAR_M = 10.0
+CALIBRATION_STRONG = -75.0
+CALIBRATION_PAIRS = 30
+CALIBRATION_KEPT = 500
+CALIBRATION_MOST_DB = 20.0
+
+
+def shifted(networks: Iterable[SeenNetwork], db: float) -> list[SeenNetwork]:
+    """The same networks, every level read `db` decibels higher.
+
+    In dBm when the backend reported it, and in the percentage otherwise, by
+    the same 0.6 dB a point that `SeenNetwork.strength` reads it with, since
+    that is the level a percentage-only reading is compared at.
+    """
+    out = []
+    for network in networks:
+        if network.signal_dbm is not None:
+            network = replace(network, signal_dbm=round(network.signal_dbm + db))
+        elif network.signal_percent is not None:
+            percent = round(network.signal_percent + db / 0.6)
+            network = replace(network, signal_percent=max(0, min(100, percent)))
+        out.append(network)
+    return out
+
+
+class Calibration:
+    """How many decibels this card reads from the card that built the map, learned on the run.
+
+    Two cards hear the same network several dB apart, and `--match signal`
+    compares levels, so a card reading six below the map's scores every place
+    as a poorer match than it is, and a street it knows comes back "not on the
+    map". The run can measure it without being told anything. Matching on which
+    networks are in view does not look at levels at all, so where that is sure
+    of the place, the levels this card heard can be set against the ones the map
+    kept there, and the median of the difference is the card's offset.
+
+    The pairs are chosen on the mean of their two readings, and not on either
+    one. Chosen on this card's reading, a card that misses its faintest networks
+    keeps only the readings that came out high, and the offset came out short of
+    the truth; chosen on the map's, the map's strong readings were partly the
+    luck of that day, which regresses on this one, and it came out long. On the
+    mean, neither side's luck decides which pairs count.
+    """
+
+    def __init__(self) -> None:
+        self.pairs: deque[float] = deque(maxlen=CALIBRATION_KEPT)
+
+    @property
+    def measured(self) -> float | None:
+        """The median difference, this card less the map's, once there are pairs enough."""
+        return median(self.pairs) if len(self.pairs) >= CALIBRATION_PAIRS else None
+
+    @property
+    def offset(self) -> float | None:
+        """What to correct by, or None: not enough pairs, or too far to be a card."""
+        found = self.measured
+        return found if found is not None and abs(found) <= CALIBRATION_MOST_DB else None
+
+    def learn(
+        self,
+        fingerprints: Sequence[Fingerprint],
+        networks: Iterable[SeenNetwork],
+        by_rarity: bool = True,
+    ) -> None:
+        """Set this scan's levels against the map's, where the map is sure where it was taken."""
+        heard = list(networks)
+        sure = locate_scan(fingerprints, heard, by_signal=False, by_rarity=by_rarity)
+        if sure is None or sure.uncertain or sure.score < CALIBRATION_SURE:
+            return
+        place = sure.place
+        near = CALIBRATION_NEAR_M / place.length_m if place.length_m else 0.1
+        beside = [
+            one
+            for one in fingerprints
+            if one.place.key == place.key and abs(one.place.fraction - place.fraction) <= near
+        ]
+        mine = {n.key: n.strength for n in heard if n.identified and n.has_signal}
+        if not beside or not mine:
+            return
+        closest = max(beside, key=lambda one: similarity(dict.fromkeys(mine), one))
+        theirs = closest.signals
+        for key, level in mine.items():
+            other = theirs.get(key)
+            if other is not None and (level + other) / 2 >= CALIBRATION_STRONG:
+                self.pairs.append(level - other)
+
+    def correct(self, networks: Iterable[SeenNetwork]) -> list[SeenNetwork]:
+        """The networks at the levels the map's card would have read them at."""
+        offset = self.offset
+        return list(networks) if offset is None else shifted(networks, -offset)
+
+
 def format_location(location: Location | None, map_path: str | Path) -> str:
     """Human-readable answer to "where am I"."""
     if location is None:
@@ -1352,6 +1455,7 @@ class HeldOutScan:
     across_mark: bool = False
     when: float | None = None  # seconds, for how fast the answers moved
     group: str = ""  # what was held out with it, so a step is only ever inside one run
+    corrected_db: float | None = None  # what the run's calibration corrected its levels by
 
     @property
     def abstained(self) -> bool:
@@ -1468,6 +1572,8 @@ def check_map(
     sequence: str | None = None,
     by_rarity: bool = True,
     keep_pace: bool = False,
+    calibrate: bool = False,
+    card_offset: float = 0.0,
 ) -> list[HeldOutScan]:
     """Hold out one outing at a time, or one walk when there is only one, and locate its scans.
 
@@ -1496,6 +1602,13 @@ def check_map(
     `keep_pace` runs the group the way `--locate --watch` runs a walk: ties
     settled by the scans before, and each answer kept to a walking pace by
     `Pace`, on the clock of the scans themselves.
+
+    `card_offset` hears every held-out scan as a card reading that many dB
+    higher would, in every way of matching, which is what another card costs
+    each of them. `calibrate` then learns the offset back on the run, the way
+    `--locate --watch --match signal` does: one `Calibration` for each outing
+    held out, which is one run, or one for the whole map when what is held out
+    is the passes of a single outing, since those are one run too.
     """
     by_outing = _by_outing(fingerprints)
     groups: dict[str, list[Fingerprint]] = {}
@@ -1504,20 +1617,31 @@ def check_map(
     if len(groups) < 2:
         return []
     results = []
+    calibration = Calibration() if calibrate else None
     for key, held in groups.items():
         rest = [one for one in fingerprints if (one.outing if by_outing else one.walk) != key]
         pace = Pace.of(rest) if keep_pace else None
+        if calibrate and by_outing:
+            calibration = Calibration()
+        heard: list[list[SeenNetwork]] = []
         for index, one in enumerate(held):
+            scan = shifted(one.networks, card_offset) if card_offset else list(one.networks)
+            corrected = None
+            if calibration is not None:
+                calibration.learn(rest, scan, by_rarity)
+                corrected = calibration.offset
+                scan = calibration.correct(scan)
+            heard.append(scan)
             if sequence is None and pace is None:
-                found = locate_scan(rest, one.networks, by_signal, by_rarity=by_rarity)
+                found = locate_scan(rest, scan, by_signal, by_rarity=by_rarity)
             else:
-                run = [earlier.networks for earlier in held[max(0, index - LOOK_BACK) : index + 1]]
+                run = heard[max(0, index - LOOK_BACK) : index + 1]
                 how = sequence or "tie"
                 found = locate_sequence(rest, run, how, by_signal, by_rarity=by_rarity)
             if pace is not None:
                 # A scan without a time is taken to be one cycle after the last.
                 found = pace.keep(found, one.time.timestamp() if one.time else index * 5.0)
-            results.append(_measure(one, found, key))
+            results.append(replace(_measure(one, found, key), corrected_db=corrected))
     return results
 
 
@@ -1589,6 +1713,15 @@ def _column(results: Sequence[HeldOutScan]) -> tuple[list[str], int, int]:
     return rows, len(fractions), len(metres)
 
 
+def _learned(calibrated: Sequence[HeldOutScan]) -> str:
+    """What the run's calibration did, to end the sentence that explains the column."""
+    applied = [one.corrected_db for one in calibrated if one.corrected_db is not None]
+    if not applied:
+        return ": here it never had pairs enough to correct anything."
+    corrected = f"{len(applied)} of {len(calibrated)} scans, by {median(applied):+.1f} dB"
+    return f": here it corrected {corrected}."
+
+
 def format_map_check(
     fingerprints: Sequence[Fingerprint],
     by_networks: Sequence[HeldOutScan],
@@ -1596,6 +1729,8 @@ def format_map_check(
     settling_ties: Sequence[HeldOutScan],
     choosing_path: Sequence[HeldOutScan],
     keeping_pace: Sequence[HeldOutScan],
+    calibrated: Sequence[HeldOutScan],
+    card_offset: float = 0.0,
 ) -> str:
     """Human-readable verdict on how well the map locates a walk it has not seen."""
     if not by_networks:
@@ -1618,44 +1753,51 @@ def format_map_check(
     ]
     left, placed, measured = _column(by_networks)
     right, _, _ = _column(by_signal)
+    corrected, _, _ = _column(calibrated)
     ties, _, _ = _column(settling_ties)
     path, _, _ = _column(choosing_path)
     pace, _, _ = _column(keeping_pace)
     counted = map_summary(fingerprints)
+    heard = ""
+    if card_offset:
+        way = "higher" if card_offset > 0 else "lower"
+        heard = f", heard as a card reading {abs(card_offset):g} dB {way} would hear them,"
     held = (
-        "Each outing held out in turn, and its scans located from the other outings:"
+        f"Each outing held out in turn, and its scans{heard} located from the other outings:"
         if _by_outing(fingerprints)
-        else "Each walk held out in turn, and its scans located from the rest of the map:"
+        else f"Each walk held out in turn, and its scans{heard} located from the rest of the map:"
     )
     lines = [
         counted.describe(),
         "",
-        held,
+        textwrap.fill(held, 90),
         "",
         (
-            f"  {'':<28}{'by networks':>13}{'and by signal':>15}"
+            f"  {'':<28}{'by networks':>13}{'and by signal':>15}{'signal, calibrated':>20}"
             f"{'settling ties':>15}{'choosing the path':>18}{'at a walking pace':>19}"
         ),
     ]
     lines += [
-        f"  {label:<28}{one:>13}{other:>15}{tie:>15}{run:>18}{kept:>19}"
-        for label, one, other, tie, run, kept in zip(
-            labels, left, right, ties, path, pace, strict=True
+        f"  {label:<28}{one:>13}{other:>15}{fixed:>20}{tie:>15}{run:>18}{kept:>19}"
+        for label, one, other, fixed, tie, run, kept in zip(
+            labels, left, right, corrected, ties, path, pace, strict=True
         )
     ]
     lines.append("")
-    lines.append(
-        "  A scan that landed on the wrong stretch is not a small error, it is a "
-        "different street,\n  so it is counted apart rather than averaged into the distances. "
-        "One placed across a mark\n  is on the stretch next door, a few metres past the mark the "
-        "two share, and its error is\n  measured through that mark. Settling ties places each scan "
-        "with the scans before it\n  breaking a tie between two stretches. Choosing the path takes "
-        "the likeliest path through\n  them, which can overrule the scan itself. At a walking "
-        "pace settles ties and keeps\n  each answer's place along the stretch to a walk's "
-        "speed, as --locate --watch does.\n  Moved faster than a walk counts the steps between "
-        "two answers in a row on the right\n  stretch that nobody walks in the seconds between "
-        "them."
+    explained = (
+        "A scan that landed on the wrong stretch is not a small error, it is a different "
+        "street, so it is counted apart rather than averaged into the distances. One placed "
+        "across a mark is on the stretch next door, a few metres past the mark the two share, "
+        "and its error is measured through that mark. Signal, calibrated compares levels "
+        "after correcting the card by what it learns on the run, as --locate --watch --match "
+        f"signal does{_learned(calibrated)} Settling ties places each scan with the scans "
+        "before it breaking a tie between two stretches. Choosing the path takes the "
+        "likeliest path through them, which can overrule the scan itself. At a walking pace "
+        "settles ties and keeps each answer's place along the stretch to a walk's speed, as "
+        "--locate --watch does. Moved faster than a walk counts the steps between two answers "
+        "in a row on the right stretch that nobody walks in the seconds between them."
     )
+    lines.append(textwrap.fill(explained, 90, initial_indent="  ", subsequent_indent="  "))
     names = [name for one in fingerprints for name in one.place.stretch]
     confusable = format_confusable(confusable_crossings(names))
     if confusable:

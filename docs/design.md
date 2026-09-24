@@ -21,6 +21,7 @@ one feature with somebody else's privacy on the line and its decisions fill a pa
 | how a scan that could be at either of two corners is placed | *A tie is settled by the walk, not by the scan* |
 | why the live answer moves at a walk and not scan by scan | *A walk has a pace* |
 | why an answer says it is at a corner | *A corner is somewhere too* |
+| how another card is calibrated against the map on the run | *Two cards hear one street differently* |
 | what `--sequence path` does, and what it costs | *The path or the point, and why it is a flag* |
 | what `--check-map` holds out, and what a scan placed across a mark is | *A scan at a mark is on two stretches* |
 | why a block came out on the chord with the street drawn | *A street is more than one way* |
@@ -194,6 +195,41 @@ meet at the corner an answer is at, tied, are not a doubt about where you are, a
 corner of "B", uncertain` said a thing and took it back. They are no longer reported as a tie.
 It is rare, none on the sample and 9 of 75 uncertain answers on the real outing at walking pace,
 and it is the case where the old report contradicted itself.
+
+## Two cards hear one street differently
+
+Two cards hear the same network several dB apart, and `--match signal` compares levels: six
+decibels multiply every similarity by 0.55, `exp(-6/10)`, and a street the map knows comes back
+"not on the map". Matching on which networks are in view looks at no levels at all, so a card's
+offset changes nothing there, not one answer on either map; nor does it move an access point,
+since the reconciliation's weights are normalised and a constant offset cancels out.
+
+The offset can be learned on the run without being told anything, because the level-free
+matching already knows where you are. Wherever it is sure, the levels this card heard are set
+against the ones the map kept at that spot, and the median of the difference is the offset.
+Which pairs to count is where it went wrong twice. Chosen on this card's reading, a card that
+misses its faintest networks keeps only the readings that came out high, and the offset came out
+short, 3 and 5 dB for a card 6 dB low. Chosen on the map's reading, the map's strong readings
+were partly the luck of that day, which regresses on this one, and it came out long, 8 and 9 dB,
+and 1.5 and 4 for the very card that built the map. Chosen on the mean of the two, neither
+side's luck decides which pairs count, and it came out right. On the first real outing, held out
+as `--check-map --card-offset` holds it, by signal:
+
+| the card | by signal, as it reads | calibrated on the run | learned |
+|---|---|---|---|
+| the one that built the map | 63 / 35 / 37 m | 63 / 34 / 37 m | +0.0 dB |
+| reading 6 dB higher | 64 / 66 / 35 m | 63 / 34 / 37 m | +6.0 dB |
+| reading 6 dB lower | 64 / 76 / 36 m | 63 / 34 / 37 m | -6.0 dB |
+
+On the right stretch, not on the map, and the mean error. Calibrated, the three cards come out
+the same, and the map's own card is left where it was. It takes thirty pairs, the first half
+minute of a walk.
+
+Two things were tried and left out. A card that is deafer than the map's misses networks the map
+has, and ignoring the map's networks below what this card can hear helped one map and hurt the
+other, the sample's error going from 27 to 30 m: not a correction yet. And the offset is not
+kept between runs, since it is against the card that built this map and is wrong for any other,
+and learning it again costs half a minute.
 
 ## The path or the point, and why it is a flag
 
