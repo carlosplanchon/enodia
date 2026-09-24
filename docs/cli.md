@@ -209,11 +209,12 @@ the page reloads itself every `--interval`. An answer the scans could not settle
 another colour, and when the map loses you the last place it knew stays greyed. `--streets` adds
 the streets, and whatever `--surroundings` brought: the water, the parks and every named street.
 It needs a map whose fingerprints carry coordinates, which is one built from a notebook that
-`--geocode` has been through. The mouse wheel zooms where the pointer is, a drag moves the view,
-and the buttons zoom in, out, back to the whole map, or follow you: zoomed in, each reload keeps
-you in the middle until you drag the map away. The keys `+`, `-`, `0` and `f` do the same. The
-zoom is kept in the page's address, `live.html#x,y,width`, which is how it lasts from one reload
-to the next.
+`--geocode` has been through. A `--streets` file that is not there is an error, as a missing map
+is, and not a page quietly drawn with no streets. The mouse wheel zooms where the pointer is, a
+drag moves the view, and the buttons zoom in, out, back to the whole map, or follow you: zoomed
+in, each reload keeps you in the middle until you drag the map away. The keys `+`, `-`, `0` and
+`f` do the same. The zoom is kept in the page's address, `live.html#x,y,width`, which is how it
+lasts from one reload to the next.
 
 `--sequence tie` is that, and the default. `--sequence path` asks the scans before it every
 time, not only on a tie: it chooses the likeliest path through all of them, staying on a stretch

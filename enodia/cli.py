@@ -621,6 +621,19 @@ def run_watch(
         if not mapped_places(known):
             print(f"error: {map_file}: no coordinates to draw", file=sys.stderr)
             return 1
+        # A streets file that is not there is an error here, and not an empty
+        # drawing. `read_streets` calls a missing file no geometry, because
+        # `--geocode --streets` names it before writing it, but a live map
+        # asked to draw the streets and drawing none said nothing: a path with
+        # a typo in it, or a file never copied to this machine, gave a page of
+        # grey dots and no reason why.
+        if args.streets is not None and not Path(args.streets).exists():
+            print(
+                f"error: {args.streets}: no such streets file. --geocode --streets writes one, "
+                "and without --streets the live map is drawn with no streets at all.",
+                file=sys.stderr,
+            )
+            return 1
         try:
             drawn = walked_streets(args.streets)
         except OSError as exc:

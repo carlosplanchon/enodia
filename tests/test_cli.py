@@ -969,6 +969,21 @@ def test_a_live_map_needs_a_map_that_knows_where_it_was_taken(tmp_path, capsys):
     assert f"error: {mapa}: no coordinates to draw" in capsys.readouterr().err
 
 
+def test_a_live_map_refuses_a_streets_file_that_is_not_there_before_touching_the_radio(
+    tmp_path, capsys
+):
+    # Drawn with no streets, and no word about why, was what a typo in the path
+    # or a file never copied to the machine gave. The radio is never asked: the
+    # suite refuses it, so reaching it would fail this test another way.
+    mapa = placed_streets(tmp_path)
+    missing = tmp_path / "calles.jsonl"
+    flags = ["--map", str(mapa), "--live-map", str(tmp_path / "vivo.html")]
+    assert cli.main([*WATCH, *flags, "--streets", str(missing)]) == 1
+    err = capsys.readouterr().err
+    assert f"error: {missing}: no such streets file" in err
+    assert not (tmp_path / "vivo.html").exists()
+
+
 def test_a_live_map_stops_on_streets_it_cannot_read_or_a_page_it_cannot_write(
     monkeypatch, tmp_path, capsys
 ):
