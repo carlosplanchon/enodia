@@ -2,7 +2,7 @@
 
 # Enodia
 
-*Wardriving on foot, without GPS. A talking Wi-Fi scanner, a paper notebook, and a map built from your own walks.*
+**Know where you are in a city from its Wi-Fi alone. No GPS, no location service: a map you walked yourself.**
 
 [![tests](https://github.com/carlosplanchon/enodia/actions/workflows/tests.yml/badge.svg)](https://github.com/carlosplanchon/enodia/actions/workflows/tests.yml)
 [![PyPI version](https://img.shields.io/pypi/v/enodia.svg)](https://pypi.org/project/enodia/)
@@ -10,46 +10,29 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/carlosplanchon/enodia)
 
-## Why Enodia?
+Enodia turns a Linux laptop in a backpack into a Wi-Fi scanner that talks. You walk, and it logs every network in reach and tells you through your headphones what changes. At each corner you press the headset button and write the corner down. Back home, Enodia lines the two up: every scan gets its place along your route, every router an estimated position, and the walk becomes a map. Walk those streets again and it tells you where you are, as you go.
 
-The city is full of radios. Enodia uses them as landmarks.
+It all runs on your machine. The one command that goes online looks your corners up on OpenStreetMap, and only when you ask it to.
 
-Walk down a street and networks appear, signals grow stronger, fade and disappear. A Linux laptop in your backpack records that changing landscape and speaks through your headphones.
+![A real walk in Dolores, Uruguay: 31 blocks and 39 corners, and where each of 652 access points probably stands, drawn over the neighbourhood from OpenStreetMap.](https://raw.githubusercontent.com/carlosplanchon/enodia/main/samples/dolores/dolores-plan.svg)
 
-At each crossing, press the headset button: "Mark 1." "Mark 2." Write the crossing beside the mark number in a paper notebook. Without a button, write the crossing and the time you hear instead. The log keeps the moment. The notebook gives it a place.
+*A real walk, published in [`samples/dolores/`](samples/dolores/README.md) with every network pseudonymised: the route, the corners marked along it, and where each access point probably stands. A dot is a router the walk pinned down, a ring one it only heard from around there.*
 
-Back home, Enodia joins the two: scans placed along your route, estimates of where access points stand, and fingerprints you can keep. Walk there again and a new scan can tell you where you are: between these crossings, this far along.
+## What it does
 
-No GNSS receiver and no external geolocation database: position comes from a radio map you walked yourself. Everything else follows, and runs offline.
+- **Records a walk by ear.** A scan every five seconds, every network logged with its signal, and the news in your headphones: "New network found", "Mark 3". Nothing to look at while you walk.
+- **Places everything along your route.** It joins the log with the corners you noted, places each scan between two of them, and estimates where each router stands. Out come a plan in SVG, a table in CSV and the walk in GeoJSON.
+- **Builds a map from your walks** and tells you where a scan was taken: `between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 53% of the way`, or `at the corner of "Rivera y Brito del Pino"`.
+- **Follows you live.** `--locate --watch` scans as you walk, says where you are when it changes, and draws you on a page that reloads itself, over the streets, the water and the parks, with no connection.
+- **Checks itself.** Each estimate has a command that measures it against the walk: a corner held out and placed again, a block walked twice set against itself, a pass held out and found again from the rest of the map.
 
-![Enodia: a walked route, numbered street crossings and radio observations across four city blocks.](https://raw.githubusercontent.com/carlosplanchon/enodia/main/assets/enodia_banner.jpg)
+## Try it now
 
-## Get started
-
-You need Linux, Python 3.10+, and a Wi-Fi interface managed by iwd, NetworkManager or wpa_supplicant, with permission to scan through D-Bus. For speech, install `espeak-ng` or SVOX Pico. Without a voice engine, Enodia prints its announcements.
-
-Install it as a command with [uv](https://docs.astral.sh/uv/):
-
-```bash
-uv tool install enodia
-```
-
-`uv tool upgrade enodia` follows new releases, and `uvx enodia --help` runs it once without installing anything. `--geocode --proxy` needs the `socks` extra: `uv tool install "enodia[socks]"`. From a clone of the repository, `uv sync` and then `uv run enodia` do the same as `enodia` below.
-
-For a guided terminal menu covering the whole workflow:
+From a clone of the repository, with no Wi-Fi card involved:
 
 ```bash
-enodia --assistant
-```
-
-Before walking, follow [machine setup](docs/setup.md) to keep the laptop awake with its lid closed and enable the headset button.
-
-## See it work
-
-Try the bundled example, from a clone of the repository, without scanning any radios:
-
-```bash
-enodia --locate samples/synthetic_montevideo/rivera-query.jsonl \
+uv sync
+uv run enodia --locate samples/synthetic_montevideo/rivera-query.jsonl \
   --map samples/synthetic_montevideo/rivera-map.jsonl --voice none
 ```
 
@@ -60,77 +43,87 @@ You are between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 53% of
   from evidence last gathered 2026-09-17 17:02
 ```
 
-The street names, coordinates and geometry are real OpenStreetMap data. The radio observations are synthetic. This demonstrates the workflow, not measured accuracy on a real walk. [Inputs and reproduction commands](samples/synthetic_montevideo/README.md).
+That one is synthetic: real streets of Montevideo, invented radios, made to show the workflow ([how it was made](samples/synthetic_montevideo/README.md)). The walk in Dolores is real. To see how well its map finds its own passes, which takes about two minutes:
+
+```bash
+uv run enodia --check-map --map samples/dolores/dolores-map.jsonl
+```
+
+## Install
+
+You need Linux, Python 3.10 or newer, and a Wi-Fi interface run by iwd, NetworkManager or wpa_supplicant that you may scan with over D-Bus. For the voice, `espeak-ng` or SVOX Pico. Without either, Enodia prints what it would have said.
+
+```bash
+uv tool install enodia
+```
+
+`uv tool upgrade enodia` follows new releases. The proxy support of `--geocode` needs the `socks` extra: `uv tool install "enodia[socks]"`. Before the first walk, [set up the machine](docs/setup.md) so that it keeps scanning with the lid closed and hears the headset button.
 
 ## Your first walk
 
-**1. Check the machine, then start a short outing.**
+**1. Check the machine, then walk.**
 
 ```bash
 enodia --preflight --log walk.jsonl
-enodia --say-status --log walk.jsonl
+enodia --log walk.jsonl
 ```
 
-Resolve preflight failures before leaving. Check that you hear announcements with the lid closed. Use a new log filename for each outing.
+Press the headset button at every corner, the first and the last included. Enodia answers "Mark 1", "Mark 2" and so on. Two or three blocks are enough for a first try. Ctrl+C ends the walk.
 
-**2. Mark the crossings.**
-
-Mark the first crossing, each crossing along the way, and the last one. Write each name beside its announced mark number, or beside the spoken time if you have no button. Two or three blocks are enough to try the whole process. Press Ctrl+C when you finish.
-
-**3. Transcribe the notebook into `notebook.txt`.**
+**2. Write the corners down** in `notebook.txt`, one line per mark:
 
 ```text
 #1 Rivera y Avenida Doctor Francisco Soca
 #2 Rivera y Brito del Pino
 ```
 
-`#1` means button mark 1. For timed notes, replace it with a time such as `17:45:00`. Keep crossing names consistent between outings.
+Without a button, write the time instead of the mark: `17:45:00 Rivera y Brito del Pino`.
 
-Coordinates are optional: append `@ latitude, longitude` after a crossing name. Without them, positions are fractions of the stretch between two crossings.
-
-**4. Reconcile the walk and add it to your map.**
+**3. Put the walk on the map.**
 
 ```bash
-enodia --reconcile walk.jsonl notebook.txt
-enodia --map-add walk.jsonl notebook.txt
+enodia --geocode notebook.txt --area Montevideo --streets streets.jsonl --surroundings
+enodia --reconcile walk.jsonl notebook.geo.txt --streets streets.jsonl --svg plan.svg
+enodia --map-add walk.jsonl notebook.geo.txt --streets streets.jsonl
 ```
 
-Reconciliation places scans between crossings and estimates access-point positions. Adding the walk to the map keeps its scans as fingerprints.
+`--geocode` looks the corners up on OpenStreetMap and writes `notebook.geo.txt` beside the notebook, with the streets and the neighbourhood into `streets.jsonl`. It is optional: without coordinates, every place is a fraction of the way between two corners.
 
-On a later visit, ask where you are, once or as you walk:
+**4. Come back, and find yourself.**
 
 ```bash
-enodia --locate
-enodia --locate --watch
-enodia --locate --watch --live-map live.html --streets streets.jsonl   # and see it on a map
+enodia --locate --watch --streets streets.jsonl --live-map live.html
 ```
 
-## Go further
+Open `live.html` in a browser once and leave it open. `enodia --assistant` is a menu for the same steps, the lookup aside: the walk, the reconciliation, the map and finding yourself.
 
-- **Draw the route.** Add coordinates by hand or look up crossings with `--geocode`. Use `--streets` for street geometry and export with `--csv`, `--geojson` or `--svg`. Geocoding is the only command that accesses the internet, and it supports an explicit proxy.
-- **Check the estimates.** `--check-pace` compares inferred movement with the clock, `--check-passes` compares repeated passes, and `--check-map` holds out each outing in turn to test localisation.
-- **Share an outing.** `--export-public` produces a pseudonymised log and notebook. Review both before publishing. Stable fingerprints and route geometry can still identify a place. [Publishing a walk](docs/export.md) says what the export promises and what it cannot.
+## How good is it?
 
-See the [CLI reference](docs/cli.md) for command syntax and options.
+One real walk so far. It is in the repository, so the first three numbers can be run again. The fourth comes from walking the same streets with Enodia the next day.
+
+- **The corners.** Held out one at a time and placed again from the walk alone, they land 9 m from where they were on average, and 4 m with `--pace clock` (`--check-pace`).
+- **The routers.** Seven blocks walked twice place the same networks within 16% of a block of each other on average (`--check-passes`).
+- **Finding yourself.** A pass held out and located from the rest of the map lands 38 m from where it was on average (`--check-map`). Most of those answers are on the block next door, because most blocks were walked once and holding that pass out left nothing on them. The experimental `--along levels` brings it to 33 m.
+- **In the street.** Walking with `--locate --watch`, matching on which networks are in view lost no scan on streets the map knows. Matching on their signal strength too lost a third of them, and it is not the default.
+
+A second walk over the same streets, on another day, is the measurement that settles these. [The methodology](docs/methodology.md) says what each check can and cannot tell you.
 
 ## Limits
 
-Enodia is experimental. Field use so far covers one real outing. Its pace, access-point and localisation estimates are tested on synthetic observations, and their accuracy on real streets remains to be established.
-
-Enodia has no GPS on purpose. The question is whether a self-built Wi-Fi map can give a position on its own, and a receiver in the loop answers it by making the radio a second opinion. Where GPS does belong is as ground truth: coordinates can be written into the notebook beside any crossing (`@ -34.9066, -56.2001`) before reconciling, and `--check-pace` then measures the estimates against them in metres.
-
-The map covers places you have already walked and ages as routers move or disappear. A map recognising the same outing it was built from proves little. Access-point positions are estimates, and scans follow straight lines between crossings unless you supply street geometry.
-
-Fresh Wi-Fi scans send probe requests. `--preflight` checks scan-address randomisation settings but does not change them. Logs and maps contain network identifiers and location information.
+- The map knows the streets you walked, and it ages as routers move or disappear.
+- Positions are estimates, and the report says how far to trust each one. A router the walk only heard from around there is drawn as a ring, never as a dot.
+- Enodia has no GPS on purpose: the question is whether a map of radios can place you by itself, and a receiver in the loop would answer it for the radio. GPS belongs as ground truth, written beside a corner in the notebook (`@ -34.9066, -56.2001`).
+- Fresh scans send probe requests. `--preflight` checks that the scanning address is randomised, and changes nothing.
+- Logs and maps hold your neighbours' network names and addresses, and where they are. [`--export-public`](docs/export.md) makes a copy you can publish, and says what it cannot hide.
 
 ## Documentation
 
-- [Machine setup](docs/setup.md): the lid, the Wi-Fi daemon, the voice and headset permissions.
+- [Machine setup](docs/setup.md): the lid, the Wi-Fi daemon, the voice, the headset button.
 - [CLI reference](docs/cli.md): every flag, by the command you reach for it with.
-- [File formats](docs/formats.md): the notebook you write and the log Enodia writes.
-- [Methodology](docs/methodology.md): positioning, fingerprints and what the self-checks measure.
-- [Design notes](docs/design.md): engineering decisions and the failure behind each one.
-- [Publishing a walk](docs/export.md): what `--export-public` promises, and the three things it cannot.
+- [File formats](docs/formats.md): the notebook you write, and the log and streets files Enodia writes.
+- [Methodology](docs/methodology.md): how scans, routers and fingerprints are placed, and what each check measures.
+- [Design notes](docs/design.md): each decision, and the failure behind it.
+- [Publishing a walk](docs/export.md): what `--export-public` promises, and what it cannot.
 - [From Python](docs/library.md): the same operations as function calls.
 
 ## License
