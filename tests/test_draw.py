@@ -5,7 +5,19 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from enodia.draw import DARK_RULES, HERE, LOST, UNSURE, WATER, Frame, live_map, svg_map
+from enodia.draw import (
+    DARK_FINGERPRINT,
+    DARK_RULES,
+    FINGERPRINT,
+    HERE,
+    LOST,
+    STATES,
+    UNSURE,
+    WATER,
+    Frame,
+    live_map,
+    svg_map,
+)
 from enodia.fingerprint import Fingerprint, Location, Place
 from enodia.netlog import LogRecord, SeenNetwork
 from enodia.reconcile import Estimate, PlacedNetwork, PlacedScan, Position, Reconciliation, Waypoint
@@ -353,6 +365,15 @@ def test_lost_the_page_keeps_the_last_place_it_knew_greyed_and_a_trail_behind():
     assert page.count("<line") - 1 == 3  # three steps of trail, and the scale bar
     empty = live_map(fingerprints(), None, [], "not on the map")
     assert 'r="7"' not in empty
+
+
+def test_the_maps_fingerprints_are_in_a_colour_no_answer_is_drawn_in():
+    # Grey was also the colour of an answer that lost you, and the dot saying
+    # so looked like one more of the map's.
+    page = live_map(fingerprints(), None, [HERE_NOW], "not on the map")
+    assert page.count(f'r="1.6" fill="{FINGERPRINT}"') == 5
+    answers = {colour for light_and_dark in STATES.values() for colour in light_and_dark}
+    assert FINGERPRINT not in answers and DARK_FINGERPRINT not in answers
 
 
 def test_the_live_map_draws_the_neighbourhood_and_credits_it():

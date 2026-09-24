@@ -104,7 +104,7 @@ enodia --locate --watch --streets streets.jsonl --live-map live.html
 
 Open `live.html` in a browser once and leave it open. `enodia --assistant` is a menu for the same steps, the lookup aside: the walk, the reconciliation, the map and finding yourself.
 
-![The live map in a browser: where the scan puts you on Carlos María Solari, the last answers fading behind it, the map's own fingerprints as grey dots, and the streets named.](https://raw.githubusercontent.com/carlosplanchon/enodia/main/assets/enodia_live.png)
+![The live map in a browser: where the scan puts you on Carlos María Solari, the last answers fading behind it, the map's own fingerprints as violet dots, and the streets named.](https://raw.githubusercontent.com/carlosplanchon/enodia/main/assets/enodia_live.png)
 
 *The live map, zoomed in with Follow me.*
 

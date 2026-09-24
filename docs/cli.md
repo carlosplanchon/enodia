@@ -203,18 +203,20 @@ enodia --locate --watch --live-map live.html --streets streets.jsonl
 ```
 
 `--live-map FILE` draws the same run: every cycle it writes a page with the map's own
-fingerprints as grey dots, where you are as a large one with your last few answers fading behind
-it, and the line the terminal printed on top. Open it once in a browser and leave it open, since
-the page reloads itself every `--interval`. An answer the scans could not settle is drawn in
-another colour, and when the map loses you the last place it knew stays greyed. `--streets` adds
-the streets, and whatever `--surroundings` brought: the water, the parks and every named street.
-It needs a map whose fingerprints carry coordinates, which is one built from a notebook that
-`--geocode` has been through. A `--streets` file that is not there is an error, as a missing map
-is, and not a page quietly drawn with no streets. The mouse wheel zooms where the pointer is, a
-drag moves the view, and the buttons zoom in, out, back to the whole map, or follow you: zoomed
-in, each reload keeps you in the middle until you drag the map away. The keys `+`, `-`, `0` and
-`f` do the same. The zoom is kept in the page's address, `live.html#x,y,width`, which is how it
-lasts from one reload to the next.
+fingerprints as violet dots, where you are as a large one with your last few answers fading
+behind it, and the line the terminal printed on top. Open it once in a browser and leave it
+open, since the page reloads itself every `--interval`. An answer the scans could not settle is
+drawn in another colour, and when the map loses you the last place it knew stays greyed.
+`--streets` adds the streets, and whatever `--surroundings` brought: the water, the parks and
+every named street. It needs a map whose fingerprints carry coordinates, which is one built from
+a notebook that `--geocode` has been through. A `--streets` file that is not there is an error,
+as a missing map is, and not a page quietly drawn with no streets. The mouse wheel zooms where
+the pointer is, a drag moves the view, and the buttons zoom in, out, back to the whole map, or
+follow you: zoomed in, each reload keeps you in the middle until you drag the map away. The keys
+`+`, `-`, `0` and `f` do the same. The page is light or dark as the system is. The Dark or Light
+button, or the key `t`, turns it to the other and keeps it there. The zoom and the theme are
+kept in the page's address, `live.html#view=x,y,width&follow&theme=dark`, which is how they last
+from one reload to the next.
 
 `--sequence tie` is that, and the default. `--sequence path` asks the scans before it every
 time, not only on a tie: it chooses the likeliest path through all of them, staying on a stretch

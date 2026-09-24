@@ -53,6 +53,9 @@ LABEL = "#6b645b"
 HERE = "#1a6b8a"
 UNSURE = "#c98a12"
 LOST = "#9a9186"
+# The map's own fingerprints on the live map, in a colour no answer is drawn in:
+# grey was already that of an answer that lost you.
+FINGERPRINT = "#a08cd6"
 # One name of a street per this many metres of it, at most. A grid of blocks is
 # a hundred metres a side, and a name on every one of them is a pattern, not a
 # label.
@@ -74,7 +77,7 @@ DARK_STREET_EDGE = "#4b535d"
 DARK_WATER = "#1d3d4f"
 DARK_PARK = "#1e3527"
 DARK_LABEL = "#9aa4ae"
-DARK_LOOSE = "#6e7781"
+DARK_FINGERPRINT = "#a597cf"
 DARK_HERE = "#4aa3df"
 DARK_UNSURE = "#e0a33a"
 DARK_LOST = "#7d8590"
@@ -111,7 +114,7 @@ DARK_RULES = (
     (".label", f"fill: {DARK_LABEL};"),
     ("line.scale", f"stroke: {DARK_CROSSING};"),
     ("text.scale", f"fill: {DARK_CROSSING};"),
-    (".fingerprint", f"fill: {DARK_LOOSE};"),
+    (".fingerprint", f"fill: {DARK_FINGERPRINT};"),
     (".trail", f"stroke: {DARK_HERE};"),
     (".you", f"stroke: {DARK_PAPER};"),
     *(
@@ -624,7 +627,7 @@ def live_map(
 ) -> str:
     """One moment of `--locate --watch`, as a page that reloads itself every interval.
 
-    The map's own fingerprints are the grey dots, the streets the walk put on
+    The map's own fingerprints are the violet dots, the streets the walk put on
     it, and where the last scan puts you is the large one, with the last few
     answers fading behind it. An answer the scan could not settle between two
     stretches is drawn in another colour, and with the ring of how far apart
@@ -658,7 +661,7 @@ def live_map(
         out += _background(frame, streets)
     out += [
         f'<circle class="fingerprint" cx="{frame.x(lon):.1f}" cy="{frame.y(lat):.1f}" r="1.6" '
-        f'fill="{LOOSE}"/>'
+        f'fill="{FINGERPRINT}"/>'
         for lat, lon in places
     ]
     for index in range(len(shown) - 1):

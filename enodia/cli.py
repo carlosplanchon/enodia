@@ -626,7 +626,7 @@ def run_watch(
         # `--geocode --streets` names it before writing it, but a live map
         # asked to draw the streets and drawing none said nothing: a path with
         # a typo in it, or a file never copied to this machine, gave a page of
-        # grey dots and no reason why.
+        # dots on nothing and no reason why.
         if args.streets is not None and not Path(args.streets).exists():
             print(
                 f"error: {args.streets}: no such streets file. --geocode --streets writes one, "
