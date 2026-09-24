@@ -106,7 +106,7 @@ Open `live.html` in a browser once and leave it open. `enodia --assistant` is a 
 
 ![The live map in a browser: where the scan puts you on Carlos María Solari, the last answers fading behind it, the map's own fingerprints as grey dots, and the streets named.](https://raw.githubusercontent.com/carlosplanchon/enodia/main/assets/enodia_live.png)
 
-*The live map, zoomed in with Follow me, during a replay of the walk in `samples/dolores/` against its own map. It shows what the page looks like, not how exact it is.*
+*The live map, zoomed in with Follow me.*
 
 ## How good is it?
 
