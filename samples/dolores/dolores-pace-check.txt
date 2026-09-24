@@ -1,0 +1,42 @@
+Crossings held out, and how far along the walk each method put the nearest scan from them:
+  crossing                            by movement   by clock
+  Juan Zorrilla de San Martín y José         15 m        0 m
+  Juan Zorrilla de San Martín y José          4 m        2 m
+  Juan Zorrilla de San Martín y Carl          1 m        2 m  <-
+  Juan Zorrilla de San Martín y Grit          4 m        3 m
+  Treinta y Tres Orientales, Grito d          4 m        6 m  <-
+  Treinta y Tres Orientales, Carlos           7 m        7 m  <-
+  Treinta y Tres Orientales, José Pe          2 m        4 m  <-
+  Treinta y Tres Orientales, José Bo          6 m        0 m
+  Treinta y Tres Orientales, Santiag          6 m        3 m
+  Carlos María Solari y Santiago Gad          3 m        7 m  <-
+  Carlos María Solari y José Bonifac         15 m        2 m
+  Carlos María Solari y José Pedro V         10 m        7 m
+  Carlos María Solari y Carlos P. Pu         13 m        1 m
+  Carlos María Solari y Grito de Ase         13 m        4 m
+  Río Negro y Grito de Asencio                9 m        2 m
+  Río Negro y Carlos P. Puig                  6 m        5 m
+  Río Negro y José Pedro Varela               0 m        2 m  <-
+  Río Negro y José Bonifacio Redruel          7 m        5 m
+  Río Negro y Santiago Gadea                 12 m        1 m
+  Carlos María Solari y Santiago Gad         16 m        4 m
+  Treinta y Tres Orientales, Santiag          9 m        1 m
+  Juan Zorrilla de San Martín y Sant          3 m        4 m  <-
+  Juan Zorrilla de San Martín y José          7 m        3 m
+  Treinta y Tres Orientales, José Bo         21 m        0 m
+  Carlos María Solari y José Bonifac         21 m        0 m
+  Río Negro y José Bonifacio Redruel          5 m        7 m  <-
+  Río Negro y José Pedro Varela               9 m        5 m
+  Carlos María Solari y José Pedro V          1 m        5 m  <-
+  Treinta y Tres Orientales, José Pe         10 m        4 m
+  Juan Zorrilla de San Martín y José          4 m        5 m  <-
+  Juan Zorrilla de San Martín y Carl          5 m        1 m
+  Treinta y Tres Orientales, Carlos          11 m        3 m
+  Carlos María Solari y Carlos P. Pu         16 m        8 m
+  Río Negro y Carlos P. Puig                 13 m        5 m
+  Río Negro y Grito de Asencio                5 m        4 m
+  Carlos María Solari y Grito de Ase         13 m        6 m
+  Treinta y Tres Orientales, Grito d         16 m        3 m
+
+  mean error: 9 m by movement, 4 m by clock
+  The clock wins by 5 m: keep --pace clock on this route.

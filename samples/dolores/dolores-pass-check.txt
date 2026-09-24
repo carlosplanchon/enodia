@@ -1,0 +1,53 @@
+Stretches walked more than once, and how far apart the passes put the networks:
+
+  "Juan Zorrilla de San Martín y Santiago Gadea" to "Juan Zorrilla de San Martín y José Bonifacio Redruello", 97 m
+    19:04:34 to 19:05:40, walked there
+    19:30:03 to 19:31:02, walked there
+    36 networks heard on more than one pass
+    the passes disagree by 8% of the stretch (7 m) on average
+    every pass went the same way: no shift to measure
+
+  "Juan Zorrilla de San Martín y José Pedro Varela" to "Juan Zorrilla de San Martín y Carlos P. Puig", 100 m
+    19:06:54 to 19:07:59, walked there
+    19:39:00 to 19:39:52, walked there
+    31 networks heard on more than one pass
+    the passes disagree by 9% of the stretch (9 m) on average
+    every pass went the same way: no shift to measure
+
+  "Juan Zorrilla de San Martín y Grito de Asencio" to "Treinta y Tres Orientales, Grito de Asencio", 101 m
+    19:09:24 to 19:10:34, walked there
+    19:46:43 to 19:47:47, walked back
+    55 networks heard on more than one pass
+    the passes disagree by 21% of the stretch (21 m) on average
+    shift in the direction of travel: 8% (8 m), which is what a scan's lag looks like
+
+  "Treinta y Tres Orientales, Santiago Gadea" to "Carlos María Solari y Santiago Gadea", 99 m
+    19:15:24 to 19:16:24, walked there
+    19:27:46 to 19:28:51, walked back
+    23 networks heard on more than one pass
+    the passes disagree by 13% of the stretch (13 m) on average
+    shift in the direction of travel: 6% (6 m), which is what a scan's lag looks like
+
+  "Carlos María Solari y Grito de Asencio" to "Río Negro y Grito de Asencio", 103 m
+    19:21:06 to 19:22:02, walked there
+    19:44:32 to 19:45:33, walked back
+    37 networks heard on more than one pass
+    the passes disagree by 19% of the stretch (19 m) on average
+    shift in the direction of travel: 8% (8 m), which is what a scan's lag looks like
+
+  "Río Negro y Grito de Asencio" to "Río Negro y Carlos P. Puig", 107 m
+    19:22:06 to 19:23:06, walked there
+    19:43:17 to 19:44:30, walked back
+    31 networks heard on more than one pass
+    the passes disagree by 23% of the stretch (25 m) on average
+    shift in the direction of travel: 12% (12 m), which is what a scan's lag looks like
+
+  "Río Negro y José Pedro Varela" to "Río Negro y José Bonifacio Redruello", 100 m
+    19:24:23 to 19:25:21, walked there
+    19:34:31 to 19:35:23, walked back
+    28 networks heard on more than one pass
+    the passes disagree by 22% of the stretch (22 m) on average
+    shift in the direction of travel: 10% (10 m), which is what a scan's lag looks like
+
+  Mean disagreement over 7 stretches: 16% of a stretch.
+  That is the error bar on placing an access point along a route, measured against nothing but the walk itself.

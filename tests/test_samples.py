@@ -164,15 +164,36 @@ def test_the_real_outing_map_is_what_its_outing_builds(tmp_path):
     assert built == kept
 
 
-def test_the_real_outing_plan_is_what_the_command_draws(tmp_path, capsys):
-    # The neighbourhood as OpenStreetMap has it, the walk over it, and where
-    # each access point probably stands, all of it from the exported outing.
-    plan = tmp_path / "plan.svg"
-    command = ["--reconcile", *DOLORES_FILES, *DOLORES_STREETS, "--svg", str(plan)]
-    assert cli.main(command) == 0
+def dolores(*extra):
+    return ["--reconcile", *DOLORES_FILES, *DOLORES_STREETS, *extra]
+
+
+def test_the_real_outing_artifacts_are_what_the_commands_produce(tmp_path, capsys):
+    # The report, the checks of the passes walked twice, and one run for the
+    # plan, the table and the GeoJSON, all of them from the exported outing, as
+    # the synthetic sample is held to its own.
+    assert cli.main(dolores("--scans")) == 0
+    report = (DOLORES / "dolores-report.txt").read_text(encoding="utf-8")
+    assert capsys.readouterr().out == report
+    assert cli.main(dolores("--check-passes")) == 0
+    passes = (DOLORES / "dolores-pass-check.txt").read_text(encoding="utf-8")
+    assert capsys.readouterr().out == passes
+    made = {name: tmp_path / name for name in ("networks.csv", "walk.geojson", "plan.svg")}
+    flags = ["--csv", str(made["networks.csv"]), "--geojson", str(made["walk.geojson"])]
+    assert cli.main(dolores(*flags, "--svg", str(made["plan.svg"]))) == 0
     capsys.readouterr()
-    beside = DOLORES / "dolores-plan.svg"
-    assert plan.read_text(encoding="utf-8") == beside.read_text(encoding="utf-8")
+    for name, written in made.items():
+        beside = DOLORES / f"dolores-{name}"
+        assert written.read_text(encoding="utf-8") == beside.read_text(encoding="utf-8"), beside
+
+
+@slow
+def test_the_real_outing_pace_check_is_what_the_command_says(capsys):
+    # Every middle crossing held out and found again, by movement and by the
+    # clock: on this walk the clock won, which is what that file says.
+    assert cli.main(dolores("--check-pace")) == 0
+    pace = (DOLORES / "dolores-pace-check.txt").read_text(encoding="utf-8")
+    assert capsys.readouterr().out == pace
 
 
 @slow
