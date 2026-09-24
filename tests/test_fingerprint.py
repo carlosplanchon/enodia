@@ -869,7 +869,9 @@ def test_the_scans_before_a_tie_settle_it(sequence):
     assert found.place.stretch == ("Alfa", "Bravo")
     assert found.alternative is not None and found.alternative.stretch == ("Charlie", "Delta")
     report = format_location(found, "mapa.jsonl")
-    assert 'The scan alone could as easily be between "Charlie" and "Delta"' in report
+    # Two lookalike corners, ten metres from each, are said as the corners.
+    assert report.startswith('You are at "Bravo"')
+    assert 'The scan alone could as easily be at "Delta"' in report
     assert "The 2 scans before it settle it here." in report
 
 
@@ -1893,3 +1895,64 @@ def test_the_check_counts_answers_that_moved_faster_than_a_walk():
     assert fingerprint.jumps(other_run) == (0, 0)
     unmeasured = [replace(one, found=at(one.truth.fraction, length=None)) for one in run[:2]]
     assert fingerprint.jumps(unmeasured) == (0, 0)
+
+
+# --- at the corner --------------------------------------------------------------
+
+SOCA, BRITO = "Rivera y Soca", "Rivera y Brito del Pino"
+
+
+def test_an_answer_a_few_metres_from_a_mark_is_at_that_mark():
+    assert Place(SOCA, BRITO, 0.1, length_m=100.0).corner() == SOCA  # ten metres
+    assert Place(SOCA, BRITO, 0.2, length_m=100.0).corner() is None  # twenty
+    assert Place(SOCA, BRITO, 0.9, length_m=100.0).corner() == BRITO
+    assert Place(SOCA, BRITO, 0.1, length_m=300.0).corner() is None  # thirty, on a long block
+    # With no length written down anywhere, a block of a hundred metres.
+    assert Place(SOCA, BRITO, 0.1).corner() == SOCA
+    assert Place(SOCA, BRITO, 0.2).corner() is None
+    # A stretch shorter than two of it: whichever mark is nearer.
+    assert Place(SOCA, BRITO, 0.6, length_m=20.0).corner() == BRITO
+    assert Place(SOCA, BRITO, 0.4, length_m=20.0).corner() == SOCA
+
+
+def test_a_corner_is_said_as_a_corner_and_a_place_as_a_place():
+    corner = fingerprint.Location(Place(SOCA, BRITO, 0.05, length_m=100.0), 0.9, 1, 0.0)
+    assert corner.describe() == 'at the corner of "Rivera y Soca"'
+    assert corner.corner == SOCA
+    assert format_location(corner, "mapa.jsonl").startswith(
+        'You are at the corner of "Rivera y Soca"'
+    )
+    plaza = fingerprint.Location(
+        Place("Plaza Independencia", SOCA, 0.05, length_m=100.0), 0.9, 1, 0.0
+    )
+    assert plaza.describe() == 'at "Plaza Independencia"'
+    middle = fingerprint.Location(Place(SOCA, BRITO, 0.5, length_m=100.0), 0.9, 1, 0.0)
+    assert middle.describe() == f'between "{SOCA}" and "{BRITO}", 50% of the way'
+    assert middle.corner is None
+    # The reconciliation's own wording keeps the exact fraction.
+    assert Place(SOCA, BRITO, 0.05, length_m=100.0).describe().endswith("5% of the way")
+
+
+def test_two_stretches_that_meet_at_the_corner_both_answers_are_at_are_not_a_doubt():
+    # Walking down Rivera from Soca to Brito del Pino, three metres short of
+    # Brito, and a scan that matches the block past Brito about as well. Either
+    # way you are at the corner of Rivera y Brito del Pino.
+    here = Place(SOCA, BRITO, 0.97, length_m=100.0)
+    past = Place(BRITO, "Rivera y Bolívar", 0.04, length_m=100.0)
+    found = fingerprint.Location(here, 0.9, 1, 0.0, alternative=past)
+    assert not found.uncertain
+    report = format_location(found, "mapa.jsonl")
+    assert "Uncertain" not in report and "settle" not in report
+    # The block past it at its middle, or at its far corner, is a doubt.
+    for far in (0.5, 0.97):
+        elsewhere = replace(past, fraction=far)
+        doubt = fingerprint.Location(here, 0.9, 1, 0.0, alternative=elsewhere)
+        assert doubt.uncertain
+        assert "Uncertain: it could as easily be" in format_location(doubt, "mapa.jsonl")
+    far_corner = fingerprint.Location(here, 0.9, 1, 0.0, alternative=replace(past, fraction=0.97))
+    assert format_location(far_corner, "mapa.jsonl").endswith(
+        'Uncertain: it could as easily be at the corner of "Rivera y Bolívar"'
+    )
+    # And in the middle of a block with the alternative at a corner.
+    halfway = fingerprint.Location(replace(here, fraction=0.5), 0.9, 1, 0.0, alternative=past)
+    assert halfway.uncertain

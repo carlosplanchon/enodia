@@ -20,6 +20,7 @@ one feature with somebody else's privacy on the line and its decisions fill a pa
 | why a scan after a hole in the log is not placed too early | *A hole in the scans is not a step* |
 | how a scan that could be at either of two corners is placed | *A tie is settled by the walk, not by the scan* |
 | why the live answer moves at a walk and not scan by scan | *A walk has a pace* |
+| why an answer says it is at a corner | *A corner is somewhere too* |
 | what `--sequence path` does, and what it costs | *The path or the point, and why it is a flag* |
 | what `--check-map` holds out, and what a scan placed across a mark is | *A scan at a mark is on two stretches* |
 | why a block came out on the chord with the street drawn | *A street is more than one way* |
@@ -163,6 +164,36 @@ The filter never chooses the stretch either: that stays with the scans (`tie`, `
 filter only follows the place along it, taking the walk over through the mark two stretches
 share and starting again from the scan after any other change, a gap of half a minute, or a
 stretch of no known length.
+
+## A corner is somewhere too
+
+An answer used to say `between "A" and "B", 97% of the way` three metres from B, with an error
+of twenty. That is a precision nobody has, and the true answer, the one somebody standing there
+would give, is the corner. So an answer within 15 m of a mark is said as that mark, `at the
+corner of "B"`, or `at "B"` when the mark is a place rather than a corner of two streets. The
+distance was measured, not chosen: holding out each group as `--check-map` does, at walking
+pace, and asking how far the scan really was from the corner the answer named.
+
+| said at a corner within | the scan within 25 m of it, sample | first real outing |
+|---|---|---|
+| 10 m | 12 of 15 | 58 of 99 |
+| 15 m | 21 of 26 | 126 of 200 |
+| 20 m | 24 of 36 | 187 of 287 |
+| 30 m | 37 of 57 | 217 of 373 |
+
+On the sample, anything past 15 m adds corners that are wrong more often. The real outing is
+flat either side, 63% at 15 m and 65% at 20 m, and it is one outing whose held-out passes begin
+and end at corners, so it is the sample's curve that sets the number, and the real one that says
+the number is not harmful. A stretch with no length written down takes a block to be a hundred
+metres.
+
+It is how an answer is said and nothing more. The dot on the live map stays where the estimate
+is, and the reconciliation keeps the exact fraction, since there the fraction is what was worked
+out and the report is about the working. One consequence is taken on purpose: two stretches that
+meet at the corner an answer is at, tied, are not a doubt about where you are, and `at the
+corner of "B", uncertain` said a thing and took it back. They are no longer reported as a tie.
+It is rare, none on the sample and 9 of 75 uncertain answers on the real outing at walking pace,
+and it is the case where the old report contradicted itself.
 
 ## The path or the point, and why it is a flag
 

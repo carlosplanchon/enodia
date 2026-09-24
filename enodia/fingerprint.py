@@ -55,6 +55,7 @@ from enodia.reconcile import (
     NotebookError,
     Reconciliation,
     confusable_crossings,
+    corner_streets,
     describe_fraction,
     distance_metres,
     folded,
@@ -65,6 +66,16 @@ from enodia.reconcile import (
 from enodia.streets import StreetMap
 
 # --- A place, in a frame that does not depend on which walk saw it -----------
+
+# How near a mark an answer has to be for it to be said as that mark: "at the
+# corner of" rather than "97% of the way". Measured on the sample and on the
+# first real outing, held out as `--check-map` holds them: at 15 m, 21 of 26
+# answers said at a corner on the sample had the scan within 25 m of it, and at
+# 30 m only 37 of 57. The real outing was flat either side, 63% at 15 m and 65%
+# at 20 m. And a stretch whose length nobody wrote down is taken to be a block
+# of a hundred metres, which is what a block is in Montevideo and in Dolores.
+AT_CORNER_M = 15.0
+BLOCK_M = 100.0
 
 
 def canonical(name_from: str, name_to: str, fraction: float) -> tuple[str, str, float]:
@@ -116,6 +127,18 @@ class Place:
     def metres(self, fraction: float) -> float | None:
         """A fraction of this stretch in metres, when its length is known."""
         return None if self.length_m is None else fraction * self.length_m
+
+    def corner(self, within_m: float = AT_CORNER_M) -> str | None:
+        """The mark this place is at, when it is near enough to one to say so, or None.
+
+        Near enough is `within_m` along the stretch, and on a stretch too short to
+        be anywhere else, the nearer of its two marks.
+        """
+        length = self.length_m if self.length_m else BLOCK_M
+        to_first, to_second = self.fraction * length, (1.0 - self.fraction) * length
+        if min(to_first, to_second) > within_m:
+            return None
+        return self.name_from if to_first <= to_second else self.name_to
 
     def describe(self) -> str:
         return describe_fraction(self.name_from, self.name_to, self.fraction)
@@ -558,8 +581,21 @@ class Location:
         settled a tie or overruled the scan: `alternative` then names the
         stretch they ruled out of a tie, and `alone` the stretch the scan by
         itself would have been put on.
+
+        Two stretches that meet at the corner both answers are at are not a
+        doubt about where you are. A scan at a corner hears the two blocks that
+        meet there alike, which is exactly when the tie comes up, and "at the
+        corner of X, uncertain" said the one thing and then took it back.
         """
-        return self.alternative is not None and not self.settled
+        if self.alternative is None or self.settled:
+            return False
+        here, there = self.place.corner(), self.alternative.corner()
+        return here is None or there is None or folded(here) != folded(there)
+
+    @property
+    def corner(self) -> str | None:
+        """The mark this answer is at, when it is near enough to one to say so."""
+        return self.place.corner()
 
     @property
     def scattered(self) -> bool:
@@ -567,7 +603,24 @@ class Location:
         return self.scattered_m is not None
 
     def describe(self) -> str:
-        return self.place.describe()
+        return said(self.place)
+
+
+def said(place: Place) -> str:
+    """How an answer reads: the mark when it is at one, and how far along otherwise.
+
+    Not how a reconciliation reads, which is `Place.describe` and keeps the
+    exact fraction, since there the fraction is what was worked out and the
+    report is about the working. An answer to "where am I" is a place for
+    somebody standing in the street, and a few metres from a corner the corner
+    is the true answer and 97% is a precision nobody has. A mark named after
+    two streets is a corner; one that is a place, a plaza, is just where you
+    are.
+    """
+    mark = place.corner()
+    if mark is None:
+        return place.describe()
+    return f'at the corner of "{mark}"' if corner_streets(mark) else f'at "{mark}"'
 
 
 def _spread_of(places: Sequence[Place]) -> float | None:
@@ -1176,16 +1229,16 @@ def format_location(location: Location | None, map_path: str | Path) -> str:
         n = location.settled
         return f"The scan before it {one}" if n == 1 else f"The {n} scans before it {many}"
 
-    if location.alternative is not None and not location.settled:
-        lines.append(f"  Uncertain: it could as easily be {location.alternative.describe()}")
-    elif location.alternative is not None:
+    if location.alternative is not None and location.settled:
         lines.append(
-            f"  The scan alone could as easily be {location.alternative.describe()}. "
+            f"  The scan alone could as easily be {said(location.alternative)}. "
             f"{before('settles', 'settle')} it here."
         )
+    elif location.uncertain and location.alternative is not None:
+        lines.append(f"  Uncertain: it could as easily be {said(location.alternative)}")
     elif location.alone is not None:
         lines.append(
-            f"  The scan alone would have said {location.alone.describe()}. "
+            f"  The scan alone would have said {said(location.alone)}. "
             f"{before('puts', 'put')} it here."
         )
     if location.scattered_m is not None:

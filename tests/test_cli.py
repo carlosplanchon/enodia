@@ -810,6 +810,50 @@ def test_locate_watch_prints_every_scan_and_speaks_what_changes(monkeypatch, tmp
     assert "Stopped." not in out
 
 
+def test_locate_watch_says_a_corner_once_however_many_stretches_meet_there(
+    monkeypatch, tmp_path, capsys
+):
+    # Down Rivera to Brito del Pino, five metres short of it, then five metres
+    # past it on the next block, then halfway down that block. The corner is
+    # said once, walking through it says nothing, and the block is said when
+    # the walk is on it.
+    brito, soca, bolivar = "Rivera y Brito del Pino", "Rivera y Soca", "Rivera y Bolívar"
+    rows = [
+        (soca, brito, 0.95, "s#0", "Casa"),
+        (brito, bolivar, 0.05, "b#0", "Bar"),
+        (brito, bolivar, 0.5, "b#1", "Pan"),
+    ]
+    mapa = tmp_path / "mapa.jsonl"
+    mapa.write_text(
+        "".join(
+            json.dumps(
+                {
+                    "outing": walk.split("#")[0],
+                    "walk": walk,
+                    "from": name_from,
+                    "to": name_to,
+                    "fraction": fraction,
+                    "length_m": 100.0,
+                    "networks": [{"ssid": ssid, "bssid": heard(ssid)[0].bssid, "signal_dbm": -60}],
+                }
+            )
+            + "\n"
+            for name_from, name_to, fraction, walk, ssid in rows
+        )
+    )
+    watching(monkeypatch, [heard("Casa"), heard("Bar"), heard("Pan")])
+    assert cli.main([*WATCH, "--map", str(mapa), "--cycles", "3"]) == 0
+    out = capsys.readouterr().out
+    lines = [line[10:] for line in out.splitlines() if line[:2].isdigit() and line[2] == ":"]
+    assert lines == [
+        f'at the corner of "{brito}"',
+        f'at the corner of "{brito}"',
+        f'between "{brito}" and "{bolivar}", 50% of the way',
+    ]
+    said = [line.split("> ", 1)[1] for line in out.splitlines() if line.startswith("Say ")]
+    assert said == [brito, f"{brito} to {bolivar}", "50 percent"]
+
+
 def test_locate_watch_keeps_the_run_through_a_blocked_radio(monkeypatch, tmp_path, capsys):
     # The second cycle finds the switch off. It costs that cycle and nothing
     # else: "Radio blocked" once, "Scanning again" when it comes back, and the

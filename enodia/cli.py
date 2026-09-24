@@ -49,6 +49,7 @@ from enodia.reconcile import (
     NotebookError,
     check_pace,
     check_passes,
+    folded,
     format_pace_check,
     format_pass_check,
     format_report,
@@ -504,13 +505,28 @@ def say_location(voice: BackgroundVoice, found: Location | None, lang: str, name
         voice.say("Not on the map", lang=lang)
         return
     place = found.place
-    if 0.0 < place.fraction < 1.0:
+    mark = found.corner
+    if mark is None:
         voice.say(f"{place.name_from} to {place.name_to}", lang=names)
         voice.say(f"{round(place.fraction * 100)} percent", lang=lang)
     else:
-        voice.say(place.name_to if place.fraction >= 1.0 else place.name_from, lang=names)
+        voice.say(mark, lang=names)
     if found.uncertain:
         voice.say("Uncertain", lang=lang)
+
+
+def spoken(found: Location | None) -> tuple[str, object] | None:
+    """What the voice says a place is: the corner when at one, the stretch otherwise.
+
+    What `--watch` compares to decide whether there is something new to say.
+    The stretch alone got it wrong at a corner: walking through one is leaving
+    one stretch for the next at the same place, and the corner was said a
+    second time for a walk that had not moved.
+    """
+    if found is None:
+        return None
+    mark = found.corner
+    return ("corner", folded(mark)) if mark is not None else ("stretch", found.place.key)
 
 
 def run_watch(
@@ -520,10 +536,12 @@ def run_watch(
 
     Each scan is placed with the ones before it, the way a log's last scan is,
     so a tie is settled by the walk as it happens. One line is printed per
-    scan. Speech is for what changes: a new stretch, or the map losing you or
-    finding you again, is said in full through `say_location`, and another
-    tenth of the way along the same stretch is a status line, said only when
-    the voice is free, since a percentage said late is another place. The loop
+    scan. Speech is for what changes: a new stretch or a corner reached, or the
+    map losing you or finding you again, is said in full through
+    `say_location`, and another tenth of the way along the same stretch is a
+    status line, said only when the voice is free, since a percentage said late
+    is another place. What counts as new is what would be said (`spoken`), so a
+    corner walked through from one stretch to the next is said once. The loop
     keeps the walk's own cadence, sleeping only what is left of `--interval`
     after the scan and the lookup, and a fresh scan takes about five seconds
     per card, so a shorter interval is not kept. A blocked radio costs the
@@ -617,18 +635,9 @@ def run_watch(
                 # Renamed into place, so a browser reloading mid-write reads the
                 # page before or the page after and never half of one.
                 os.replace(written, live)
-            moved = (
-                first
-                or (found is None) != (previous is None)
-                or (
-                    found is not None
-                    and previous is not None
-                    and found.place.key != previous.place.key
-                )
-            )
-            if moved:
+            if first or spoken(found) != spoken(previous):
                 say_location(voice, found, args.lang, args.ssid_lang)
-            elif found is not None and previous is not None:
+            elif found is not None and found.corner is None and previous is not None:
                 if int(found.place.fraction * 10) != int(previous.place.fraction * 10):
                     voice.say(
                         f"{round(found.place.fraction * 100)} percent", lang=args.lang, status=True

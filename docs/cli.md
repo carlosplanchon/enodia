@@ -124,6 +124,12 @@ is what the matching did before the weights, and is there so that a real map can
 the way the sample did: run `--check-map` with each and compare the two tables. An outing
 already in the map is not added twice.
 
+An answer within 15 m of a mark names it, `at the corner of "Rivera y Soca"`, rather than saying
+97% of the way: the error is typically about that size, and a few metres from a corner the
+corner is the true answer. A mark that is not a corner of two streets, a plaza, is said as `at
+"Plaza Independencia"`. Two stretches that meet at the corner the answer is at are not a doubt
+about where you are, so a tie between them is not reported as one.
+
 A fresh scan stands alone. `--locate LOG` has the scans before the last one, and when two
 stretches match that scan about as well, the stretch the scans before it were on, or one next to
 it, settles which: a walk does not jump a block in five seconds. They choose between two answers
