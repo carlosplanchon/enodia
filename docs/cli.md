@@ -102,8 +102,11 @@ six columns: each scan alone by networks, by signal as well, by signal with the 
 on the run, with the scans before it settling a tie or choosing the path, the two ways
 `--sequence` names, and at a walking pace, the way `--locate --watch` runs. `--card-offset DB`
 hears every held-out scan as a card reading that many dB higher, or lower when negative, would
-hear it, which is what another card costs each column and what calibrating wins back.
-[The methodology notes](methodology.md) say what each of the three can and cannot tell you.
+hear it, which is what another card costs each column and what calibrating wins back. Its row
+"pulled in, near a corner" is how far the answers to scans taken near a corner land towards the
+middle of the block, on average, and negative past the corner, the answers that went into the
+block next door counted too. [The methodology notes](methodology.md) say what each of the three
+can and cannot tell you.
 
 ## The map, and finding yourself again
 
@@ -116,17 +119,29 @@ enodia --locate LOG --sequence path                            # let the scans b
 enodia --locate --watch                                        # keep scanning: where am I, as it changes
 enodia --locate --match signal                                 # score on signal strength too
 enodia --locate --weigh alike                                  # count every network the same
+enodia --locate --along levels                                 # experimental: place it by the levels
 enodia --map other.jsonl --locate                               # a map somewhere else
 ```
 
-`--match networks` is the default and matches on which networks are in view, each weighed by
-how rare it is in the map: a router heard everywhere says less than one heard on one block.
-`--match signal` also weighs how strongly each came in, which is more precise and less
-portable between radios, since two cards report different numbers for the same room. `--weigh
-rarity` is that weighing, and the default. `--weigh alike` counts every network the same, which
-is what the matching did before the weights, and is there so that a real map can measure them
-the way the sample did: run `--check-map` with each and compare the two tables. An outing
-already in the map is not added twice.
+`--match networks` is the default and matches on which networks are in view, each weighed by how
+rare it is in the map: a router heard everywhere says less than one heard on one block. `--match
+signal` also weighs how strongly each came in, which is more precise and less portable between
+radios, since two cards report different numbers for the same room. `--match signal` is barely
+tested, and what little there is says it does worse: on the first real walk made to locate, it
+answered "not on the map" for 38 of 111 scans taken on streets the map knows, where `--match
+networks` lost none, and where both answered it was no more exact. It is there to be measured,
+not to be relied on. `--weigh rarity` is that weighing, and the default. `--weigh alike` counts
+every network the same, which is what the matching did before the weights, and is there so that
+a real map can measure them the way the sample did: run `--check-map` with each and compare the
+two tables. An outing already in the map is not added twice.
+
+`--along levels` is experimental. The place along the stretch is otherwise the middle of the
+fingerprints that matched; with it, each network heard on the stretch gets a curve of how its
+level rises and falls along the block, fitted from the map, and the answer is where the scan's
+levels fit the curves best. The stretch is still the one the matching chose. The fit is on the
+shape of the levels, not on what they read, so another card lands in the same place, and it
+needs no `--match signal`. Run `--check-map` with it and without it and compare the two tables:
+it stays or goes on what walks measure.
 
 An answer within 15 m of a mark names it, `at the corner of "Rivera y Soca"`, rather than saying
 97% of the way: the error is typically about that size, and a few metres from a corner the
@@ -201,11 +216,14 @@ zoom is kept in the page's address, `live.html#x,y,width`, which is how it lasts
 to the next.
 
 `--sequence tie` is that, and the default. `--sequence path` asks the scans before it every
-time, not only on a tie: it chooses the likeliest path through all of them, staying on a
-stretch for nothing, stepping onto one that shares a mark for a little, jumping anywhere else
-for a lot, and the answer is where that path ends. It can overrule the last scan, in both
-directions, and the price of a jump is a number no walk has measured yet, which is why it is a
-flag: `--check-map` reports both.
+time, not only on a tie: it chooses the likeliest path through all of them, staying on a stretch
+for nothing, stepping onto one that shares a mark for a little, jumping anywhere else for a lot,
+and the answer is where that path ends. It can overrule the last scan, in both directions, and
+the price of a jump is a number no walk has measured yet, which is why it is a flag:
+`--check-map` reports both. It is barely tested and so far no better: on the sample and on the
+first real outing it put fewer scans on the right stretch than `--sequence tie`, 135 against 136
+and 55 against 69, and on the one walk made with it, it came onto a new block two scans late
+once in eighteen turns and was never right where the default was wrong.
 
 ## Putting the notebook on the map
 
@@ -303,6 +321,8 @@ enodia --export-public walk.jsonl notebook.txt --ssid keep              # names 
 enodia --export-public walk.jsonl notebook.txt --mac-shaped             # d2:17:43:.. rather than ap-1c8a74f992ae
 enodia --export-public walk.jsonl notebook.txt --key-file ~/keys/enodia.key
 enodia --export-public walk.jsonl notebook.txt --outing 3f9a2b10          # one walk of a file that holds several
+enodia --export-public walk.jsonl notebook.txt --keep-places              # the streets as they are, only the networks hidden
+enodia --export-public walk.jsonl notebook.txt --keep-time                # the day and the hour as they were
 ```
 
 Both files at once, and `--out` names the directory, `public/` by default. The directory is the
@@ -312,6 +332,12 @@ one after somebody has read the first line by line. Two exports aimed at one dir
 for the same reason: the first to claim the name wins and the second is told the place is taken.
 The export is written privately and opened up only when it is complete. To read it privately
 before deciding whether to publish it, `chmod 700` it afterwards.
+
+`--keep-places` leaves the crossings named and placed as they are and substitutes only the
+networks, for somebody content to publish the streets they walked: the route is then on the map
+for anyone to see, and so is roughly where each access point along it stands. The clock is moved
+all the same, to 1970-01-01, and `--keep-time` leaves it as it was: the day and the hour of the
+walk are then published with it. [Publishing a walk](export.md) says what each choice gives up.
 
 An `event` this does not recognise is left out of the export with the rest of its record, and a
 `security` label the backends are not known to write is withheld. Both are counted in the
@@ -380,7 +406,7 @@ says which flag is the odd one.
 | `--area`, `--marks`, `--proxy`, `--overpass-url` | `--geocode` |
 | `--max-speed` | `--geocode` or `--locate --watch`, and not with `--no-walking-pace` |
 | `--out` | `--geocode` or `--export-public` |
-| `--ssid`, `--mac-shaped`, `--key-file` | `--export-public` |
+| `--ssid`, `--mac-shaped`, `--key-file`, `--keep-places`, `--keep-time` | `--export-public` |
 | `--streets` | `--geocode`, `--reconcile`, `--map-add` or `--live-map` |
 | `--surroundings` | `--geocode` and `--streets` |
 | `--live-map`, `--no-walking-pace` | `--locate --watch` |
@@ -388,7 +414,7 @@ says which flag is the odd one.
 | `--svg`, `--check-pace`, `--check-passes`, `--path-loss`, `--csv`, `--geojson`, `--scans` | `--reconcile` |
 | `--svg-names` | `--svg` |
 | `--pace` | `--reconcile` or `--map-add` |
-| `--map`, `--match`, `--weigh`, `--sequence` | `--map-add`, `--locate`, `--check-map` or `--assistant` |
+| `--map`, `--match`, `--weigh`, `--along`, `--sequence` | `--map-add`, `--locate`, `--check-map` or `--assistant` |
 | `--outing` | `--reconcile`, `--map-add`, `--export-public`, `--locate LOG` or `--geocode --marks` |
 | `--watch` | `--locate` scanning live, not `--locate LOG`, and never with `--dir` |
 

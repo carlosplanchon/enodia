@@ -37,7 +37,7 @@ from datetime import datetime
 from itertools import pairwise
 from math import exp, log
 from pathlib import Path
-from statistics import median
+from statistics import mean, median
 from typing import Any
 
 import ifpeek
@@ -1182,6 +1182,142 @@ class Pace:
         return replace(found, place=replace(place, fraction=fraction, lat=lat, lon=lon))
 
 
+# Placing an answer along its stretch by the levels (`Levels`, `--along levels`),
+# which is experimental. The level a network not heard somewhere is taken to have
+# there, how far apart the fitted points are along the block, how wide the fit
+# around each one is, the best of 5, 8 and 12 m on the sample and on the first
+# real outing, and how much data a point needs around it to be chosen.
+LEVELS_UNHEARD = -95.0
+LEVELS_STEP_M = 2.0
+LEVELS_WIDTH_M = 12.0
+LEVELS_SUPPORT = 0.5
+
+
+def _levels(networks: Iterable[SeenNetwork]) -> dict[str, float]:
+    """The level of every identified network with one, never below `LEVELS_UNHEARD`."""
+    return {
+        n.key: max(n.strength, LEVELS_UNHEARD) for n in networks if n.identified and n.has_signal
+    }
+
+
+@dataclass(frozen=True)
+class _Curves:
+    """How every network heard on one stretch rises and falls along it, fitted on a grid."""
+
+    grid: tuple[float, ...]  # fractions of the stretch
+    levels: dict[str, tuple[float, ...]]  # each network's fitted level at each of them
+    support: tuple[float, ...]  # how much data there is around each of them
+    line: tuple[float, float, float, float] | None  # coordinates against the fraction
+
+
+def _curves(on_stretch: Sequence[Fingerprint]) -> _Curves | None:
+    """Each network's level along a stretch, by a local linear fit, or None without two points.
+
+    Linear and not an average, because an average near the end of a block has
+    data on one side only and bends every curve towards the middle, which is the
+    one bias this is here to take away. A network a fingerprint did not hear is
+    taken to be there at `LEVELS_UNHEARD`: not hearing it is evidence too.
+    """
+    heard = [
+        (one.place.fraction, levels) for one in on_stretch if (levels := _levels(one.networks))
+    ]
+    if len(heard) < 2:
+        return None
+    length = next((one.place.length_m for one in on_stretch if one.place.length_m), BLOCK_M)
+    steps = max(round(length / LEVELS_STEP_M), 10)
+    grid = tuple(index / steps for index in range(steps + 1))
+    keys = sorted({key for _, levels in heard for key in levels})
+    fitted: dict[str, list[float]] = {key: [] for key in keys}
+    support = []
+    for point in grid:
+        offsets = [(fraction - point) * length for fraction, _ in heard]
+        weights = [exp(-(x * x) / (2 * LEVELS_WIDTH_M**2)) for x in offsets]
+        s0 = sum(weights)
+        s1 = sum(w * x for w, x in zip(weights, offsets, strict=True))
+        s2 = sum(w * x * x for w, x in zip(weights, offsets, strict=True))
+        spread = s0 * s2 - s1 * s1
+        support.append(s0)
+        for key in keys:
+            values = [levels.get(key, LEVELS_UNHEARD) for _, levels in heard]
+            t0 = sum(w * v for w, v in zip(weights, values, strict=True))
+            t1 = sum(w * x * v for w, x, v in zip(weights, offsets, values, strict=True))
+            # Every point at one fraction has no slope to fit: the plain mean.
+            level = (s2 * t0 - s1 * t1) / spread if spread > 1e-9 * s0 * s2 else t0 / s0
+            fitted[key].append(max(level, LEVELS_UNHEARD))
+    return _Curves(
+        grid,
+        {key: tuple(values) for key, values in fitted.items()},
+        tuple(support),
+        _line([one.place for one in on_stretch]),
+    )
+
+
+class Levels:
+    """An answer's place along its stretch, from how its networks rise and fall along it.
+
+    Experimental, and `--along levels`. The place along the stretch is otherwise
+    the middle of the fingerprints that matched, which is only as fine as they
+    are and leans towards the middle of the block near its ends. Here each
+    network heard on the stretch gets a curve of its level along it, fitted from
+    the map, and the answer is the point where the scan's levels fit the curves
+    best. The fit is on their shape, with the mean difference taken out at every
+    point, so a card that reads six decibels low lands in the same place, and it
+    needs no `--match signal`.
+
+    The stretch is never this one's to choose, as with `Pace`: only the fraction
+    moves. A stretch with fewer than two fingerprints with levels, or a scan that
+    shares no network with it, is answered as it was.
+    """
+
+    def __init__(self, fingerprints: Sequence[Fingerprint]) -> None:
+        self.by_stretch: dict[tuple[str, str], list[Fingerprint]] = {}
+        for one in fingerprints:
+            self.by_stretch.setdefault(one.place.key, []).append(one)
+        self.fitted: dict[tuple[str, str], _Curves | None] = {}
+
+    @classmethod
+    def of(cls, fingerprints: Sequence[Fingerprint]) -> Levels:
+        """Curves for this map's stretches, fitted as each is first asked for."""
+        return cls(fingerprints)
+
+    def curves(self, key: tuple[str, str]) -> _Curves | None:
+        """The stretch's curves, fitted the first time they are asked for."""
+        if key not in self.fitted:
+            self.fitted[key] = _curves(self.by_stretch.get(key, []))
+        return self.fitted[key]
+
+    def place(self, found: Location | None, networks: Iterable[SeenNetwork]) -> Location | None:
+        """This answer, with its fraction where the scan's levels fit the stretch best."""
+        if found is None:
+            return None
+        place = found.place
+        curves = self.curves(place.key)
+        heard = _levels(networks)
+        if curves is None or not heard.keys() & curves.levels.keys():
+            return found
+        fits = []
+        for index, fraction in enumerate(curves.grid):
+            if curves.support[index] < LEVELS_SUPPORT:
+                continue
+            misses = [
+                heard.get(key, LEVELS_UNHEARD) - curve[index]
+                for key, curve in curves.levels.items()
+            ]
+            middle = sum(misses) / len(misses)
+            misfit = sum((miss - middle) ** 2 for miss in misses)
+            # Rounded, and then the nearest to where the matching put it: curves
+            # that say nothing about one point over another leave it there.
+            fits.append((round(misfit, 6), abs(fraction - place.fraction), fraction))
+        # Never empty: the point of the grid nearest any fingerprint is within a
+        # step of it, and the fit there has that fingerprint's full weight.
+        fraction = min(fits)[2]
+        lat, lon = place.lat, place.lon
+        if curves.line is not None and place.coordinates is not None:
+            lat = curves.line[0] + curves.line[1] * fraction
+            lon = curves.line[2] + curves.line[3] * fraction
+        return replace(found, place=replace(place, fraction=fraction, lat=lat, lon=lon))
+
+
 def follow(
     fingerprints: Sequence[Fingerprint],
     scans: Iterable[Iterable[SeenNetwork]],
@@ -1574,6 +1710,7 @@ def check_map(
     keep_pace: bool = False,
     calibrate: bool = False,
     card_offset: float = 0.0,
+    along: str = "matches",
 ) -> list[HeldOutScan]:
     """Hold out one outing at a time, or one walk when there is only one, and locate its scans.
 
@@ -1609,7 +1746,12 @@ def check_map(
     `--locate --watch --match signal` does: one `Calibration` for each outing
     held out, which is one run, or one for the whole map when what is held out
     is the passes of a single outing, since those are one run too.
+
+    `along="levels"` places each answer along its stretch by `Levels`, fitted
+    from the rest of the map, instead of the middle of what matched.
     """
+    if along not in ("matches", "levels"):
+        raise ValueError(f"along is 'matches' or 'levels', not {along!r}")
     by_outing = _by_outing(fingerprints)
     groups: dict[str, list[Fingerprint]] = {}
     for one in fingerprints:
@@ -1621,6 +1763,7 @@ def check_map(
     for key, held in groups.items():
         rest = [one for one in fingerprints if (one.outing if by_outing else one.walk) != key]
         pace = Pace.of(rest) if keep_pace else None
+        levels = Levels.of(rest) if along == "levels" else None
         if calibrate and by_outing:
             calibration = Calibration()
         heard: list[list[SeenNetwork]] = []
@@ -1638,6 +1781,8 @@ def check_map(
                 run = heard[max(0, index - LOOK_BACK) : index + 1]
                 how = sequence or "tie"
                 found = locate_sequence(rest, run, how, by_signal, by_rarity=by_rarity)
+            if levels is not None:
+                found = levels.place(found, scan)
             if pace is not None:
                 # A scan without a time is taken to be one cycle after the last.
                 found = pace.keep(found, one.time.timestamp() if one.time else index * 5.0)
@@ -1648,6 +1793,43 @@ def check_map(
 # How far past a walking pace two answers in a row may move before the report
 # counts it as a jump: a few metres, for what the clock's second rounds away.
 JUMP_SLACK_M = 5.0
+
+
+# How near a corner a scan has to be for its answer to count in `pulled_in`: the
+# fifth of the block at each end.
+NEAR_A_CORNER = 0.2
+
+
+def pulled_in(results: Sequence[HeldOutScan]) -> float | None:
+    """How far answers to scans near a corner landed towards the middle of the block, on average.
+
+    Positive towards the middle, negative past the corner, and the answers that
+    went past it into the block next door counted, measured through that corner.
+    Counting only the answers on the right stretch is what first made this look
+    like a pull of thirty metres towards the middle: near a corner, the answers
+    that landed past it are exactly the ones that would have said otherwise, and
+    leaving them out left only the ones inside.
+    """
+    moved = []
+    for one in results:
+        truth = one.truth
+        if one.found is None or truth.length_m is None:
+            continue
+        if truth.fraction < NEAR_A_CORNER:
+            end = 0.0
+        elif truth.fraction > 1.0 - NEAR_A_CORNER:
+            end = 1.0
+        else:
+            continue
+        found = one.found.place
+        if found.key == truth.key:
+            inwards = found.fraction - truth.fraction
+            moved.append((inwards if end == 0.0 else -inwards) * truth.length_m)
+        elif one.across_mark and one.error_m is not None:
+            shared = _shared_mark(truth, found)
+            if shared is not None and shared[0] == end:
+                moved.append(-one.error_m)
+    return mean(moved) if moved else None
 
 
 def jumps(results: Sequence[HeldOutScan]) -> tuple[int, int]:
@@ -1708,6 +1890,8 @@ def _column(results: Sequence[HeldOutScan]) -> tuple[list[str], int, int]:
     ]
     rows += ["-", "-"] if not fractions else [f"{one:.0%}" for one in _middle(fractions)]
     rows += ["-", "-"] if not metres else [f"{one:.0f} m" for one in _middle(metres)]
+    pull = pulled_in(results)
+    rows.append("-" if pull is None else f"{pull:+.0f} m")
     faster, steps = jumps(results)
     rows.append(f"{faster} of {steps}" if steps else "-")
     return rows, len(fractions), len(metres)
@@ -1731,6 +1915,7 @@ def format_map_check(
     keeping_pace: Sequence[HeldOutScan],
     calibrated: Sequence[HeldOutScan],
     card_offset: float = 0.0,
+    along: str = "matches",
 ) -> str:
     """Human-readable verdict on how well the map locates a walk it has not seen."""
     if not by_networks:
@@ -1749,6 +1934,7 @@ def format_map_check(
         "median error, of a stretch",
         "mean error in metres",
         "median error in metres",
+        "pulled in, near a corner",
         "moved faster than a walk",
     ]
     left, placed, measured = _column(by_networks)
@@ -1767,6 +1953,10 @@ def format_map_check(
         if _by_outing(fingerprints)
         else f"Each walk held out in turn, and its scans{heard} located from the rest of the map:"
     )
+    if along == "levels":
+        held = held.removesuffix(":") + (
+            ", each answer placed along its stretch by the levels, which is experimental:"
+        )
     lines = [
         counted.describe(),
         "",
@@ -1794,8 +1984,11 @@ def format_map_check(
         "before it breaking a tie between two stretches. Choosing the path takes the "
         "likeliest path through them, which can overrule the scan itself. At a walking pace "
         "settles ties and keeps each answer's place along the stretch to a walk's speed, as "
-        "--locate --watch does. Moved faster than a walk counts the steps between two answers "
-        "in a row on the right stretch that nobody walks in the seconds between them."
+        "--locate --watch does. Pulled in, near a corner is how far the answers to scans taken "
+        "within a fifth of a block of a corner landed towards the middle of the block, on "
+        "average, and negative past the corner, into the block next door. Moved faster than a "
+        "walk counts the steps between two answers in a row on the right stretch that nobody "
+        "walks in the seconds between them."
     )
     lines.append(textwrap.fill(explained, 90, initial_indent="  ", subsequent_indent="  "))
     names = [name for one in fingerprints for name in one.place.stretch]

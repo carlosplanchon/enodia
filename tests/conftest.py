@@ -141,6 +141,13 @@ as_root = pytest.mark.skipif(
     os.geteuid() == 0, reason="root reads a file whose mode is 000, so there is nothing to test"
 )
 
+# The real outing's map check takes minutes, and the rest of the suite seconds.
+# Run with ENODIA_SLOW=1, which one job of the CI does on every push: skipped
+# everywhere else rather than dropped, so it cannot be forgotten either.
+slow = pytest.mark.skipif(
+    not os.environ.get("ENODIA_SLOW"), reason="minutes long: run with ENODIA_SLOW=1"
+)
+
 
 @pytest.fixture(autouse=True)
 def data_dir_in_tmp(monkeypatch, tmp_path):

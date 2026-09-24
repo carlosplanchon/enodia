@@ -29,3 +29,6 @@ jobs:
         run: uv run ty check enodia
       - name: Tests
         run: uv run pytest
+      - name: The real outing's map check, which takes minutes
+        if: matrix.python-version == '3.14'
+        run: ENODIA_SLOW=1 uv run pytest tests/test_samples.py --no-cov

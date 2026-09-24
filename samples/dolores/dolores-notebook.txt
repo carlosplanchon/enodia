@@ -1,0 +1,40 @@
+date 2026-09-22
+19:04:30 Juan Zorrilla de San Martín y Santiago Gadea @ -33.520119, -58.219688
+19:05:42 Juan Zorrilla de San Martín y José Bonifacio Redruello @ -33.520562, -58.220588
+19:06:53 Juan Zorrilla de San Martín y José Pedro Varela @ -33.521026, -58.221516
+19:08:03 Juan Zorrilla de San Martín y Carlos P. Puig @ -33.521498, -58.222440
+19:09:24 Juan Zorrilla de San Martín y Grito de Asencio @ -33.521999, -58.223454
+19:10:35 Treinta y Tres Orientales, Grito de Asencio @ -33.522778, -58.222895
+19:11:58 Treinta y Tres Orientales, Carlos P. Puig @ -33.522281, -58.221896
+19:13:07 Treinta y Tres Orientales, José Pedro Varela @ -33.521804, -58.220980
+19:14:15 Treinta y Tres Orientales, José Bonifacio Redruello @ -33.521332, -58.220058
+19:15:21 Treinta y Tres Orientales, Santiago Gadea @ -33.520877, -58.219161
+19:16:28 Carlos María Solari y Santiago Gadea @ -33.521648, -58.218623
+19:17:36 Carlos María Solari y José Bonifacio Redruello @ -33.522111, -58.219522
+19:18:50 Carlos María Solari y José Pedro Varela @ -33.522585, -58.220431
+19:19:59 Carlos María Solari y Carlos P. Puig @ -33.523059, -58.221357
+19:21:06 Carlos María Solari y Grito de Asencio @ -33.523560, -58.222340
+19:22:06 Río Negro y Grito de Asencio @ -33.524360, -58.221780
+19:23:11 Río Negro y Carlos P. Puig @ -33.523891, -58.220774
+19:24:18 Río Negro y José Pedro Varela @ -33.523430, -58.219854
+19:25:24 Río Negro y José Bonifacio Redruello @ -33.522974, -58.218920
+19:26:26 Río Negro y Santiago Gadea @ -33.522543, -58.218001
+19:27:43 Carlos María Solari y Santiago Gadea @ -33.521648, -58.218623
+19:28:53 Treinta y Tres Orientales, Santiago Gadea @ -33.520877, -58.219161
+19:29:59 Juan Zorrilla de San Martín y Santiago Gadea @ -33.520119, -58.219688
+19:31:06 Juan Zorrilla de San Martín y José Bonifacio Redruello @ -33.520562, -58.220588
+19:32:12 Treinta y Tres Orientales, José Bonifacio Redruello @ -33.521332, -58.220058
+19:33:19 Carlos María Solari y José Bonifacio Redruello @ -33.522111, -58.219522
+19:34:29 Río Negro y José Bonifacio Redruello @ -33.522974, -58.218920
+19:35:28 Río Negro y José Pedro Varela @ -33.523430, -58.219854
+19:36:38 Carlos María Solari y José Pedro Varela @ -33.522585, -58.220431
+19:37:48 Treinta y Tres Orientales, José Pedro Varela @ -33.521804, -58.220980
+19:38:52 Juan Zorrilla de San Martín y José Pedro Varela @ -33.521026, -58.221516
+19:39:55 Juan Zorrilla de San Martín y Carlos P. Puig @ -33.521498, -58.222440
+19:41:01 Treinta y Tres Orientales, Carlos P. Puig @ -33.522281, -58.221896
+19:42:10 Carlos María Solari y Carlos P. Puig @ -33.523059, -58.221357
+19:43:17 Río Negro y Carlos P. Puig @ -33.523891, -58.220774
+19:44:31 Río Negro y Grito de Asencio @ -33.524360, -58.221780
+19:45:35 Carlos María Solari y Grito de Asencio @ -33.523560, -58.222340
+19:46:42 Treinta y Tres Orientales, Grito de Asencio @ -33.522778, -58.222895
+19:47:47 Juan Zorrilla de San Martín y Grito de Asencio @ -33.521999, -58.223454

@@ -1126,6 +1126,72 @@ def test_the_map_check_can_hear_the_map_as_another_card_would(tmp_path, capsys):
     assert "--card-offset: only meaningful together with --check-map" in capsys.readouterr().err
 
 
+def graded(tmp_path):
+    """A map of one block with a fingerprint every tenth of it, two networks across it.
+
+    One fades from Alfa and the other rises towards Bravo, and each fingerprint
+    also hears the whole street's own router, the same everywhere, which is
+    what makes every one of them match a scan about as well.
+    """
+    mapa = tmp_path / "mapa.jsonl"
+    rows = [
+        {
+            "outing": "a",
+            "walk": f"a#{step}",
+            "from": "Alfa",
+            "to": "Bravo",
+            "fraction": step / 10,
+            "length_m": 100.0,
+            "networks": [
+                {"ssid": "Calle", "bssid": "aa:bb:cc:dd:ee:10", "signal_dbm": -60},
+                {"ssid": "Alfa-side", "bssid": "aa:bb:cc:dd:ee:11", "signal_dbm": -50 - 4 * step},
+                {"ssid": "Bravo-side", "bssid": "aa:bb:cc:dd:ee:12", "signal_dbm": -90 + 4 * step},
+            ],
+        }
+        for step in range(11)
+    ]
+    mapa.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    return mapa
+
+
+def at_alfa():
+    """What a card five metres from Alfa hears on the graded block."""
+    return [
+        AccessPoint("Calle", "aa:bb:cc:dd:ee:10", 2412, -60, None, "psk", False),
+        AccessPoint("Alfa-side", "aa:bb:cc:dd:ee:11", 2412, -52, None, "psk", False),
+        AccessPoint("Bravo-side", "aa:bb:cc:dd:ee:12", 2412, -88, None, "psk", False),
+    ]
+
+
+def test_locate_along_the_levels_puts_a_scan_by_a_corner_at_it(monkeypatch, tmp_path, capsys):
+    # Every fingerprint hears the same three networks, so the matching alone
+    # finds the block and cannot tell where along it; the levels can.
+    from enodia import fingerprint
+
+    mapa = graded(tmp_path)
+    monkeypatch.setattr(fingerprint.ifpeek, "get_wifi_interfaces", lambda: ["wlan0"])
+    monkeypatch.setattr(fingerprint.ifpeek, "interface_rfkill", lambda interface: None)
+    monkeypatch.setattr(
+        fingerprint.ifpeek, "scan_access_points", lambda interface=None, fresh=False: at_alfa()
+    )
+    flags = ["--locate", "--voice", "none", "-i", "wlan0", "--map", str(mapa)]
+    assert cli.main(flags) == 0
+    matched = capsys.readouterr().out
+    assert cli.main([*flags, "--along", "levels"]) == 0
+    levelled = capsys.readouterr().out
+    assert 'You are at "Alfa"' in levelled and 'You are at "Alfa"' not in matched
+    watching(monkeypatch, [at_alfa(), at_alfa()])
+    assert cli.main([*WATCH, "--map", str(mapa), "--cycles", "2", "--along", "levels"]) == 0
+    assert 'at "Alfa"' in capsys.readouterr().out
+
+
+def test_along_needs_a_command_that_uses_the_map(capsys):
+    with pytest.raises(SystemExit) as stopped:
+        cli.main(["--voice", "none", "--button", "off", "--along", "levels"])
+    assert stopped.value.code == 2
+    assert "--along" in capsys.readouterr().err
+
+
 def test_locate_watch_stops_on_ctrl_c_and_keeps_the_cadence(monkeypatch, tmp_path, capsys):
     from enodia import fingerprint
 

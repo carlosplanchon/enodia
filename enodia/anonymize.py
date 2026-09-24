@@ -387,9 +387,11 @@ class Shift:
     began: datetime
     lat: float | None = None
     lon: float | None = None
+    keep_time: bool = False
 
     def when(self, moment: datetime) -> datetime:
-        return EPOCH + (moment - self.began)
+        """The moment on the artificial clock, or as it was with `keep_time`."""
+        return moment if self.keep_time else EPOCH + (moment - self.began)
 
     def where(self, lat: float, lon: float) -> tuple[float, float]:
         """The same point relative to the walk, laid out from the origin.
@@ -424,6 +426,8 @@ class Exported:
     withheld: int = 0
     survived: tuple[tuple[str, int], ...] = ()
     unconfirmed: str | None = None
+    places_kept: bool = False
+    time_kept: bool = False
 
 
 def crossing_name(names: Names, name: str) -> str:
@@ -571,7 +575,9 @@ def export_log(
     return rows, scans, len(seen), withheld
 
 
-def export_notebook(waypoints: Sequence[Waypoint], names: Names, shift: Shift) -> list[str]:
+def export_notebook(
+    waypoints: Sequence[Waypoint], names: Names, shift: Shift, keep_places: bool = False
+) -> list[str]:
     """The notebook, written again from what was parsed out of it.
 
     Written again and not patched, which is the opposite of what `--geocode`
@@ -579,6 +585,12 @@ def export_notebook(waypoints: Sequence[Waypoint], names: Names, shift: Shift) -
     comments are worth keeping; here the operator's own comments are arbitrary
     prose about their afternoon, and the only way to be sure none of it goes out
     is not to carry any of it.
+
+    `keep_places` writes the crossings as they are named and where they are,
+    for somebody who is content to publish the streets they walked: the corners
+    are public, and the networks are what the export is for. The clock is moved
+    all the same, since the time of day is a pattern of life and reproducing a
+    walk needs only its intervals.
     """
     rows: list[str] = []
     day = None
@@ -592,9 +604,10 @@ def export_notebook(waypoints: Sequence[Waypoint], names: Names, shift: Shift) -
             # here, so losing one is losing the data rather than hiding it.
             day = moved.date()
             rows.append(f"date {day.isoformat()}")
-        line = f"{moved.strftime('%H:%M:%S')} {crossing_name(names, point.name)}"
+        name = point.name if keep_places else crossing_name(names, point.name)
+        line = f"{moved.strftime('%H:%M:%S')} {name}"
         if point.lat is not None and point.lon is not None:
-            lat, lon = shift.where(point.lat, point.lon)
+            lat, lon = (point.lat, point.lon) if keep_places else shift.where(point.lat, point.lon)
             line += f" @ {lat:.6f}, {lon:.6f}"
         rows.append(line)
     return rows
@@ -615,7 +628,7 @@ def _comment(line: str) -> str:
     return body.partition("#")[2].strip()
 
 
-def what_went_in(log: Path, notebook: Path, ssid: str) -> set[str]:
+def what_went_in(log: Path, notebook: Path, ssid: str, keep_places: bool = False) -> set[str]:
     """Every name and address the two source files carry, to look for afterwards.
 
     Read from the files and not from the pseudonyms `Names` handed out, which is
@@ -629,7 +642,10 @@ def what_went_in(log: Path, notebook: Path, ssid: str) -> set[str]:
     is the worse of the two mistakes.
 
     With `--ssid keep` the names are not collected, because they are in the
-    output on purpose and reporting them would be reporting the flag back.
+    output on purpose and reporting them would be reporting the flag back, and
+    with `keep_places` the crossings are not, for the same reason. The
+    operator's comments on those lines are collected either way: they never go
+    out, and one that did would be exactly the leak this is for.
     """
     wanted = [key for key in IDENTIFYING if key != "ssid" or ssid != "keep"]
     went: set[str] = set()
@@ -661,6 +677,8 @@ def what_went_in(log: Path, notebook: Path, ssid: str) -> set[str]:
             continue
         found = NOTEBOOK_LINE.match(line) or MARKED_LINE.match(line)
         if found is None:  # pragma: no cover - MARKED_LINE takes any line with a character in it
+            continue
+        if keep_places:
             continue
         name = found.group("name").strip()
         went.add(name)
@@ -695,6 +713,8 @@ def export_outing(
     ssid: str = "remove",
     mac_shaped: bool = False,
     outing: str | None = None,
+    keep_places: bool = False,
+    keep_time: bool = False,
 ) -> Exported:
     """Write a publishable copy of one outing, and say what it did.
 
@@ -725,18 +745,18 @@ def export_outing(
     waypoints = read_notebook(notebook, first.date(), first.tzinfo, button_marks(records))
 
     names = Names(key=key, mac_shaped=mac_shaped)
-    shift = Shift(began=earliest(records, waypoints))
+    shift = Shift(began=earliest(records, waypoints), keep_time=keep_time)
     placed = [point for point in waypoints if point.lat is not None and point.lon is not None]
     if placed:
         shift.lat, shift.lon = placed[0].lat, placed[0].lon
 
     rows, counted, networks, withheld = export_log(records, names, shift, ssid)
-    lines = export_notebook(waypoints, names, shift)
+    lines = export_notebook(waypoints, names, shift, keep_places)
     written = ("\n".join(rows) + "\n", "\n".join(lines) + "\n")
     # Against the bytes themselves and not against the objects they were built
     # from, because the substitution being right is what is in question.
-    survived = survivors(what_went_in(log, notebook, ssid), "".join(written))
-    log_name = f"outing-{EPOCH.date().isoformat()}.jsonl"
+    survived = survivors(what_went_in(log, notebook, ssid, keep_places), "".join(written))
+    log_name = f"outing-{shift.when(shift.began).date().isoformat()}.jsonl"
     unconfirmed = _commit(out, (log_name, written[0]), (NOTEBOOK_NAME, written[1]))
     return Exported(
         out / log_name,
@@ -750,6 +770,8 @@ def export_outing(
         withheld + unusable,
         survived,
         unconfirmed,
+        keep_places,
+        keep_time,
     )
 
 
@@ -904,6 +926,11 @@ def format_export(done: Exported) -> str:
             "the backends are known to write goes out as it is, so this is either a daemon "
             "saying something new, which is worth telling me about, or a line somebody edited."
         )
+    if done.time_kept:
+        lines.append(
+            "\n--keep-time left every time as it was: the day of the walk and the hour of each "
+            "step of it go out with it, and together they say when the walker walks."
+        )
     if done.kept_names:
         lines.append(
             f"\n{done.kept_names} network{'' if done.kept_names == 1 else 's'} had no address "
@@ -918,9 +945,19 @@ def format_export(done: Exported) -> str:
         "  A radio fingerprint locates itself. The set of access points at a corner is that",
         "  corner's identity, which is how --locate works, so anybody who walks the same",
         "  streets with their own scanner can join their real addresses onto this.",
-        "  The shape of the walk survives. The coordinates were moved to an artificial",
-        "  origin and the geometry between them is intact, which is what reproducing the",
-        "  numbers needs and what makes the route searchable against a map.",
+        *(
+            (
+                "  The walk is where it was walked. --keep-places left the streets and the",
+                "  coordinates as they are, so the route is on the map for anyone to see, and",
+                "  so is roughly where each access point along it stands.",
+            )
+            if done.places_kept
+            else (
+                "  The shape of the walk survives. The coordinates were moved to an artificial",
+                "  origin and the geometry between them is intact, which is what reproducing the",
+                "  numbers needs and what makes the route searchable against a map.",
+            )
+        ),
         "",
         "Read it before publishing it. That is the only check that counts.",
     ]

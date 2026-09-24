@@ -12,6 +12,7 @@ Each outing held out in turn, and its scans located from the other outings:
   median error, of a stretch            17%            17%                 17%            17%               17%                18%
   mean error in metres                 23 m           23 m                23 m           23 m              24 m               23 m
   median error in metres               21 m           22 m                22 m           21 m              22 m               23 m
+  pulled in, near a corner            +12 m          +14 m               +13 m          +12 m             +12 m              +11 m
   moved faster than a walk        22 of 129       9 of 132            9 of 131      22 of 129         23 of 128           6 of 129
 
   A scan that landed on the wrong stretch is not a small error, it is a different street,
@@ -22,6 +23,8 @@ Each outing held out in turn, and its scans located from the other outings:
   100 of 144 scans, by +0.5 dB. Settling ties places each scan with the scans before it
   breaking a tie between two stretches. Choosing the path takes the likeliest path through
   them, which can overrule the scan itself. At a walking pace settles ties and keeps each
-  answer's place along the stretch to a walk's speed, as --locate --watch does. Moved
-  faster than a walk counts the steps between two answers in a row on the right stretch
-  that nobody walks in the seconds between them.
+  answer's place along the stretch to a walk's speed, as --locate --watch does. Pulled in,
+  near a corner is how far the answers to scans taken within a fifth of a block of a
+  corner landed towards the middle of the block, on average, and negative past the corner,
+  into the block next door. Moved faster than a walk counts the steps between two answers
+  in a row on the right stretch that nobody walks in the seconds between them.

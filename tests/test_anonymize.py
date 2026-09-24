@@ -20,6 +20,7 @@ from enodia.anonymize import (
     format_export,
     key_path,
     read_key,
+    what_went_in,
 )
 from enodia.netlog import read_log
 from enodia.reconcile import reconcile
@@ -287,6 +288,24 @@ def test_the_times_keep_their_intervals_and_lose_their_day(tmp_path):
     ]
 
 
+def test_keeping_the_time_publishes_the_day_and_the_hour_as_they_were(tmp_path):
+    # For somebody content to say when they walked: every time as it was
+    # recorded, in the notebook as in the log, and the log named by its day.
+    done, log, paper = exported(tmp_path, keep_time=True)
+    stamps = [json.loads(line)["time"] for line in log.splitlines()]
+    assert stamps == [
+        "2026-09-14T17:45:10-03:00",
+        "2026-09-14T17:46:10-03:00",
+        "2026-09-14T17:47:10-03:00",
+    ]
+    assert paper.splitlines()[0] == "date 2026-09-14"
+    assert paper.splitlines()[1].startswith("17:44:30 ")
+    assert done.log.name == "outing-2026-09-14.jsonl" and done.time_kept
+    assert "--keep-time left every time as it was" in format_export(done)
+    # The networks are substituted all the same.
+    assert "Casa Planchon" not in log and "aa:bb:cc:dd:ee:ff" not in log
+
+
 def test_a_notebook_that_starts_before_the_log_does_not_go_negative(tmp_path):
     # Marking the corner and then walking is the ordinary way round, so the
     # notebook usually starts first and shifting by the log alone would put it
@@ -341,6 +360,32 @@ def test_a_comment_in_the_notebook_does_not_survive_the_export(tmp_path):
     # prose about somebody's afternoon.
     _, _, paper = exported(tmp_path)
     assert "#" not in paper and "vereda" not in paper
+
+
+def test_keeping_the_places_publishes_the_streets_and_still_hides_the_networks(tmp_path):
+    # The corners are public and the networks are what the export is for, so
+    # somebody content to publish the streets they walked can keep them: named
+    # as they were and where they were. The clock is moved all the same.
+    done, log, paper = exported(tmp_path, keep_places=True)
+    assert "17:44:30 Agraciada y Freire @ -34.860000, -56.210000" not in paper  # the time moved
+    assert "Agraciada y Freire @ -34.860000, -56.210000" in paper
+    assert "Agraciada y Solari @ -34.861000, -56.209000" in paper
+    assert paper.splitlines()[0] == f"date {EPOCH.date().isoformat()}"
+    for real in ("Casa Planchon", "ANTEL_4821", "aa:bb:cc:dd:ee:ff", "11:22:33:44:55:66"):
+        assert real not in log and real not in paper
+    assert "vereda" not in paper  # the operator's comments still never go out
+    assert done.places_kept and done.survived == ()  # the streets are not reported back
+    said = format_export(done)
+    assert "--keep-places left the streets and the" in said
+    assert "moved to an artificial" not in said
+
+
+def test_keeping_the_places_still_looks_for_everything_else_that_went_in(tmp_path):
+    log, paper = outing(tmp_path)
+    kept = what_went_in(log, paper, "remove", keep_places=True)
+    assert {"Casa Planchon", "aa:bb:cc:dd:ee:ff", "por la vereda norte"} <= kept
+    assert "Agraciada y Freire" not in kept and "Agraciada" not in kept
+    assert "Agraciada" in what_went_in(log, paper, "remove")
 
 
 # --- the point of the whole thing ------------------------------------------------
@@ -426,6 +471,17 @@ def test_export_public_writes_both_files_and_says_what_it_did(capsys, tmp_path):
     assert (tmp_path / "public" / "notebook.txt").exists()
 
 
+def test_export_public_keeps_the_places_when_asked(capsys, tmp_path):
+    log, paper = outing(tmp_path)
+    out = tmp_path / "public"
+    flags = ["--export-public", str(log), str(paper), "--out", str(out), "--keep-places"]
+    assert cli.main([*flags, "--keep-time"]) == 0
+    said = capsys.readouterr().out
+    assert "--keep-places left the streets" in said and "--keep-time left every time" in said
+    assert "17:44:30 Agraciada y Freire @ -34.860000" in (out / "notebook.txt").read_text()
+    assert (out / "outing-2026-09-14.jsonl").exists()
+
+
 def test_export_public_reports_a_notebook_it_cannot_read(capsys, tmp_path):
     log, paper = outing(tmp_path, notebook="17:0 A\nB\n")
     assert cli.main(["--export-public", str(log), str(paper), "--out", str(tmp_path / "p")]) == 1
@@ -438,6 +494,8 @@ def test_export_public_reports_a_notebook_it_cannot_read(capsys, tmp_path):
         ["--ssid", "keep"],
         ["--mac-shaped"],
         ["--key-file", "clave"],
+        ["--keep-places"],
+        ["--keep-time"],
     ],
 )
 def test_export_flags_without_export_public_are_an_error(flags, capsys):

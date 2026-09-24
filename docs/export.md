@@ -64,6 +64,25 @@ block is a metre, in a project that reports errors of eight. So the offsets are 
 metres and laid down again at the origin's own latitude, and the distances come out the same to
 within a few centimetres.
 
+**`--keep-places` publishes the streets and keeps the clock moved.** The crossings are public:
+anybody can walk to the corner of Rivera and Soca. What an export protects is the networks, and
+for somebody content to publish the streets they walked, renaming the corners and moving the map
+throws away what makes the walk worth publishing: it can no longer be drawn over the streets
+OpenStreetMap has, or reconciled along them. So `--keep-places` writes the crossings as they
+were named and where they were, and substitutes the networks exactly as without it. What it
+gives up is said every time it runs: the route is on the map for anyone to see, and so is
+roughly where each access point along it stands, the walker's own among them. The clock is moved
+all the same, because the time of day is a pattern of life and reproducing a walk needs only its
+intervals. The export's own search for what went in and came out stops looking for the
+crossings, which are in the output on purpose, and goes on looking for everything else, the
+comments on those same lines included.
+
+**`--keep-time` leaves the clock as it was.** A walk moved to 1970 reproduces every number in
+it, since what matters is how long each step took, and the day and the hour are a pattern of
+life: the same walk every Tuesday at seven says when somebody is out. For somebody content to
+say when they walked, `--keep-time` writes every time as it was recorded, in the log and in the
+notebook, and names the log by its own day. The export says so every time it runs.
+
 **A type closes the fields, and only a domain closes the strings.** Serialising a typed record
 means a field nobody named cannot leave. It says nothing about a field that was named and whose
 type is `str`, because the value in it came out of a file that may have been edited: an `event`

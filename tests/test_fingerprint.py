@@ -8,6 +8,7 @@ import threading
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from math import exp, log
+from statistics import mean
 
 import ifpeek
 import pytest
@@ -2096,3 +2097,135 @@ def test_the_check_hears_another_card_and_learns_it_back_on_the_run():
     never = format_map_check(walks, *[check_map(walks)] * 6)
     assert "here it never had pairs enough to correct anything." in " ".join(never.split())
     assert "heard as a card" not in never
+
+
+# --- along the levels (experimental) ----------------------------------------------
+
+A_BSSID, B_BSSID = "aa:bb:cc:dd:0a:01", "aa:bb:cc:dd:0b:01"
+
+
+def slope(fraction, db=0.0):
+    """Two networks across one block: one fading from Alfa, one rising towards Bravo."""
+    return (
+        net("Alfa-side", round(-50 - 40 * fraction + db), bssid=A_BSSID),
+        net("Bravo-side", round(-90 + 40 * fraction + db), bssid=B_BSSID),
+    )
+
+
+def graded_block(length=100.0, outing="one", start=None, where=None):
+    """A fingerprint every tenth of the block, each hearing the two networks at its place."""
+    return [
+        mark(
+            step / 10,
+            *slope(step / 10),
+            walk=f"{outing}#{step}",
+            length=length,
+            when=None if start is None else start + timedelta(seconds=5 * step),
+        )
+        if where is None
+        else replace(
+            mark(step / 10, *slope(step / 10), walk=f"{outing}#{step}", length=length),
+            place=Place("Alfa", "Bravo", step / 10, *where(step / 10), length),
+        )
+        for step in range(11)
+    ]
+
+
+def answer_at(fraction, lat=None, lon=None, length=100.0):
+    return fingerprint.Location(Place("Alfa", "Bravo", fraction, lat, lon, length), 0.9, 1, 0.1)
+
+
+def test_the_levels_put_a_scan_near_a_corner_near_that_corner():
+    # Taken five metres from Alfa, and answered at 30% by the middle of what
+    # matched: the curves put it back where its levels say it was.
+    levels = fingerprint.Levels.of(graded_block())
+    placed = levels.place(answer_at(0.3), slope(0.05))
+    assert placed is not None and placed.place.fraction == pytest.approx(0.05, abs=0.011)
+    # A card reading six decibels low lands in the same place.
+    low = levels.place(answer_at(0.3), slope(0.05, db=-6.0))
+    assert low is not None and low.place.fraction == placed.place.fraction
+    far = levels.place(answer_at(0.3), slope(0.95))
+    assert far is not None and far.place.fraction == pytest.approx(0.95, abs=0.011)
+
+
+def test_the_levels_need_a_stretch_with_two_points_and_a_scan_that_shares_a_network():
+    lone = fingerprint.Levels.of(graded_block()[:1])
+    found = answer_at(0.3)
+    assert lone.place(found, slope(0.05)) is found
+    levels = fingerprint.Levels.of(graded_block())
+    stranger = [net("Nadie", -60, bssid="aa:bb:cc:dd:ff:ff")]
+    assert levels.place(found, stranger) is found
+    assert levels.place(None, slope(0.05)) is None
+    elsewhere = fingerprint.Location(Place("Charlie", "Delta", 0.3), 0.9, 1, 0.1)
+    assert levels.place(elsewhere, slope(0.05)) is elsewhere
+    # Fingerprints that heard nothing with a level fit nothing either.
+    mute = (net("Mudo", None, bssid="aa:bb:cc:dd:ee:ee"),)
+    deaf = [replace(one, networks=mute) for one in graded_block()]
+    assert fingerprint.Levels.of(deaf).place(found, slope(0.05)) is found
+
+
+def test_the_levels_without_a_length_take_a_block_of_a_hundred_metres():
+    levels = fingerprint.Levels.of(graded_block(length=None))
+    placed = levels.place(answer_at(0.3, length=None), slope(0.05))
+    assert placed is not None and placed.place.fraction == pytest.approx(0.05, abs=0.011)
+
+
+def test_the_levels_choose_only_where_the_map_has_data():
+    # Walked for its first third only: the far end is not chosen, however the
+    # curves carry on past the last fingerprint.
+    near_end = [one for one in graded_block() if one.place.fraction <= 0.3]
+    placed = fingerprint.Levels.of(near_end).place(answer_at(0.2), slope(0.9))
+    assert placed is not None and placed.place.fraction <= 0.5
+    # Two fingerprints at one fraction have no slope to fit: every point fits as
+    # well as any other, and the answer stays where the matching put it.
+    twice = fingerprint.Levels.of([mark(0.5, *slope(0.2)), mark(0.5, *slope(0.4))])
+    assert twice.place(answer_at(0.5), slope(0.3)).place.fraction == 0.5
+
+
+def test_the_levels_put_the_answer_on_the_line_its_stretch_draws():
+    on_the_street = graded_block(where=lambda fraction: (-34.9, -56.2 + 0.001 * fraction))
+    levels = fingerprint.Levels.of(on_the_street)
+    placed = levels.place(answer_at(0.3, -34.9, -56.1997), slope(0.05))
+    assert placed is not None
+    assert placed.place.coordinates == pytest.approx((-34.9, -56.2 + 0.001 * placed.place.fraction))
+    # An answer whose coordinates were withheld keeps them withheld.
+    assert levels.place(answer_at(0.3), slope(0.05)).place.coordinates is None
+
+
+def test_the_pull_near_a_corner_counts_the_answers_that_went_past_it():
+    def held(truth, found, error=0.0, across=False, length=100.0):
+        return fingerprint.HeldOutScan(
+            Place("Alfa", "Bravo", truth, None, None, length), found, error, 0.0, "", across
+        )
+
+    past = Place("Alfa", "Charlie", 0.1, None, None, 100.0)
+    beyond = Place("Bravo", "Echo", 0.1, None, None, 100.0)
+    results = [
+        held(0.05, answer_at(0.25)),  # twenty metres in from Alfa
+        held(0.95, answer_at(0.85)),  # ten in from Bravo
+        held(0.05, fingerprint.Location(past, 0.9, 1, 0.0), 15.0, True),  # past Alfa
+        held(0.05, fingerprint.Location(beyond, 0.9, 1, 0.0), 95.0, True),  # past the other end
+        held(0.5, answer_at(0.9)),  # in the middle: not near a corner
+        held(0.05, answer_at(0.25), length=None),  # no length to measure it in
+        held(0.05, None),
+    ]
+    assert fingerprint.pulled_in(results) == pytest.approx((20 + 10 - 15) / 3)
+    assert fingerprint.pulled_in(results[4:]) is None
+
+
+def test_the_check_can_place_along_the_levels():
+    first = datetime(2026, 9, 1, 17, 0, tzinfo=TZ)
+    walks = [
+        *graded_block(outing="lunes", start=first),
+        *graded_block(outing="martes", start=first + timedelta(days=1)),
+    ]
+    matched = check_map(walks)
+    levelled = check_map(walks, along="levels")
+    error = lambda results: mean(one.error_m for one in results if one.error_m is not None)  # noqa: E731
+    assert error(levelled) < error(matched)
+    with pytest.raises(ValueError, match="along is 'matches' or 'levels'"):
+        check_map(walks, along="elsewhere")
+    report = format_map_check(walks, *[levelled] * 6, along="levels")
+    said = " ".join(report.split())
+    assert "placed along its stretch by the levels, which is experimental" in said
+    assert "pulled in, near a corner" in report

@@ -1,0 +1,34 @@
+Map: 518 fingerprints, 38 walks over 31 stretches, 1 outings.
+
+Each walk held out in turn, and its scans located from the rest of the map:
+
+                                by networks  and by signal  signal, calibrated  settling ties choosing the path  at a walking pace
+  scans held out                        518            518                 518            518               518                518
+  placed on the right stretch            66             63                  63             69                55                 69
+  placed across a mark                  452            419                 420            449               463                449
+  landed on the wrong stretch             0              1                   1              0                 0                  0
+  not on the map                          0             35                  34              0                 0                  0
+  mean error, of a stretch              44%            43%                 43%            47%               49%                47%
+  median error, of a stretch            38%            35%                 35%            40%               39%                39%
+  mean error in metres                 38 m           37 m                37 m           41 m              42 m               41 m
+  median error in metres               35 m           32 m                32 m           37 m              37 m               36 m
+  pulled in, near a corner            -21 m          -19 m               -19 m          -20 m             -20 m              -18 m
+  moved faster than a walk          5 of 52        6 of 48             7 of 48        5 of 55           5 of 45            2 of 55
+
+  A scan that landed on the wrong stretch is not a small error, it is a different street,
+  so it is counted apart rather than averaged into the distances. One placed across a mark
+  is on the stretch next door, a few metres past the mark the two share, and its error is
+  measured through that mark. Signal, calibrated compares levels after correcting the card
+  by what it learns on the run, as --locate --watch --match signal does: here it corrected
+  512 of 518 scans, by +0.0 dB. Settling ties places each scan with the scans before it
+  breaking a tie between two stretches. Choosing the path takes the likeliest path through
+  them, which can overrule the scan itself. At a walking pace settles ties and keeps each
+  answer's place along the stretch to a walk's speed, as --locate --watch does. Pulled in,
+  near a corner is how far the answers to scans taken within a fifth of a block of a
+  corner landed towards the middle of the block, on average, and negative past the corner,
+  into the block next door. Moved faster than a walk counts the steps between two answers
+  in a row on the right stretch that nobody walks in the seconds between them.
+
+  518 of 518 answers were backed only by the outing the scan came from,
+  which flatters this result: that is the map recognising a walk, not a place.
+  Walk these streets again on another day and run this again.

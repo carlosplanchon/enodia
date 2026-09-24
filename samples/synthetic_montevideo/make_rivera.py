@@ -1,6 +1,6 @@
 """The Rivera sample: real corners and street geometry, synthetic radios.
 
-    uv run python samples/make_rivera.py
+    uv run python samples/synthetic_montevideo/make_rivera.py
 
 writes the three logs and the two notebooks beside this file, from
 `rivera-streets.jsonl`, which `--geocode --streets` wrote from OpenStreetMap.

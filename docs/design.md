@@ -22,6 +22,7 @@ one feature with somebody else's privacy on the line and its decisions fill a pa
 | why the live answer moves at a walk and not scan by scan | *A walk has a pace* |
 | why an answer says it is at a corner | *A corner is somewhere too* |
 | how another card is calibrated against the map on the run | *Two cards hear one street differently* |
+| what `--along levels` does, and why it is experimental | *Where along the block, from the levels* |
 | what `--sequence path` does, and what it costs | *The path or the point, and why it is a flag* |
 | what `--check-map` holds out, and what a scan placed across a mark is | *A scan at a mark is on two stretches* |
 | why a block came out on the chord with the street drawn | *A street is more than one way* |
@@ -38,6 +39,11 @@ one feature with somebody else's privacy on the line and its decisions fill a pa
 | why a missing button press is written down | *The kernel saying it lost your input* |
 | why the preflight says FAIL about a lid that is fine | *The lid*, in [setting up the machine](setup.md) |
 | what a real walk changed | *What the first real outing falsified* |
+
+The real outing the newer sections quote, a walk in Dolores on 2026-09-22, is in
+[`samples/dolores/`](../samples/dolores/README.md) with its networks pseudonymised, so its
+numbers can be run again: `dolores-map-check.txt` and `dolores-map-check-levels.txt` are its two
+map checks.
 
 ## Not knowing is an answer
 
@@ -231,6 +237,58 @@ other, the sample's error going from 27 to 30 m: not a correction yet. And the o
 kept between runs, since it is against the card that built this map and is wrong for any other,
 and learning it again costs half a minute.
 
+A real walk was less kind to `--match signal` itself than the simulation. It lost 38 of 111
+scans on streets the map knows, where matching on the networks lost none. The levels differed
+from the mapping day's by anything from +4 to +19 dB from one network to the next, which no
+single correction fixes, and the way the laptop was carried may be why; that is not yet known.
+The run had also begun indoors, beside a router the map had only heard from the pavement, and
+that taught the calibration a difference that was not the card. It is barely tested, it has so
+far done worse, and it stays to be measured.
+
+## Where along the block, from the levels
+
+The place along a stretch is the middle of the fingerprints that matched a scan, which is only
+as fine as they are. `--along levels`, which is experimental, fits instead a curve for every
+network heard on the stretch, of how its level rises and falls along the block, and puts the
+answer where the scan's levels fit the curves best. The stretch is still the matching's.
+
+It began from a measurement that was wrong. Counting only the answers that landed on the right
+stretch, the ones near a corner looked pulled thirty metres towards the middle of the block on
+the first real outing. But near a corner the answers that went past it, into the block next
+door, are exactly the ones that would have said otherwise, and leaving them out left only the
+ones inside. Counted whole, and measured through the corner:
+
+| near a corner, a fifth of the block from it | on the stretch | past the corner | together |
+|---|---|---|---|
+| the sample | 55, +18.8 m inwards | 8, -31.3 m | +12.4 m |
+| the first real outing | 13, +33.6 m inwards | 193, -23.6 m | -20.0 m |
+
+The sample's pull inwards is real. The real outing's answers mostly go past the corner, since 24
+of its 31 blocks were walked once and holding that pass out leaves nothing on the block.
+`--check-map` reports this as "pulled in, near a corner" in every column now, flag or not.
+
+Two choices in the fit are what make it worth trying. The curves are local linear fits and not
+local averages, because an average near the end of a block has data on one side only and bends
+every curve towards the middle, which is the pull being taken away. And the fit is on the shape
+of the levels, with the mean difference taken out at every point, so a card reading six decibels
+low lands in the same place and it needs no `--match signal`. Curves that say nothing about one
+point over another leave the answer where the matching put it. Held out as `--check-map` holds
+them, by networks:
+
+| | the middle of the matches | along the levels |
+|---|---|---|
+| the sample: mean and median error | 23 m, 21 m | 23 m, 21 m |
+| the sample: pulled in, near a corner | +12 m | +11 m |
+| the first real outing: mean and median error | 38 m, 35 m | 33 m, 29 m |
+| the first real outing: pulled in, near a corner | -21 m | -13 m |
+
+On the real outing it brings the answers that went past a corner back towards it, and every
+column gains about five metres. On the sample it changes nothing that matters, and the sample's
+radios were made by a model much like the one the curves draw, which is a reason to trust it
+less, not more, where it does well. That is one real outing, held out a pass at a time, and it
+is why the flag is experimental: a second outing over the same streets on another day is the
+measurement that decides it, and if it does not hold there, it goes.
+
 ## The path or the point, and why it is a flag
 
 `--sequence tie` is the rule above: the scans before the last one speak only when it cannot
@@ -262,6 +320,11 @@ That cost, and the price of a jump, which is a number nobody has measured, are w
 flag and not the new rule. It is the same reason `--pace` and `--match` are flags: choosing
 for the operator before a real walk has measured the two would be inventing the result, and
 `--check-map` reports both, in columns of their own, so that the walk can.
+
+Where it stands: barely tested, and so far worse. It put fewer scans on the right stretch than
+settling ties on the sample and on the first real outing, and walked with, it was late onto a
+new block and never right where the default was wrong. It stays so that a second outing over the
+same streets can measure it, and goes if that says the same.
 
 ## A scan at a mark is on two stretches
 

@@ -9,6 +9,7 @@ import time
 from collections import deque
 from collections.abc import Iterator, Sequence
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 from enodia import __version__
@@ -18,6 +19,7 @@ from enodia.draw import live_map, mapped_places, svg_map
 from enodia.fingerprint import (
     Calibration,
     Fingerprint,
+    Levels,
     Location,
     Pace,
     RadioBlocked,
@@ -301,8 +303,9 @@ def build_parser() -> argparse.ArgumentParser:
         metavar=("LOG", "NOTEBOOK"),
         help="write a publishable copy of one outing: the addresses and names of other "
         "people's networks substituted, the crossings renamed, the clock and the map moved "
-        "to an artificial origin. Both files together, because a notebook of real street "
-        "corners says where you walked whatever the log says",
+        "to an artificial origin (the streets stay where they are with --keep-places). Both "
+        "files together, because a notebook of real street corners says where you walked "
+        "whatever the log says",
     )
     parser.add_argument(
         "--ssid",
@@ -310,6 +313,20 @@ def build_parser() -> argparse.ArgumentParser:
         default="remove",
         help="with --export-public: what to do with the names of the networks. Removed by "
         "default, since a name is chosen by a person and often says which person",
+    )
+    parser.add_argument(
+        "--keep-places",
+        action="store_true",
+        help="with --export-public: leave the crossings named and placed as they are, and "
+        "substitute only the networks. The route is then on the map for anyone to see, and so "
+        "is roughly where each access point along it stands; the clock is moved all the same",
+    )
+    parser.add_argument(
+        "--keep-time",
+        action="store_true",
+        help="with --export-public: leave every time as it was recorded instead of moving the "
+        "walk to 1970-01-01, so the date and the hour of each step of it are published "
+        "(default: the intervals kept and the day moved)",
     )
     parser.add_argument(
         "--mac-shaped",
@@ -442,12 +459,21 @@ def build_parser() -> argparse.ArgumentParser:
         "matching and what calibrating on the run wins back (default: the same card)",
     )
     parser.add_argument(
+        "--along",
+        choices=["matches", "levels"],
+        default="matches",
+        help="how the place along the stretch is found: the middle of the fingerprints that "
+        "matched, or, experimental, where the scan's levels fit how each network rises and "
+        "falls along the block (default: matches)",
+    )
+    parser.add_argument(
         "--match",
         choices=["networks", "signal"],
         default="networks",
         help="what a fingerprint is matched on: which networks are in view, or also how "
-        "strong they came in, which is more precise and less portable between radios "
-        "(default: networks)",
+        "strong they came in. 'signal' is barely tested and has so far done worse: on the one "
+        "real walk that tried it, it lost 38 of 111 scans on streets the map knows, where "
+        "'networks' lost none (default: networks)",
     )
     parser.add_argument(
         "--weigh",
@@ -461,9 +487,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--sequence",
         choices=["tie", "path"],
         default="tie",
-        help="with --locate LOG: what the scans before the last one do. 'tie' settles a tie "
-        "between two stretches; 'path' chooses the likeliest path through all of them, "
-        "and can overrule the last scan (default: tie)",
+        help="with --locate LOG, --locate --watch or --check-map: what the scans before the last "
+        "one do. 'tie' settles a tie between two stretches; 'path' chooses the likeliest path "
+        "through all of them and can overrule the last scan. 'path' is barely tested and has so "
+        "far done no better, and was late onto a new block (default: tie)",
     )
     return parser
 
@@ -635,12 +662,15 @@ def run_watch(
     calibration = Calibration() if by_signal else None
     announced: float | None = None
     refused = False
+    levels = Levels.of(known) if args.along == "levels" else None
+    latest: list[SeenNetwork] = []
 
     def corrected(scans: Iterator[list[SeenNetwork]]) -> Iterator[list[SeenNetwork]]:
         """Each scan at the levels the map's card would have read, once the run knows them."""
-        nonlocal announced, refused
+        nonlocal announced, refused, latest
         for seen in scans:
             if calibration is None:
+                latest = seen
                 yield seen
                 continue
             calibration.learn(known, seen, by_rarity)
@@ -657,12 +687,15 @@ def run_watch(
                     flush=True,
                 )
                 refused = True
-            yield calibration.correct(seen)
+            latest = calibration.correct(seen)
+            yield latest
 
     previous: Location | None = None
     first = True
     try:
         for answer in follow(known, corrected(fresh()), args.sequence, by_signal, by_rarity):
+            if levels is not None:
+                answer = levels.place(answer, latest)
             found = answer if pace is None else pace.keep(answer, time.monotonic())
             stamp = time.strftime("%H:%M:%S")
             if found is None:
@@ -753,6 +786,8 @@ def run_export(args: argparse.Namespace) -> int:
             ssid=args.ssid,
             mac_shaped=args.mac_shaped,
             outing=args.outing,
+            keep_places=args.keep_places,
+            keep_time=args.keep_time,
         )
     except (ExportError, NotebookError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -845,23 +880,20 @@ def run_map(args: argparse.Namespace, map_file: Path) -> int:
         except OSError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
-        offset = args.card_offset
+        offset, along = args.card_offset, args.along
+        check = partial(
+            check_map, fingerprints, by_rarity=by_rarity, card_offset=offset, along=along
+        )
         # In the order the report's columns are read in, the calibrated one last.
         checked = [
-            check_map(fingerprints, by_rarity=by_rarity, card_offset=offset),
-            check_map(fingerprints, by_signal=True, by_rarity=by_rarity, card_offset=offset),
-            check_map(fingerprints, sequence="tie", by_rarity=by_rarity, card_offset=offset),
-            check_map(fingerprints, sequence="path", by_rarity=by_rarity, card_offset=offset),
-            check_map(fingerprints, keep_pace=True, by_rarity=by_rarity, card_offset=offset),
-            check_map(
-                fingerprints,
-                by_signal=True,
-                calibrate=True,
-                by_rarity=by_rarity,
-                card_offset=offset,
-            ),
+            check(),
+            check(by_signal=True),
+            check(sequence="tie"),
+            check(sequence="path"),
+            check(keep_pace=True),
+            check(by_signal=True, calibrate=True),
         ]
-        print(format_map_check(fingerprints, *checked, card_offset=offset))
+        print(format_map_check(fingerprints, *checked, card_offset=offset, along=along))
         return 0
 
     # A map that is not there is an error here, and not an empty map. `read_map`
@@ -904,6 +936,8 @@ def run_map(args: argparse.Namespace, map_file: Path) -> int:
         found = locate_sequence(
             known, scans, sequence=args.sequence, by_signal=by_signal, by_rarity=by_rarity
         )
+        if args.along == "levels":
+            found = Levels.of(known).place(found, scans[-1])
         print(format_location(found, map_file))
         say_location(voice, found, args.lang, args.ssid_lang)
         return 0
@@ -1127,6 +1161,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         for flag, given in (
             ("--ssid", args.ssid != "remove"),
             ("--mac-shaped", args.mac_shaped),
+            ("--keep-places", args.keep_places),
+            ("--keep-time", args.keep_time),
             ("--key-file", args.key_file is not None),
         )
         if given
@@ -1185,6 +1221,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             ("--map", args.map is not None),
             ("--match", args.match != "networks"),
             ("--weigh", args.weigh != "rarity"),
+            ("--along", args.along != "matches"),
             ("--sequence", args.sequence != "tie"),
         )
         if given

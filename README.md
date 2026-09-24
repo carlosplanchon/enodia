@@ -49,8 +49,8 @@ Before walking, follow [machine setup](docs/setup.md) to keep the laptop awake w
 Try the bundled example, from a clone of the repository, without scanning any radios:
 
 ```bash
-enodia --locate samples/rivera-query.jsonl \
-  --map samples/rivera-map.jsonl --voice none
+enodia --locate samples/synthetic_montevideo/rivera-query.jsonl \
+  --map samples/synthetic_montevideo/rivera-map.jsonl --voice none
 ```
 
 ```text
@@ -60,7 +60,7 @@ You are between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 53% of
   from evidence last gathered 2026-09-17 17:02
 ```
 
-The street names, coordinates and geometry are real OpenStreetMap data. The radio observations are synthetic. This demonstrates the workflow, not measured accuracy on a real walk. [Inputs and reproduction commands](samples/README.md).
+The street names, coordinates and geometry are real OpenStreetMap data. The radio observations are synthetic. This demonstrates the workflow, not measured accuracy on a real walk. [Inputs and reproduction commands](samples/synthetic_montevideo/README.md).
 
 ## Your first walk
 
