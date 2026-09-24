@@ -26,13 +26,26 @@ It all runs on your machine. The one command that goes online looks your corners
 - **Follows you live.** `--locate --watch` scans as you walk, says where you are when it changes, and draws you on a page that reloads itself, over the streets, the water and the parks, with no connection.
 - **Checks itself.** Each estimate has a command that measures it against the walk: a corner held out and placed again, a block walked twice set against itself, a pass held out and found again from the rest of the map.
 
-## Try it now
+## Install
 
-From a clone of the repository, with no Wi-Fi card involved:
+You need Linux, Python 3.10 or newer, and a Wi-Fi interface run by iwd, NetworkManager or wpa_supplicant that you may scan with over D-Bus. For the voice, `espeak-ng` or SVOX Pico. Without either, Enodia prints what it would have said.
 
 ```bash
-uv sync
-uv run enodia --locate samples/synthetic_montevideo/rivera-query.jsonl \
+uv tool install enodia
+```
+
+`uv tool upgrade enodia` follows new releases. The proxy support of `--geocode` needs the `socks` extra: `uv tool install "enodia[socks]"`. Before the first walk, [set up the machine](docs/setup.md) so that it keeps scanning with the lid closed and hears the headset button.
+
+To work on Enodia itself, run `uv sync` in a clone and `uv run enodia` instead.
+
+## Try it now
+
+The samples live in the repository rather than in the package, so clone it for them. No Wi-Fi card is involved:
+
+```bash
+git clone https://github.com/carlosplanchon/enodia.git
+cd enodia
+enodia --locate samples/synthetic_montevideo/rivera-query.jsonl \
   --map samples/synthetic_montevideo/rivera-map.jsonl --voice none
 ```
 
@@ -46,18 +59,8 @@ You are between "Rivera y Brito del Pino" and "Rivera y Simón Bolívar", 53% of
 That one is synthetic: real streets of Montevideo, invented radios, made to show the workflow ([how it was made](samples/synthetic_montevideo/README.md)). The walk in Dolores is real. To see how well its map finds its own passes, which takes about two minutes:
 
 ```bash
-uv run enodia --check-map --map samples/dolores/dolores-map.jsonl
+enodia --check-map --map samples/dolores/dolores-map.jsonl
 ```
-
-## Install
-
-You need Linux, Python 3.10 or newer, and a Wi-Fi interface run by iwd, NetworkManager or wpa_supplicant that you may scan with over D-Bus. For the voice, `espeak-ng` or SVOX Pico. Without either, Enodia prints what it would have said.
-
-```bash
-uv tool install enodia
-```
-
-`uv tool upgrade enodia` follows new releases. The proxy support of `--geocode` needs the `socks` extra: `uv tool install "enodia[socks]"`. Before the first walk, [set up the machine](docs/setup.md) so that it keeps scanning with the lid closed and hears the headset button.
 
 ## Your first walk
 
