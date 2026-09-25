@@ -110,10 +110,10 @@ The lookup is the one command that goes online. To keep it apart from your own a
 **4. Come back, and find yourself.**
 
 ```bash
-enodia --locate --watch --streets streets.jsonl --live-map live.html
+enodia --locate --watch --streets streets.jsonl --live-map live.html --log watch.jsonl
 ```
 
-Open `live.html` in a browser once and leave it open. `enodia --assistant` is a menu for the same steps, the lookup aside: the walk, the reconciliation, the map and finding yourself.
+Open `live.html` in a browser once and leave it open. `--log` keeps the scans, so the run can be located again later with `--locate watch.jsonl`, against another map or with other flags. `enodia --assistant` is a menu for the same steps, the lookup aside: the walk, the reconciliation, the map and finding yourself.
 
 ![The live map in a browser: where the scan puts you on Río Negro, with the streets it may be on shaded around it, the last answers fading behind it, the map's own fingerprints as violet dots, the streets named, and in the corner a panel of what the run is doing.](https://raw.githubusercontent.com/carlosplanchon/enodia/main/assets/enodia_live.png)
 
