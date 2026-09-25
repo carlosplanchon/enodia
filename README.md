@@ -64,6 +64,17 @@ enodia --check-map --map samples/dolores/dolores-map.jsonl
 
 To see the real walk over a map, open `samples/dolores/dolores-walk.geojson` in a map viewer that reads GeoJSON, such as [GPXSee](https://www.gpxsee.org/) (on Arch Linux, `sudo pacman -S gpxsee`), or look at `samples/dolores/dolores-plan.svg`, the same walk drawn with no map service at all.
 
+## In the field
+
+Enodia locating a real street corner from Wi-Fi alone.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/carlosplanchon/enodia/main/assets/esquina_varela_y_solari.jpeg" width="48%" alt="The street signs at the corner of José Pedro Varela and Carlos María Solari in Dolores, photographed at night.">
+  <img src="https://raw.githubusercontent.com/carlosplanchon/enodia/main/assets/esquina_varela_y_solari_enodia.jpeg" width="48%" alt="The live map on a laptop at the same corner, at night: the dot on the crossing of José Pedro Varela and Carlos María Solari, the streets around it named, and at the top, 22:45:09 at the corner of Carlos María Solari y José Pedro Varela.">
+</p>
+
+*The corner of "Carlos María Solari y José Pedro Varela" in Dolores, marked on the walk in [`samples/dolores/`](samples/dolores/README.md) and found again two days later: the street signs on the left, the live map on the right.*
+
 ## Your first walk
 
 **1. Check the machine, then walk.**
