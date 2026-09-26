@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "enodia"
-version = "0.4.1"
+version = "0.4.2"
 description = "Wardriving on foot, without GPS: a talking Wi-Fi scanner in a backpack, a paper notebook of street crossings, and a reconciliation that places every access point along your walk."
 readme = "README.md"
 license = "MIT"
