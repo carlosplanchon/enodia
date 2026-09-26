@@ -39,7 +39,7 @@ one feature with somebody else's privacy on the line and its decisions fill a pa
 | what an export promises and what it cannot | [Publishing a walk](export.md) |
 | why a missing button press is written down | *The kernel saying it lost your input* |
 | why the preflight says FAIL about a lid that is fine | *The lid*, in [setting up the machine](setup.md) |
-| what a real walk changed | *What the first real outing falsified* |
+| what a real walk changed | *What a real outing falsified* |
 
 The real outing the newer sections quote, a walk in Dolores on 2026-09-22, is in
 [`samples/dolores/`](../samples/dolores/README.md) with its networks pseudonymised, so its
@@ -162,7 +162,7 @@ is a dot that jumps thirty metres and back in ten seconds. So `--locate --watch`
 place along the stretch with a filter of constant speed, a Kalman filter in one dimension: each
 scan moves the answer by how much it disagrees, weighed against how sure the walk so far is, and
 the speed is never more than a walk's. The jumps went from 22 to 6, and from 5 to 2 of 55 on the
-first real outing.
+Dolores outing.
 
 What it did not do is make the answer better, and that is the measurement to keep in mind. The
 mean error stayed at 23 m on the sample and moved a metre on the real outing, because what a
@@ -214,7 +214,7 @@ corner of "B"`, or `at "B"` when the mark is a place rather than a corner of two
 distance was measured, not chosen: holding out each group as `--check-map` does, at walking
 pace, and asking how far the scan really was from the corner the answer named.
 
-| said at a corner within | the scan within 25 m of it, sample | first real outing |
+| said at a corner within | the scan within 25 m of it, sample | the Dolores outing |
 |---|---|---|
 | 10 m | 12 of 15 | 58 of 99 |
 | 15 m | 21 of 26 | 126 of 200 |
@@ -251,7 +251,7 @@ misses its faintest networks keeps only the readings that came out high, and the
 short, 3 and 5 dB for a card 6 dB low. Chosen on the map's reading, the map's strong readings
 were partly the luck of that day, which regresses on this one, and it came out long, 8 and 9 dB,
 and 1.5 and 4 for the very card that built the map. Chosen on the mean of the two, neither
-side's luck decides which pairs count, and it came out right. On the first real outing, held out
+side's luck decides which pairs count, and it came out right. On the Dolores outing, held out
 as `--check-map --card-offset` holds it, by signal:
 
 | the card | by signal, as it reads | calibrated on the run | learned |
@@ -287,14 +287,14 @@ answer where the scan's levels fit the curves best. The stretch is still the mat
 
 It began from a measurement that was wrong. Counting only the answers that landed on the right
 stretch, the ones near a corner looked pulled thirty metres towards the middle of the block on
-the first real outing. But near a corner the answers that went past it, into the block next
+the Dolores outing. But near a corner the answers that went past it, into the block next
 door, are exactly the ones that would have said otherwise, and leaving them out left only the
 ones inside. Counted whole, and measured through the corner:
 
 | near a corner, a fifth of the block from it | on the stretch | past the corner | together |
 |---|---|---|---|
 | the sample | 55, +18.8 m inwards | 8, -31.3 m | +12.4 m |
-| the first real outing | 13, +33.6 m inwards | 193, -23.6 m | -20.0 m |
+| the Dolores outing | 13, +33.6 m inwards | 193, -23.6 m | -20.0 m |
 
 The sample's pull inwards is real. The real outing's answers mostly go past the corner, since 24
 of its 31 blocks were walked once and holding that pass out leaves nothing on the block.
@@ -312,8 +312,8 @@ them, by networks:
 |---|---|---|
 | the sample: mean and median error | 23 m, 21 m | 23 m, 21 m |
 | the sample: pulled in, near a corner | +12 m | +11 m |
-| the first real outing: mean and median error | 38 m, 35 m | 33 m, 29 m |
-| the first real outing: pulled in, near a corner | -21 m | -13 m |
+| the Dolores outing: mean and median error | 38 m, 35 m | 33 m, 29 m |
+| the Dolores outing: pulled in, near a corner | -21 m | -13 m |
 
 On the real outing it brings the answers that went past a corner back towards it, and every
 column gains about five metres. On the sample it changes nothing that matters, and the sample's
@@ -355,7 +355,7 @@ for the operator before a real walk has measured the two would be inventing the 
 `--check-map` reports both, in columns of their own, so that the walk can.
 
 Where it stands: barely tested, and so far worse. It put fewer scans on the right stretch than
-settling ties on the sample and on the first real outing, and walked with, it was late onto a
+settling ties on the sample and on the Dolores outing, and walked with, it was late onto a
 new block and never right where the default was wrong. It stays so that a second outing over the
 same streets can measure it, and goes if that says the same.
 
@@ -452,7 +452,7 @@ And the map file has the strictest version. `read_map` treats only a missing fil
 map, because everything else it could fail on is a map whose contents are unknown, and locating
 yourself against an unknown map is worse than saying so. Even the missing file is empty only
 for the command that creates one: to `--locate` it is an error, since "not on the map" is a
-sentence about the street, and on the first real outing a path with a typo in it got that
+sentence about the street, and on the Dolores outing a path with a typo in it got that
 answer every cycle of a `--watch`.
 
 ## Refused at the door
@@ -803,22 +803,27 @@ reminded once a minute while it lasts, and closed with "Scanning again" when it 
 `scan_failed` record for every cycle it cost. Before this, that failure sounded exactly like a
 healthy walk: "Scanning", the time, "Scanning", the time, over a log filling with nothing.
 
-## What the first real outing falsified
+## What a real outing falsified
 
 A radio switched off by rfkill (an airplane-mode key knocked inside the backpack,
 `rfkill block wifi` left on from the desk) hears nothing, which looks exactly like a street with
 no Wi-Fi on it. Enodia reads the kernel's switches before every scan and treats a blocked radio
 as a failed scan: "Radio blocked on wlan0", the reminders, a `scan_failed` record with the
 reason, and no scan record at all, so afterwards a hole is a hole and an empty scan is an empty
-street. What it does not read is the interface's operational state, and the first real outing is
-why: a walk is spent associated to no network, which the kernel reports as `DOWN` while forty
-networks are in view, and an earlier Enodia that took `DOWN` for a dead radio announced it all
-the way and threw every scan out as evidence of pace.
+street. What it does not read is the interface's operational state, and an outing before the one
+in Dolores is why: a walk is spent associated to no network, which the kernel reports as `DOWN`
+while forty networks are in view, and an earlier Enodia that took `DOWN` for a dead radio
+announced it all the way and threw every scan out as evidence of pace.
 
-That is the only claim in Enodia so far that a real walk has settled either way, and it settled
-it against the code. Everything else in the README that carries a measured result comes from
-synthetic observations built to have a known answer. The bundled Rivera example uses real
-OpenStreetMap corners and geometry, but its radios and outings are synthetic, and the script
-beside them says exactly how. That is why
-`--check-pace`, `--check-passes` and `--check-map` exist: they let a real outing settle the rest
-the same way.
+That was the first claim in Enodia a real walk settled either way, and it settled it against the
+code. It is no longer the only one: every measured result in the README now comes from a later
+one, the Dolores outing in [`samples/dolores/`](../samples/dolores/README.md). The corners held
+out and placed again, the routers of the blocks walked twice and the passes located from the
+rest of the map can be run again from what it publishes; the scans matched in the street come
+from walking the same streets with Enodia the next day. What one outing cannot say is how any of
+it holds on another day, and that is the measurement still missing. Where the sections above set
+"the sample" beside the Dolores outing, they mean the bundled Rivera example, whose
+OpenStreetMap corners and geometry are real and whose radios and outings are synthetic, built to
+have a known answer, and the script beside them says exactly how. That is why `--check-pace`,
+`--check-passes` and `--check-map` exist: they let each real outing settle a little more the
+same way.

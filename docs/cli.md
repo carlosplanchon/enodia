@@ -62,7 +62,7 @@ your route is not a matter of opinion: `--check-pace` below measures it.
 `10 ** (RSSI / 10n)`. The default is 3, a street with buildings on both sides. Lower makes the
 strongest sighting count for more, and at 1 it is weighing by received power. It moves the
 access points and what `--check-passes` compares, and nothing about where the scans are, and
-the report says which exponent was used whenever it is not the default. On the first real
+the report says which exponent was used whenever it is not the default. On the Dolores
 outing, six access points of one house at known coordinates came out 28 m off on average at
 3 and 22 m at 1. One house, which is why it is a flag and the default has not moved.
 
@@ -241,7 +241,7 @@ for nothing, stepping onto one that shares a mark for a little, jumping anywhere
 and the answer is where that path ends. It can overrule the last scan, in both directions, and
 the price of a jump is a number no walk has measured yet, which is why it is a flag:
 `--check-map` reports both. It is barely tested and so far no better: on the sample and on the
-first real outing it put fewer scans on the right stretch than `--sequence tie`, 135 against 136
+Dolores outing it put fewer scans on the right stretch than `--sequence tie`, 135 against 136
 and 55 against 69, and on the one walk made with it, it came onto a new block two scans late
 once in eighteen turns and was never right where the default was wrong.
 

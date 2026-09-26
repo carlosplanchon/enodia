@@ -71,7 +71,7 @@ from enodia.streets import EARTH_RADIUS_M, StreetMap
 
 # How near a mark an answer has to be for it to be said as that mark: "at the
 # corner of" rather than "97% of the way". Measured on the sample and on the
-# first real outing, held out as `--check-map` holds them: at 15 m, 21 of 26
+# Dolores outing, held out as `--check-map` holds them: at 15 m, 21 of 26
 # answers said at a corner on the sample had the scan within 25 m of it, and at
 # 30 m only 37 of 57. The real outing was flat either side, 63% at 15 m and 65%
 # at 20 m. And a stretch whose length nobody wrote down is taken to be a block

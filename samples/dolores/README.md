@@ -1,9 +1,9 @@
 # Dolores, a real outing
 
-The first real outing, walked on foot in Dolores, Soriano, on 2026-09-22 from 19:04 to 19:48: 31
-blocks, 39 corners marked with the headset button, 530 scans and 652 access points. Published
-with `--export-public --keep-places --keep-time`, so the streets and the times are real and the
-networks are not.
+The real outing the documentation quotes, walked on foot in Dolores, Soriano, on 2026-09-22 from
+19:04 to 19:48: 31 blocks, 39 corners marked with the headset button, 530 scans and 652 access
+points. Published with `--export-public --keep-places --keep-time`, so the streets and the times
+are real and the networks are not.
 
 ## What is real, and what is not
 

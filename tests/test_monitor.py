@@ -512,9 +512,9 @@ def test_a_blocked_radio_is_a_failed_scan_not_an_empty_street(mon, net):
 
 
 def test_a_walk_joined_to_no_network_is_not_a_blocked_radio(mon, net):
-    # The first real outing: the laptop associated to nothing the whole way,
-    # forty networks in view, and the kernel calling the interface DOWN. That is
-    # every outing, and it must sound like one.
+    # An outing before the Dolores one: the laptop associated to nothing the
+    # whole way, forty networks in view, and the kernel calling the interface
+    # DOWN. That is every outing, and it must sound like one.
     net.essid = None
     net.aps = [ap("Bar"), ap("Kiosco", bssid="aa:bb:cc:dd:ee:02")]
     mon.scan_networks()

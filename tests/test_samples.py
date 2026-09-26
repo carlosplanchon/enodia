@@ -133,7 +133,7 @@ def test_the_sample_map_is_what_the_two_outings_build(tmp_path):
     assert built == kept
 
 
-# --- Dolores: the first real outing, published ------------------------------------
+# --- The Dolores outing, published ------------------------------------------------
 
 DOLORES_STREETS = ["--streets", str(DOLORES / "dolores-streets.jsonl")]
 DOLORES_FILES = [str(DOLORES / "dolores-outing.jsonl"), str(DOLORES / "dolores-notebook.txt")]
@@ -202,7 +202,7 @@ def test_the_real_outing_pace_check_is_what_the_command_says(capsys):
     [([], "dolores-map-check.txt"), (["--along", "levels"], "dolores-map-check-levels.txt")],
 )
 def test_the_real_outing_map_check_is_what_the_command_says(flags, artifact, capsys):
-    # The numbers the documentation quotes for the first real outing, which
+    # The numbers the documentation quotes for the Dolores outing, which
     # were for a long time the ones nobody but its walker could reproduce.
     assert cli.main(["--check-map", "--map", str(DOLORES / "dolores-map.jsonl"), *flags]) == 0
     assert capsys.readouterr().out == (DOLORES / artifact).read_text(encoding="utf-8")
