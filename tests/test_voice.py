@@ -2,7 +2,6 @@
 
 import subprocess
 import threading
-import wave
 
 import pytest
 
@@ -10,7 +9,6 @@ from enodia import voice
 from enodia.voice import (
     BackgroundVoice,
     ESpeak,
-    PicoTTS,
     VoiceController,
     VoiceError,
     VoiceUnavailable,
@@ -37,7 +35,7 @@ def run(monkeypatch):
 
 @pytest.fixture
 def engines(monkeypatch):
-    """Pretend every engine and player is installed."""
+    """Pretend every engine is installed."""
     monkeypatch.setattr(voice.shutil, "which", lambda name: f"/usr/bin/{name}")
 
 
@@ -94,7 +92,7 @@ def test_missing_engine_raises(monkeypatch, run):
     with pytest.raises(VoiceUnavailable):
         ESpeak().say("hi")
     with pytest.raises(VoiceUnavailable):
-        PicoTTS().generate_file("x.wav", "hi")
+        ESpeak().generate_file("x.wav", "hi")
     assert run.calls == []
 
 
@@ -107,46 +105,13 @@ def test_run_translates_missing_binary(monkeypatch):
         voice._run(["nope"])
 
 
-def test_pico_generate_file_arg_list(run, engines, tmp_path):
-    PicoTTS().generate_file(tmp_path / "x.wav", '--wave /etc/passwd "$(reboot)"', lang="es-ES")
-    argv, kwargs = run.calls[0]
-    assert argv == [
-        "/usr/bin/pico2wave",
-        "--lang",
-        "es-ES",
-        "--wave",
-        str(tmp_path / "x.wav"),
-        'wave /etc/passwd "$(reboot)"',
-    ]
-    assert "shell" not in kwargs
+def test_run_includes_stderr_in_the_error(monkeypatch):
+    def failing(argv, **kwargs):
+        raise subprocess.CalledProcessError(2, argv, stderr=b"something went wrong")
 
-
-def test_pico_text_made_only_of_dashes(run, engines):
-    PicoTTS().generate_file("x.wav", "---")
-    assert run.calls[0][0][-1] == " ---"
-
-
-def test_pico_language_mapping():
-    assert PicoTTS.lang_for("es-ES") == "es-ES"
-    assert PicoTTS.lang_for("es") == "es-ES"
-    assert PicoTTS.lang_for("EN") == "en-US"
-    assert PicoTTS.lang_for("pt-BR") == "en-US"
-
-
-def test_pico_say_generates_then_plays(run, engines):
-    PicoTTS(extra_args=["--verbose"]).say("hello")
-    assert [argv[0] for argv, _ in run.calls] == ["/usr/bin/pico2wave", "/usr/bin/paplay"]
-    pico_argv = run.calls[0][0]
-    assert "--verbose" in pico_argv
-    wav = pico_argv[pico_argv.index("--wave") + 1]
-    assert wav.endswith(".wav")
-    assert run.calls[1][0] == ["/usr/bin/paplay", wav]
-
-
-def test_play_wav_without_player(monkeypatch):
-    monkeypatch.setattr(voice.shutil, "which", lambda name: None)
-    with pytest.raises(VoiceUnavailable):
-        voice.play_wav("x.wav")
+    monkeypatch.setattr(voice.subprocess, "run", failing)
+    with pytest.raises(VoiceError, match="status 2: something went wrong"):
+        voice._run(["/usr/bin/espeak-ng"], capture_output=True)
 
 
 def test_engine_failure_raises_voice_error(monkeypatch, engines):
@@ -177,20 +142,18 @@ def test_controller_silent_only_prints(capsys):
     assert "Say (Silent: True) > Now connected to" in capsys.readouterr().out
 
 
-def test_controller_speaks_each_sentence_lowercased(capsys):
+def test_controller_speaks_each_sentence_as_written(capsys):
     fake = FakeVoice()
     VoiceController(fake).say("Hello World. New network found!", lang="es-ES", print_statement=True)
-    assert fake.spoken == [("hello world.", "es-ES"), ("new network found!", "es-ES")]
+    assert fake.spoken == [("Hello World.", "es-ES"), ("New network found!", "es-ES")]
     out = capsys.readouterr().out
     assert "Say (Silent: False) > Hello World. New network found!" in out
-    assert "Enodia > hello world." in out
+    assert "Enodia > Hello World." in out
 
 
 def test_controller_options(capsys):
     fake = FakeVoice()
-    VoiceController(fake).say(
-        "Keep. Case.", preprocess_text=False, split_sentences=False, say_silent=True
-    )
+    VoiceController(fake).say("Keep. Case.", split_sentences=False, say_silent=True)
     assert fake.spoken == [("Keep. Case.", "en-US")]
     assert capsys.readouterr().out == ""
 
@@ -232,13 +195,13 @@ def test_controller_generate_file_without_voice():
 def test_controller_disables_voice_when_engine_is_missing(capsys):
     class Missing:
         def say(self, text, lang="en-US"):
-            raise VoiceUnavailable("pico2wave is not installed")
+            raise VoiceUnavailable("espeak-ng is not installed")
 
     controller = VoiceController(Missing())
     controller.say("hello")
     controller.say("again")
     assert not controller.available
-    assert controller.disabled_reason == "pico2wave is not installed"
+    assert controller.disabled_reason == "espeak-ng is not installed"
     assert capsys.readouterr().out.count("voice disabled") == 1
     controller.load_voice(FakeVoice())
     assert controller.available
@@ -251,7 +214,7 @@ def test_controller_keeps_going_after_engine_error(capsys):
 
         def say(self, text, lang="en-US"):
             self.calls += 1
-            raise VoiceError("pico2wave exited with status 1")
+            raise VoiceError("espeak-ng exited with status 1")
 
     flaky = Flaky()
     controller = VoiceController(flaky)
@@ -261,87 +224,9 @@ def test_controller_keeps_going_after_engine_error(capsys):
     assert capsys.readouterr().out.count("could not say") == 2
 
 
-def test_pico_prefers_pico2wave_when_both_exist(run, engines, tmp_path):
-    PicoTTS().generate_file(tmp_path / "x.wav", "hi")
-    assert run.calls[0][0][0] == "/usr/bin/pico2wave"
-
-
-def test_pico_tts_binary_wraps_pcm_into_wav(monkeypatch, tmp_path):
-    monkeypatch.setattr(
-        voice.shutil, "which", lambda name: "/usr/bin/pico-tts" if name == "pico-tts" else None
-    )
-    pcm = b"\x01\x02" * 800
-    calls = []
-
-    def fake_run(argv, **kwargs):
-        calls.append((list(argv), kwargs))
-        return subprocess.CompletedProcess(argv, 0, stdout=pcm, stderr=b"")
-
-    monkeypatch.setattr(voice.subprocess, "run", fake_run)
-    out = tmp_path / "x.wav"
-    PicoTTS(extra_args=["-x"]).generate_file(out, "Señal --no-es-una-opción", lang="es")
-    argv, kwargs = calls[0]
-    assert argv == ["/usr/bin/pico-tts", "-l", "es-ES", "-x"]
-    assert kwargs["input"] == "Señal --no-es-una-opción".encode()
-    assert kwargs["capture_output"] is True
-    assert "shell" not in kwargs
-    with wave.open(str(out)) as wav:
-        assert (wav.getnchannels(), wav.getsampwidth(), wav.getframerate(), wav.getnframes()) == (
-            1,
-            2,
-            16000,
-            800,
-        )
-        assert wav.readframes(800) == pcm
-
-
-def test_pico_tts_say_plays_the_wav(monkeypatch):
-    monkeypatch.setattr(
-        voice.shutil,
-        "which",
-        lambda name: f"/usr/bin/{name}" if name in ("pico-tts", "pw-play") else None,
-    )
-    calls = []
-
-    def fake_run(argv, **kwargs):
-        calls.append(list(argv))
-        return subprocess.CompletedProcess(argv, 0, stdout=b"\x00\x00" * 16, stderr=b"")
-
-    monkeypatch.setattr(voice.subprocess, "run", fake_run)
-    PicoTTS().say("hola", lang="es-ES")
-    assert calls[0] == ["/usr/bin/pico-tts", "-l", "es-ES"]
-    assert calls[1][0] == "/usr/bin/pw-play"
-    assert calls[1][1].endswith(".wav")
-
-
-def test_engine_failure_includes_stderr(monkeypatch, engines):
-    def failing(argv, **kwargs):
-        raise subprocess.CalledProcessError(2, argv, stderr=b"pico error -40: cannot open file")
-
-    monkeypatch.setattr(voice.subprocess, "run", failing)
-    with pytest.raises(VoiceError, match="status 2: pico error -40"):
-        PicoTTS().generate_file("x.wav", "hi")
-
-
-def test_default_voice_prefers_espeak(monkeypatch):
+def test_default_voice_is_espeak_when_installed(monkeypatch):
     monkeypatch.setattr(voice.shutil, "which", lambda name: f"/usr/bin/{name}")
     assert isinstance(default_voice(), ESpeak)
-
-
-def test_default_voice_falls_back_to_pico(monkeypatch):
-    monkeypatch.setattr(
-        voice.shutil,
-        "which",
-        lambda name: f"/usr/bin/{name}" if name in ("pico-tts", "paplay") else None,
-    )
-    assert isinstance(default_voice(), PicoTTS)
-
-
-def test_default_voice_pico_needs_a_player(monkeypatch):
-    monkeypatch.setattr(
-        voice.shutil, "which", lambda name: "/usr/bin/pico2wave" if name == "pico2wave" else None
-    )
-    assert default_voice() is None
 
 
 def test_default_voice_none(monkeypatch):

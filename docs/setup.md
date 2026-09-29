@@ -75,30 +75,29 @@ your laptop broadcasts rather than about what it hears.
 
 ## The voice
 
-Two engines are supported and neither is required: without one, Enodia prints what it would
-have said and the walk is otherwise unaffected.
-
-- **espeak-ng** is the default, and the classic `espeak` binary is accepted in its place.
-- **SVOX Pico** is the fallback: `libttspico-utils` on Debian and Ubuntu, which gives
-  `pico2wave`, or `pico-tts` from the AUR on Arch. Pico writes a WAV rather than playing one,
-  so it also needs a player, and the first of `paplay`, `pw-play` and `aplay` found is used.
+One engine is supported, **espeak-ng**, and the classic `espeak` binary is accepted in its
+place. It is not required: without it, Enodia prints what it would have said and the walk is
+otherwise unaffected. SVOX Pico used to be the other engine, and was dropped because nobody
+maintains it any more.
 
 ```bash
-enodia --voice espeak              # force one engine
-enodia --voice pico
+enodia --voice espeak              # and treat a missing engine as a failure, not a warning
 enodia --voice none                # print instead of speaking
 ```
 
-The preflight's `voice` line **actually says something** rather than looking for a binary,
-because a `pico2wave` with no working player is found easily and cannot be heard. `WARN` means
-no engine was found at all and Enodia will print. `FAIL` means one was found and could not
-speak, and the reason is the message.
+The preflight's `voice` line **actually says something** rather than looking for a binary: it
+says "preflight" in each language the walk speaks, the one of `--lang` and the one of
+`--ssid-lang`, and hearing it in the headphones is the check. `WARN` means there is no engine
+and Enodia will print. `FAIL` means the engine asked for with `--voice espeak` is not
+installed, or that it ran and failed in one of those languages. The reason is the message, and
+an espeak-ng that ran and failed explains itself above the report.
 
-If it says `FAIL`, the engine is the place to start, outside Enodia:
+If it says `FAIL`, or passes and nothing is heard, the engine is the place to start, outside
+Enodia:
 
 ```bash
-espeak-ng "preflight"                                          # does the engine itself speak?
-pico2wave -w /tmp/t.wav "preflight" && paplay /tmp/t.wav       # engine and player separately
+espeak-ng "preflight"              # does the engine itself speak?
+espeak-ng -v es "preflight"        # in Spanish? Enodia asks it for es when told es-ES
 ```
 
 ## Reading the headset button

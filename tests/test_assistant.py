@@ -313,9 +313,9 @@ def test_a_file_that_cannot_be_read_as_a_notebook_is_passed_over(tmp_path, monke
 
 
 def test_the_assistant_keeps_the_flags_it_was_started_with():
-    args = cli.build_parser().parse_args(["--assistant", "-i", "wlan0", "--voice", "pico"])
+    args = cli.build_parser().parse_args(["--assistant", "-i", "wlan0", "--voice", "espeak"])
     built = with_flags(args, reconcile=["a", "b"])
-    assert built.interface == ["wlan0"] and built.voice == "pico"
+    assert built.interface == ["wlan0"] and built.voice == "espeak"
     assert built.reconcile == ["a", "b"]
 
 

@@ -27,7 +27,7 @@ from enodia.system import (
     scan_mac_setting,
     session_log_path,
 )
-from enodia.voice import VoiceController
+from enodia.voice import VoiceController, VoiceError, VoiceUnavailable
 
 OK, WARN, FAIL = "OK", "WARN", "FAIL"
 COLORS = {OK: "\033[32m", WARN: "\033[33m", FAIL: "\033[31m"}
@@ -125,14 +125,27 @@ def _one_scan(interface: str) -> Check:
     return Check("scan", OK, f"{interface}: {len(seen)} networks found by a fresh scan")
 
 
-def check_voice(voice: VoiceController | None) -> Check:
-    """Actually say something: finding the binary is not the same as hearing it."""
+def check_voice(voice: VoiceController | None, langs: Sequence[str] = ("en-US",)) -> Check:
+    """Actually say something, in every language the walk speaks.
+
+    Finding the binary is not the same as hearing it. The engine is asked
+    directly and not through `VoiceController.say`, which keeps a walk going
+    past a phrase the engine could not say: right on the walk, and exactly the
+    failure this check is for. Through it, an espeak-ng that ran and exited with
+    an error, as it does for a language it does not have, was reported as having
+    spoken.
+    """
     if voice is None or voice.selected_voice is None:
         return Check("voice", WARN, "no speech engine: Enodia will print instead of speaking")
-    voice.say("Preflight", say_silent=True)
-    if not voice.available:
-        return Check("voice", FAIL, voice.disabled_reason or "the engine failed")
-    return Check("voice", OK, f"{type(voice.selected_voice).__name__} spoke")
+    spoken = list(dict.fromkeys(langs))
+    for lang in spoken:
+        try:
+            voice.selected_voice.say(text="Preflight", lang=lang)
+        except VoiceUnavailable as exc:
+            return Check("voice", FAIL, str(exc))
+        except VoiceError as exc:
+            return Check("voice", FAIL, f"could not speak {lang}: {exc}")
+    return Check("voice", OK, f"{type(voice.selected_voice).__name__} spoke {', '.join(spoken)}")
 
 
 def check_lid(conf: Path | None = None, dropins: Sequence[Path] | None = None) -> Check:
@@ -338,12 +351,13 @@ def run_preflight(
     log_dir: Path | None = None,
     resume: bool = False,
     interfaces: Sequence[str] | None = None,
+    langs: Sequence[str] = ("en-US",),
 ) -> list[Check]:
     """Every check, in the order they matter."""
     return [
         check_interfaces(interfaces),
         check_scan(interfaces),
-        check_voice(voice),
+        check_voice(voice, langs),
         check_lid(lid_conf, lid_dropins),
         check_scan_mac(),
         check_button(button, button_choice),

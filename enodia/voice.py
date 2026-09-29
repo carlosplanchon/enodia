@@ -1,14 +1,12 @@
 """Text-to-speech for Enodia.
 
 Derived from ligeia 0.1 (2019, same author) and rewritten to call the speech
-engines with argument lists instead of shell strings: the text Enodia speaks
+engine with argument lists instead of shell strings: the text Enodia speaks
 includes the SSIDs of nearby networks, which anyone around can choose.
 
-Two engines are supported. `ESpeak` (espeak-ng, or the classic espeak binary)
-speaks through its own audio output and is the default. `PicoTTS` (SVOX Pico,
-through `pico2wave` on Debian and Ubuntu or `pico-tts` from AUR on Arch) can only
-produce audio files, so speaking means writing a temporary WAV and playing it
-with the first WAV player found (`paplay`, `pw-play` or `aplay`).
+One engine is supported: `ESpeak` (espeak-ng, or the classic espeak binary),
+which speaks through its own audio output. SVOX Pico used to be the other one,
+and was dropped because nobody maintains it: its last change upstream is from 2018.
 """
 
 from __future__ import annotations
@@ -18,14 +16,10 @@ import shutil
 import subprocess
 import threading
 import time
-import wave
 from collections import deque
 from collections.abc import Sequence
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 from typing import Any, Protocol
-
-PLAYERS: tuple[str, ...] = ("paplay", "pw-play", "aplay")
 
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 
@@ -48,11 +42,11 @@ class Speaker(Protocol):
 
 
 class VoiceError(RuntimeError):
-    """A speech engine or audio player failed."""
+    """The speech engine failed."""
 
 
 class VoiceUnavailable(VoiceError):
-    """A speech engine or audio player is not installed."""
+    """The speech engine is not installed."""
 
 
 def split_into_sentences(text: str) -> list[str]:
@@ -90,19 +84,6 @@ def _run(argv: Sequence[str], **kwargs: Any) -> subprocess.CompletedProcess:
         if stderr.strip():
             message = f"{message}: {stderr.strip()}"
         raise VoiceError(message) from exc
-
-
-def find_player() -> str | None:
-    """Path of the first available WAV player, or None."""
-    return _which(*PLAYERS)
-
-
-def play_wav(path: str | Path) -> None:
-    """Play a WAV file with the first available player."""
-    player = find_player()
-    if player is None:
-        raise VoiceUnavailable(f"no audio player found (tried: {', '.join(PLAYERS)})")
-    _run([player, str(path)])
 
 
 def _terminated(text: str) -> str:
@@ -170,90 +151,10 @@ class ESpeak:
         return _run(argv, input=_terminated(text), text=True)
 
 
-class PicoTTS:
-    """SVOX Pico through either of its command line front ends.
-
-    `pico2wave` (Debian and Ubuntu, package libttspico-utils) writes a WAV file
-    itself. `pico-tts` (Arch, AUR package pico-tts) reads the text on stdin and
-    writes raw 16-bit mono PCM at 16 kHz on stdout, which is wrapped into a WAV
-    here. `say` plays the file right after writing it.
-    """
-
-    binaries = ("pico2wave", "pico-tts")
-    languages = ("en-US", "en-GB", "de-DE", "es-ES", "fr-FR", "it-IT")
-    sample_rate = 16000
-
-    def __init__(self, extra_args: Sequence[str] = ()) -> None:
-        self.extra_args = list(extra_args)
-
-    @classmethod
-    def lang_for(cls, lang: str) -> str:
-        """Closest of the six Pico voices: 'es' -> 'es-ES'; unknown languages -> 'en-US'."""
-        if lang in cls.languages:
-            return lang
-        prefix = lang.split("-")[0].lower()
-        for candidate in cls.languages:
-            if candidate.startswith(prefix):
-                return candidate
-        return "en-US"
-
-    def _binary(self) -> str:
-        binary = _which(*self.binaries)
-        if binary is None:
-            raise VoiceUnavailable("neither pico2wave nor pico-tts is installed")
-        return binary
-
-    def generate_file(
-        self,
-        destiny_path: str | Path,
-        text: str,
-        lang: str = "en-US",
-    ) -> subprocess.CompletedProcess:
-        """Write `text` as a WAV file at `destiny_path`."""
-        binary = self._binary()
-        lang = self.lang_for(lang)
-        if Path(binary).name == "pico2wave":
-            # pico2wave takes the text as a positional argument: strip leading
-            # dashes so it can never be parsed as an option.
-            text = text.lstrip(" -") or " " + text
-            return _run(
-                [
-                    binary,
-                    "--lang",
-                    lang,
-                    *self.extra_args,
-                    "--wave",
-                    str(destiny_path),
-                    text,
-                ]
-            )
-        # pico-tts: text on stdin, raw PCM on stdout.
-        result = _run(
-            [binary, "-l", lang, *self.extra_args],
-            input=text.encode("utf-8"),
-            capture_output=True,
-        )
-        with wave.open(str(destiny_path), "wb") as wav:
-            wav.setnchannels(1)
-            wav.setsampwidth(2)
-            wav.setframerate(self.sample_rate)
-            wav.writeframes(result.stdout)
-        return result
-
-    def say(self, text: str, lang: str = "en-US") -> None:
-        """Write `text` to a temporary WAV file and play it."""
-        with NamedTemporaryFile(suffix=".wav") as wav:
-            self.generate_file(wav.name, text, lang)
-            play_wav(wav.name)
-
-
-def default_voice() -> ESpeak | PicoTTS | None:
-    """eSpeak NG when installed; else SVOX Pico, which also needs a WAV player;
-    else None (print only)."""
+def default_voice() -> ESpeak | None:
+    """eSpeak NG, or the classic espeak, when installed; else None (print only)."""
     if _which(*ESpeak.binaries):
         return ESpeak()
-    if _which(*PicoTTS.binaries) and find_player():
-        return PicoTTS()
     return None
 
 
@@ -274,7 +175,7 @@ class VoiceController:
 
     @property
     def available(self) -> bool:
-        """True if a voice is loaded and has not failed for lack of an engine or player."""
+        """True if a voice is loaded and has not failed for lack of an engine."""
         return self.selected_voice is not None and self.disabled_reason is None
 
     def say(
@@ -285,7 +186,6 @@ class VoiceController:
         say_silent: bool = False,
         print_statement: bool = False,
         split_sentences: bool = True,
-        preprocess_text: bool = True,
         silent_text: str = "Say",
         optional: bool = False,
         status: bool = False,
@@ -296,8 +196,6 @@ class VoiceController:
         :param say_silent: do not print the "Say (...) > text" line.
         :param print_statement: print each sentence as it is spoken.
         :param split_sentences: speak sentence by sentence.
-        :param preprocess_text: lowercase the text before speaking (Pico reads
-            capitals as spelled-out letters).
         :param optional: this utterance may be dropped when speech falls behind.
         :param status: this utterance reports a state, not an event, and is only
             worth saying while it is current.
@@ -308,8 +206,6 @@ class VoiceController:
             say_print(text, silent, silent_text)
         if silent or not text or not self.available:
             return
-        if preprocess_text:
-            text = text.lower()
         statements = split_into_sentences(text) if split_sentences else [text]
         for statement in statements:
             if print_statement:

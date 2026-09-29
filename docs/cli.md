@@ -16,7 +16,7 @@ enodia                                    # every Wi-Fi interface, every 5 s, on
 enodia -i wlan0 -t 10                     # one interface, every 10 s
 enodia -l walk.jsonl                      # one log file of your choosing
 enodia --dir ~/walks                     # one file per outing, in that directory
-enodia --voice pico                       # engine: auto (espeak-ng, else Pico) | espeak | pico | none
+enodia --voice none                       # engine: auto (espeak-ng if installed) | espeak | none
 enodia --lang en-GB --ssid-lang es-ES        # language of the announcements, and of the network names
 enodia --say-status                       # also say "Scanning" and the time every cycle
 enodia --say-status --say-signal          # ...and the signal quality, which seldom changes
@@ -383,7 +383,7 @@ is there.
 enodia --assistant                                 # the whole workflow, one screen at a time
 enodia --assistant --dir ~/walks --map other.jsonl          # over a different directory and map
 enodia --assistant --log walk.jsonl                # over one file, and every walk inside it
-enodia --assistant -i wlan0 --voice pico           # and every walk it starts uses these
+enodia --assistant -i wlan0 --voice espeak         # and every walk it starts uses these
 ```
 
 `--assistant` takes the configuration flags and refuses the command ones: `--preflight`,

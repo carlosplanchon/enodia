@@ -20,7 +20,7 @@ from enodia.fingerprint import (
     otherwise,
 )
 from enodia.netlog import SeenNetwork, read_log
-from enodia.voice import ESpeak, PicoTTS
+from enodia.voice import ESpeak
 
 
 def test_version(capsys):
@@ -58,18 +58,10 @@ def test_voice_defaults_to_auto():
 
 def test_make_voice(monkeypatch, capsys):
     assert not cli.make_voice("none").available
-    assert isinstance(cli.make_voice("pico").controller.selected_voice, PicoTTS)
     assert isinstance(cli.make_voice("espeak").controller.selected_voice, ESpeak)
 
     monkeypatch.setattr(voice_module.shutil, "which", lambda name: f"/usr/bin/{name}")
     assert isinstance(cli.make_voice("auto").controller.selected_voice, ESpeak)
-
-    monkeypatch.setattr(
-        voice_module.shutil,
-        "which",
-        lambda name: f"/usr/bin/{name}" if name in ("pico-tts", "paplay") else None,
-    )
-    assert isinstance(cli.make_voice("auto").controller.selected_voice, PicoTTS)
 
     monkeypatch.setattr(voice_module.shutil, "which", lambda name: None)
     assert not cli.make_voice("auto").available
@@ -2208,6 +2200,19 @@ def test_the_preflight_closes_the_voice_it_opened(monkeypatch, tmp_path):
     monkeypatch.setattr(voice_module.shutil, "which", lambda name: None)
     cli.main(["--preflight", "--voice", "espeak", "--button", "off", "--log", str(tmp_path / "l")])
     assert closed == ["espeak"]
+
+
+def test_the_preflight_tries_the_voice_in_both_languages_of_the_walk(monkeypatch):
+    seen = {}
+
+    def run_preflight(voice, *args, **kwargs):
+        seen.update(kwargs)
+        return []
+
+    monkeypatch.setattr(cli, "run_preflight", run_preflight)
+    argv = ["--preflight", "--voice", "none", "--button", "off"]
+    assert cli.main([*argv, "--lang", "en-GB", "--ssid-lang", "de-DE"]) == 0
+    assert seen["langs"] == ("en-GB", "de-DE")
 
 
 def test_ctrl_c_while_the_outing_is_starting_does_not_end_in_a_traceback(monkeypatch, capsys):

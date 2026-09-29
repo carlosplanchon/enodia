@@ -28,7 +28,7 @@ It all runs on your machine. The one command that goes online looks your corners
 
 ## Install
 
-You need Linux, Python 3.10 or newer, and a Wi-Fi interface run by iwd, NetworkManager or wpa_supplicant that you may scan with over D-Bus. For the voice, `espeak-ng` or SVOX Pico. Without either, Enodia prints what it would have said.
+You need Linux, Python 3.10 or newer, and a Wi-Fi interface run by iwd, NetworkManager or wpa_supplicant that you may scan with over D-Bus. For the voice, `espeak-ng`. Without it, Enodia prints what it would have said.
 
 ```bash
 uv tool install enodia

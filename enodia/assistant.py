@@ -207,7 +207,7 @@ def with_flags(args: argparse.Namespace, **overrides: object) -> argparse.Namesp
 
     Built from the real parsed arguments and never from scratch, so that a flag
     added tomorrow is present here with its default instead of missing, and so
-    that `enodia --assistant -i wlan0 --voice pico` walks on wlan0 with pico.
+    that `enodia --assistant -i wlan0 --voice espeak` walks on wlan0 with espeak.
     The command then runs through exactly the function the flag runs through.
 
     Never by handing an argv back to argparse, which would be the obvious other

@@ -22,7 +22,7 @@ from enodia.preflight import (
     format_preflight,
     run_preflight,
 )
-from enodia.voice import VoiceController, VoiceUnavailable
+from enodia.voice import VoiceController, VoiceError, VoiceUnavailable
 
 
 class Radio:
@@ -96,10 +96,10 @@ def test_one_radio_that_cannot_scan_is_a_warning_and_not_a_reason_to_stay_home(m
 
 
 class Engine:
-    said: ClassVar[list[str]] = []
+    said: ClassVar[list[tuple[str, str]]] = []
 
     def say(self, text, lang="en-US"):
-        Engine.said.append(text)
+        Engine.said.append((text, lang))
 
 
 class MissingEngine:
@@ -107,14 +107,41 @@ class MissingEngine:
         raise VoiceUnavailable("espeak-ng is not installed")
 
 
+class EngineWithoutXx:
+    """Installed, and exits with an error for a language it does not have, as espeak-ng does."""
+
+    def say(self, text, lang="en-US"):
+        if lang == "xx-XX":
+            raise VoiceError("/usr/bin/espeak-ng exited with status 1")
+
+
 def test_voice_actually_speaks(capsys):
     Engine.said.clear()
-    assert check_voice(VoiceController(Engine())) == Check("voice", OK, "Engine spoke")
-    assert Engine.said == ["preflight"]
+    assert check_voice(VoiceController(Engine())) == Check("voice", OK, "Engine spoke en-US")
+    assert Engine.said == [("Preflight", "en-US")]
     assert check_voice(None).status == WARN
     assert check_voice(VoiceController()).status == WARN
     failed = check_voice(VoiceController(MissingEngine()))
     assert failed.status == FAIL and "not installed" in failed.detail
+
+
+def test_voice_is_tried_in_every_language_the_walk_speaks():
+    Engine.said.clear()
+    found = check_voice(VoiceController(Engine()), ["en-US", "es-ES", "en-US"])
+    assert found == Check("voice", OK, "Engine spoke en-US, es-ES")
+    assert Engine.said == [("Preflight", "en-US"), ("Preflight", "es-ES")]
+
+
+def test_an_engine_that_runs_and_fails_fails_the_check(capsys):
+    # VoiceController.say keeps a walk going past a phrase the engine could not
+    # say, and the check used to go through it: an espeak-ng asked for a
+    # language it does not have exited with an error and was reported as having
+    # spoken.
+    found = check_voice(VoiceController(EngineWithoutXx()), ["en-US", "xx-XX"])
+    assert found == Check(
+        "voice", FAIL, "could not speak xx-XX: /usr/bin/espeak-ng exited with status 1"
+    )
+    assert capsys.readouterr().out == ""
 
 
 def test_lid(tmp_path):

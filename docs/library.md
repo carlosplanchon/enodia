@@ -18,7 +18,7 @@ with WifiMonitor(
 |---|---|
 | `enodia.monitor` | `WifiMonitor`, with `scan_networks()`, `scan_networks_loop()`, `auto_scan()`, `use_button()`, `mark()`, `resume_from_log()`, and `close()` (also a context manager) |
 | `enodia.netlog` | `NetworkLog(path)` writes. `read_log(path)` parses, skipping any line that is not a whole JSON object. `outings(records)` and `records_for_outing(records, outing)` pick one walk out of a file. `find_open_networks(path)` |
-| `enodia.voice` | `VoiceController` speaks now. `BackgroundVoice(controller)` queues, dropping utterances marked `optional` when it falls behind. `ESpeak`, `PicoTTS` |
+| `enodia.voice` | `VoiceController` speaks now. `BackgroundVoice(controller)` queues, dropping utterances marked `optional` when it falls behind. `ESpeak` |
 | `enodia.button` | `ButtonMarker(devices, on_press)`, `find_button_devices()`, `list_input_devices()`, `event_age(at)` |
 | `enodia.reconcile` | `reconcile(log, notebook, by_movement=True, outing=None, path_loss=3.0)`, `check_pace(...)`, `check_passes(...)`, `read_notebook(path, day, tz, marks)`, `network_turnover(a, b)`, `place_by_movement(scans, waypoints)`, `signal_weight(dbm, exponent)` |
 | `enodia.fingerprint` | `add_to_map(map, log, notebook)`, `read_map(path)`, `locate_scan(fingerprints, networks)`, `locate_sequence(fingerprints, scans, sequence="tie")`, `follow(fingerprints, scans, sequence="tie")`, `stretch_lines(fingerprints)`, `band_of(found, lines)`, `check_map(fingerprints)`, `scan_now(interface)`, `canonical(a, b, fraction)` |

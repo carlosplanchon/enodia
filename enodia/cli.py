@@ -68,7 +68,7 @@ from enodia.reconcile import (
 )
 from enodia.streets import StreetMap, read_streets, write_streets
 from enodia.system import data_dir, map_path, session_log_path
-from enodia.voice import BackgroundVoice, ESpeak, PicoTTS, VoiceController, default_voice
+from enodia.voice import BackgroundVoice, ESpeak, VoiceController, default_voice
 
 # How many answers the live map keeps behind the current one: under a minute
 # of walk at the default interval, enough to show which way you were going.
@@ -119,10 +119,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--voice",
-        choices=["auto", "pico", "espeak", "none"],
+        choices=["auto", "espeak", "none"],
         default="auto",
-        help="speech engine; auto picks espeak-ng, or SVOX Pico when espeak-ng is missing "
-        "(default: auto)",
+        help="speech engine; auto uses espeak-ng when it is installed and prints instead "
+        "when it is not (default: auto)",
     )
     parser.add_argument(
         "--lang", default="en-US", help="language of the announcements (default: en-US)"
@@ -513,16 +513,11 @@ def make_voice(name: str) -> BackgroundVoice:
     """
     if name == "none":
         return BackgroundVoice(VoiceController())
-    if name == "pico":
-        return BackgroundVoice(VoiceController(PicoTTS()))
     if name == "espeak":
         return BackgroundVoice(VoiceController(ESpeak()))
     voice = default_voice()
     if voice is None:
-        print(
-            "No speech engine found (espeak-ng, pico2wave or pico-tts): "
-            "printing instead of speaking."
-        )
+        print("No speech engine found (espeak-ng or espeak): printing instead of speaking.")
     return BackgroundVoice(VoiceController(voice))
 
 
@@ -1093,6 +1088,7 @@ def run_preflight_command(args: argparse.Namespace) -> int:
             log_dir=None if args.dir is None else Path(args.dir),
             resume=args.resume,
             interfaces=args.interface,
+            langs=(args.lang, args.ssid_lang),
         )
     finally:
         if speaking is not None:

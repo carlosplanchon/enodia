@@ -61,7 +61,6 @@ from enodia.system import battery, data_dir, lid_switch_setting, session_log_pat
 from enodia.voice import (
     BackgroundVoice,
     ESpeak,
-    PicoTTS,
     VoiceController,
     VoiceError,
     VoiceUnavailable,
@@ -80,7 +79,6 @@ __all__ = [
     "Junction",
     "Location",
     "NetworkLog",
-    "PicoTTS",
     "Place",
     "Proxy",
     "RepeatedStretch",
