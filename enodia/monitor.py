@@ -6,7 +6,7 @@ import time
 from collections.abc import Callable, Sequence
 from datetime import datetime
 from threading import Event, Thread
-from typing import Any
+from typing import Any, Self
 
 import ifpeek
 
@@ -576,7 +576,7 @@ class WifiMonitor:
         if close_voice is not None:
             close_voice()
 
-    def __enter__(self) -> WifiMonitor:  # noqa: PYI034 -- `Self` needs Python 3.11
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *exc_info: object) -> None:

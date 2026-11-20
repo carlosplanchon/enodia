@@ -375,8 +375,8 @@ def test_a_proxy_that_is_not_socks5_is_refused_by_name():
     # The whole message, not a fragment of it. What `urlsplit` calls the scheme
     # of a bare `host:port` changed in 3.11: 3.10 answers "127.0.0.1" and every
     # version after it answers "", so the same typed proxy was told "not
-    # 127.0.0.1", as though that were a scheme somebody had asked for, on the
-    # oldest Python this supports and "not a bare host" on the newest.
+    # 127.0.0.1", as though that were a scheme somebody had asked for, on 3.10
+    # and "not a bare host" on every Python after it.
     with pytest.raises(GeocodeError, match=r"only socks5:// and socks5h:// .* not http$"):
         parse_proxy("http://127.0.0.1:3128")
     for bare in ("127.0.0.1:9050", "://host:80", "localhost"):

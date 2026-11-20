@@ -42,7 +42,7 @@ import stat
 import tempfile
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from math import cos, degrees, radians
 from pathlib import Path
 from typing import Any
@@ -81,7 +81,7 @@ KEY_BYTES = 32
 # A date nobody will mistake for the day somebody walked, and one Enodia can
 # still read back: the exported outing has to reconcile, or it is an example of
 # nothing.
-EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 # Somewhere in the Gulf of Guinea, which is where null island is and where
 # nobody's neighbourhood is. The walk is laid out from here in metres.
 ORIGIN = (0.0, 0.0)
