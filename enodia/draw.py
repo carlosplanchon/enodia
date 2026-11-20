@@ -20,6 +20,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import pairwise
 from math import atan2, cos, degrees, log10, radians
+from typing import Self
 
 from enodia.fingerprint import Band, Fingerprint, Location
 from enodia.reconcile import Reconciliation
@@ -207,7 +208,7 @@ class Frame:
         return 0.0 if span <= 0 else (metres / span) * (self.width - 2 * self.margin)
 
     @classmethod
-    def around(cls, places: Sequence[Place], width: float = WIDTH, margin: float = MARGIN) -> Frame:
+    def around(cls, places: Sequence[Place], width: float = WIDTH, margin: float = MARGIN) -> Self:
         """A frame with everything in it, and the neighbourhood around it as air.
 
         `SURROUNDINGS_M` on every side, or a tenth of the walk's own size when

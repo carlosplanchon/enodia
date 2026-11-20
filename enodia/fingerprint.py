@@ -38,7 +38,7 @@ from itertools import pairwise
 from math import cos, exp, log, radians, sqrt
 from pathlib import Path
 from statistics import mean, median
-from typing import Any
+from typing import Any, Self
 
 import ifpeek
 
@@ -1374,7 +1374,7 @@ class Levels:
         self.fitted: dict[tuple[str, str], _Curves | None] = {}
 
     @classmethod
-    def of(cls, fingerprints: Sequence[Fingerprint]) -> Levels:
+    def of(cls, fingerprints: Sequence[Fingerprint]) -> Self:
         """Curves for this map's stretches, fitted as each is first asked for."""
         return cls(fingerprints)
 
