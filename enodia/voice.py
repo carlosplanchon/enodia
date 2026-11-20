@@ -138,7 +138,7 @@ class ESpeak:
 
     def say(self, text: str, lang: str = "en-US") -> None:
         """Speak `text` through the engine's audio output."""
-        _run([*self._argv(lang), "--stdin"], input=_terminated(text), text=True)
+        _run([*self._argv(lang), "--stdin"], input=_terminated(text), text=True, encoding="utf-8")
 
     def generate_file(
         self,
@@ -148,7 +148,7 @@ class ESpeak:
     ) -> subprocess.CompletedProcess:
         """Write `text` as a WAV file at `destiny_path`."""
         argv = [*self._argv(lang), "-w", str(destiny_path), "--stdin"]
-        return _run(argv, input=_terminated(text), text=True)
+        return _run(argv, input=_terminated(text), text=True, encoding="utf-8")
 
 
 def default_voice() -> ESpeak | None:
